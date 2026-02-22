@@ -2,7 +2,8 @@
   "name": "TaskPilot Frontend",
   "image": "mcr.microsoft.com/devcontainers/typescript-node:20",
   "features": {
-    "ghcr.io/devcontainers/features/git:1": {}
+    "ghcr.io/devcontainers/features/git:1": {},
+    "ghcr.io/devcontainers/features/common-utils:2": {}
   },
   "forwardPorts": [5173],
   "portsAttributes": {
