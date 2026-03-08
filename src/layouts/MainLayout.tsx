@@ -1,4 +1,5 @@
 import { Outlet } from "react-router-dom";
+import { FloatingChat } from "@/components/FloatingChat";
 
 export default function MainLayout() {
   return (
@@ -26,6 +27,7 @@ export default function MainLayout() {
       <main className="flex-1 overflow-auto">
         <Outlet />
       </main>
+      <FloatingChat />
     </div>
   );
 }
