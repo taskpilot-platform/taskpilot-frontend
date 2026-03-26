@@ -12,5 +12,11 @@ export default defineConfig({
   server: {
     host: true, // host: true tương đương với việc luôn gắn cờ --host
     port: 5173, // (Tùy chọn) Chốt luôn cổng 5173 cho chắc chắn
+    proxy: {
+      "/api": {
+        target: "http://localhost:8080",
+        changeOrigin: true,
+      },
+    },
   },
 });

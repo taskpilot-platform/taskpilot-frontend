@@ -7,6 +7,9 @@ import "react-toastify/dist/ReactToastify.css";
 import { ToastContainer } from "react-toastify";
 import { ThemeProvider } from "./components/theme-provider.tsx";
 import { ColorThemeProvider } from "./components/color-theme-provider.tsx";
+import { useAuthStore } from "@/stores/auth.store";
+
+useAuthStore.getState().hydrate();
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import { MessageCircle, X, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -34,20 +34,23 @@ const MyAssistantMessage = () => (
 
 const chatModelAdapter: ChatModelAdapter = {
   async run({ messages }) {
-    const lastUserMessage = [...messages]
-      .reverse()
-      .find((m) => m.role === "user");
-
-    const userText =
-      lastUserMessage?.content
+    // Lưu toàn bộ lịch sử cuộc trò chuyện
+    const conversationHistory = messages.map((msg) => {
+      const textContent = msg.content
         ?.filter((p): p is { type: "text"; text: string } => p.type === "text")
         .map((p) => p.text)
         .join(" ") ?? "";
 
+      return {
+        role: msg.role === "user" ? "user" : "model",
+        parts: [{ text: textContent }],
+      };
+    });
+
     try {
       const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash-lite",
-        contents: userText,
+        model: "gemini-2.5-flash",
+        contents: conversationHistory,
       });
 
       return {

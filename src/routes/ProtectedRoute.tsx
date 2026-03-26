@@ -1,21 +1,18 @@
-// src/routes/ProtectedRoute.tsx
-import { Navigate } from "react-router-dom";
-
-// Tạm thời giả lập, sau này bạn lấy token từ Zustand store
-const isAuthenticated = () => {
-  return localStorage.getItem("token") ? true : false;
-};
+import type { ReactNode } from "react";
+import { Navigate, useLocation } from "react-router-dom";
+import { useAuthStore } from "@/stores/auth.store";
 
 interface ProtectedRouteProps {
-  children: React.ReactNode;
+  children: ReactNode;
 }
 
 export default function ProtectedRoute({ children }: ProtectedRouteProps) {
-  if (!isAuthenticated()) {
-    // Chưa đăng nhập thì đá văng ra trang login
-    return <Navigate to="/login" replace />;
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const location = useLocation();
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace state={{ from: location.pathname }} />;
   }
 
-  // Đã đăng nhập thì cho phép render nội dung bên trong
   return <>{children}</>;
 }
