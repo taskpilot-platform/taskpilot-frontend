@@ -10,8 +10,77 @@ import {
   type ChatModelAdapter,
 } from "@assistant-ui/react";
 import { GoogleGenAI } from "@google/genai";
+import OpenAI from "openai";
+import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 
-const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
+const githubToken = import.meta.env.VITE_GITHUB_TOKEN;
+
+// Khởi tạo client gọi lên GitHub Models
+const openai = githubToken
+  ? new OpenAI({
+      baseURL: "https://models.inference.ai.azure.com",
+      apiKey: githubToken,
+      dangerouslyAllowBrowser: true,
+    })
+  : null;
+
+const gemini = import.meta.env.VITE_GEMINI_API_KEY
+  ? new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY })
+  : null;
+
+type Provider = "github" | "gemini";
+
+type ModelConfig = {
+  provider: Provider;
+  model: string;
+  // Ngưỡng input an toàn ước lượng theo token để tránh gọi model chắc chắn fail.
+  safeInputTokens: number;
+  intelligenceRank: number;
+};
+
+const MODEL_CATALOG: ModelConfig[] = [
+  // Ưu tiên model miễn phí thực tế đang ổn định trên API trước, tránh 404 do model chưa mở cho key.
+  { provider: "gemini", model: "gemini-2.5-flash", safeInputTokens: 1_000_000, intelligenceRank: 1460 },
+  { provider: "gemini", model: "gemini-2.0-flash", safeInputTokens: 1_000_000, intelligenceRank: 1418 },
+  { provider: "gemini", model: "gemini-2.0-flash-lite", safeInputTokens: 1_000_000, intelligenceRank: 1395 },
+  { provider: "github", model: "DeepSeek-R1", safeInputTokens: 4000, intelligenceRank: 1426 },
+  { provider: "github", model: "o3-mini", safeInputTokens: 4000, intelligenceRank: 1424 },
+  { provider: "github", model: "gpt-4o-mini", safeInputTokens: 8000, intelligenceRank: 1420 },
+  { provider: "github", model: "Llama-4-Maverick", safeInputTokens: 8000, intelligenceRank: 1410 },
+  // Nhóm 3.x để cuối làm fallback vì nhiều key v1beta chưa được bật nên dễ 404.
+  { provider: "gemini", model: "gemini-3.1-pro", safeInputTokens: 1_000_000, intelligenceRank: 1200 },
+  { provider: "gemini", model: "gemini-3-flash", safeInputTokens: 1_000_000, intelligenceRank: 1190 },
+  { provider: "gemini", model: "gemini-3.1-flash-lite", safeInputTokens: 1_000_000, intelligenceRank: 1180 },
+];
+
+const LARGE_INPUT_THRESHOLD_TOKENS = 3200;
+const TOKEN_ESTIMATE_DIVISOR = 4;
+
+const estimateInputTokens = (text: string) =>
+  Math.ceil(text.length / TOKEN_ESTIMATE_DIVISOR);
+
+const getTextFromResponse = (content: unknown) => {
+  if (typeof content === "string") return content;
+  if (Array.isArray(content)) {
+    return content
+      .map((part) => {
+        if (typeof part === "string") return part;
+        if (
+          part &&
+          typeof part === "object" &&
+          "type" in part &&
+          "text" in part &&
+          (part as { type?: string }).type === "text"
+        ) {
+          return String((part as { text?: unknown }).text ?? "");
+        }
+        return "";
+      })
+      .join(" ")
+      .trim();
+  }
+  return "";
+};
 
 const MyUserMessage = () => (
   <div className="flex justify-end mb-3">
@@ -34,12 +103,54 @@ const MyAssistantMessage = () => (
 
 const chatModelAdapter: ChatModelAdapter = {
   async run({ messages }) {
-    // Lưu toàn bộ lịch sử cuộc trò chuyện
+    // Định dạng lại tin nhắn cho đúng chuẩn OpenAI
+    const formattedMessages: ChatCompletionMessageParam[] = messages.map((m) => {
+      const textContent = m.content
+        .filter((p): p is { type: "text"; text: string } => p.type === "text")
+        .map((p) => p.text)
+        .join(" ");
+
+      return {
+        role: m.role === "user" ? "user" : "assistant",
+        content: textContent,
+      };
+    });
+
+    const githubErrors: unknown[] = [];
+    const fullInputText = formattedMessages.map((m) => m.content).join("\n");
+    const estimatedInputTokens = estimateInputTokens(fullInputText);
+
+    const sortedCandidates = [...MODEL_CATALOG]
+      .filter((candidate) => {
+        if (candidate.provider === "github") return !!openai;
+        return !!gemini;
+      })
+      .filter((candidate) => estimatedInputTokens <= candidate.safeInputTokens)
+      .sort((a, b) => b.intelligenceRank - a.intelligenceRank);
+
+    // Input dài thì ưu tiên model chịu tải lớn trước để tránh timeout/fail rồi mới fallback.
+    const routeCandidates =
+      estimatedInputTokens > LARGE_INPUT_THRESHOLD_TOKENS
+        ? sortedCandidates.sort((a, b) => {
+            const byProvider =
+              a.provider === b.provider ? 0 : a.provider === "gemini" ? -1 : 1;
+            if (byProvider !== 0) return byProvider;
+            return b.intelligenceRank - a.intelligenceRank;
+          })
+        : sortedCandidates;
+
+    if (routeCandidates.length === 0) {
+      githubErrors.push({
+        error: "No available model for current payload",
+        estimatedInputTokens,
+      });
+    }
+
     const conversationHistory = messages.map((msg) => {
       const textContent = msg.content
-        ?.filter((p): p is { type: "text"; text: string } => p.type === "text")
+        .filter((p): p is { type: "text"; text: string } => p.type === "text")
         .map((p) => p.text)
-        .join(" ") ?? "";
+        .join(" ");
 
       return {
         role: msg.role === "user" ? "user" : "model",
@@ -47,26 +158,56 @@ const chatModelAdapter: ChatModelAdapter = {
       };
     });
 
-    try {
-      const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
-        contents: conversationHistory,
-      });
+    for (const candidate of routeCandidates) {
+      try {
+        if (candidate.provider === "github" && openai) {
+          const response = await openai.chat.completions.create({
+            model: candidate.model,
+            messages: formattedMessages,
+          });
 
-      return {
-        content: [{ type: "text" as const, text: response.text ?? "" }],
-      };
-    } catch (error) {
-      console.error("🔥 LỖI GEMINI CHI TIẾT:", error);
-      return {
-        content: [
-          {
-            type: "text" as const,
-            text: "Xin lỗi, em đang bị lỗi kết nối. Sếp check lại F12 nhé 😢",
-          },
-        ],
-      };
+          const responseText = getTextFromResponse(response.choices[0]?.message?.content);
+          if (responseText) {
+            return {
+              content: [{ type: "text" as const, text: responseText }],
+            };
+          }
+        }
+
+        if (candidate.provider === "gemini" && gemini) {
+          const response = await gemini.models.generateContent({
+            model: candidate.model,
+            contents: conversationHistory,
+          });
+
+          const responseText = (response.text ?? "").trim();
+          if (responseText) {
+            return {
+              content: [{ type: "text" as const, text: responseText }],
+            };
+          }
+        }
+      } catch (error) {
+        githubErrors.push({ provider: candidate.provider, model: candidate.model, error });
+      }
     }
+
+    if (!openai) {
+      githubErrors.push("missing VITE_GITHUB_TOKEN");
+    }
+    if (!gemini) {
+      githubErrors.push("missing VITE_GEMINI_API_KEY");
+    }
+
+    console.error("🔥 ALL MODEL FALLBACKS FAILED:", githubErrors);
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: "Xin lỗi, em đang lỗi kết nối ở tất cả model dự phòng. Sếp check F12 và token giúp em nhé 😢",
+        },
+      ],
+    };
   },
 };
 
