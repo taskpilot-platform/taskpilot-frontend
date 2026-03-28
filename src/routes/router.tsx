@@ -11,6 +11,8 @@ import RegisterPage from "@/pages/RegisterPage";
 import ForgotPasswordPage from "@/pages/ForgotPasswordPage";
 import ResetPasswordPage from "@/pages/ResetPasswordPage";
 import DashboardPage from "@/pages/DashboardPage";
+import ProfilePage from "@/pages/ProfilePage";
+import AdminSkillsPage from "@/pages/AdminSkillsPage";
 
 // Import Guard
 import ProtectedRoute from "./ProtectedRoute";
@@ -50,6 +52,14 @@ export const router = createBrowserRouter([
       {
         path: "/",
         element: <DashboardPage />,
+      },
+      {
+        path: "/profile",
+        element: <ProfilePage />,
+      },
+      {
+        path: "/admin/skills",
+        element: <AdminSkillsPage />,
       },
       // Thêm các route khác của TaskPilot vào đây sau:
       // { path: "/tasks", element: <TasksPage /> },

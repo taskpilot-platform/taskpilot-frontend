@@ -15,3 +15,22 @@ export interface UserSkill {
   name: string;
   level: number;
 }
+
+export interface UpdateProfileRequest {
+  fullName: string;
+  avatarUrl: string | null;
+}
+
+export interface ChangePasswordRequest {
+  oldPassword: string;
+  newPassword: string;
+}
+
+export interface AddSkillRequest {
+  name: string;
+  level: number;
+}
+
+export interface UpdateSkillRequest {
+  level: number;
+}

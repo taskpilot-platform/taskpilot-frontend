@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { getApiErrorMessage } from "@/lib/http";
 import { useAuthStore } from "@/stores/auth.store";
 import { toast } from "react-toastify";
+import { LayoutDashboard, ShieldCheck, UserRound, LogOut, FolderKanban, ListChecks } from "lucide-react";
 
 export default function MainLayout() {
   const logout = useAuthStore((state) => state.logout);
@@ -36,34 +37,64 @@ export default function MainLayout() {
           <NavLink
             to="/"
             className={({ isActive }) =>
-              `block rounded-md px-3 py-2 transition-colors ${
+              `flex items-center gap-2 rounded-md px-3 py-2 transition-colors ${
                 isActive ? "bg-accent font-medium" : "hover:bg-accent"
               }`
             }
           >
+            <LayoutDashboard className="h-4 w-4" />
             Dashboard
           </NavLink>
           <Link
             to="/"
-            className="block rounded-md px-3 py-2 text-muted-foreground hover:bg-accent"
+            className="flex items-center gap-2 rounded-md px-3 py-2 text-muted-foreground hover:bg-accent"
           >
+            <FolderKanban className="h-4 w-4" />
             Dự án (sắp có)
           </Link>
           <Link
             to="/"
-            className="block rounded-md px-3 py-2 text-muted-foreground hover:bg-accent"
+            className="flex items-center gap-2 rounded-md px-3 py-2 text-muted-foreground hover:bg-accent"
           >
+            <ListChecks className="h-4 w-4" />
             Công việc (sắp có)
           </Link>
         </nav>
 
         <div className="mt-auto">
+          <div className="mb-3 space-y-2">
+            <NavLink
+              to="/profile"
+              className={({ isActive }) =>
+                `flex items-center gap-2 rounded-md px-3 py-2 transition-colors ${
+                  isActive ? "bg-accent font-medium" : "hover:bg-accent"
+                }`
+              }
+            >
+              <UserRound className="h-4 w-4" />
+              Profile
+            </NavLink>
+
+            <NavLink
+              to="/admin/skills"
+              className={({ isActive }) =>
+                `flex items-center gap-2 rounded-md px-3 py-2 transition-colors ${
+                  isActive ? "bg-accent font-medium" : "hover:bg-accent"
+                }`
+              }
+            >
+              <ShieldCheck className="h-4 w-4" />
+              Quản lý skills
+            </NavLink>
+          </div>
+
           <Button
             onClick={handleLogout}
             variant="outline"
-            className="w-full"
+            className="w-full gap-2"
             disabled={isLoading}
           >
+            <LogOut className="h-4 w-4" />
             {isLoading ? "Đang đăng xuất..." : "Đăng xuất"}
           </Button>
         </div>
