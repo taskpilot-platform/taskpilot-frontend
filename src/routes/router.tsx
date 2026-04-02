@@ -13,6 +13,7 @@ import ResetPasswordPage from "@/pages/ResetPasswordPage";
 import DashboardPage from "@/pages/DashboardPage";
 import ProfilePage from "@/pages/ProfilePage";
 import AdminSkillsPage from "@/pages/AdminSkillsPage";
+import ProjectsPage from "@/pages/ProjectsPage";
 
 // Import Guard
 import ProtectedRoute from "./ProtectedRoute";
@@ -56,6 +57,10 @@ export const router = createBrowserRouter([
       {
         path: "/profile",
         element: <ProfilePage />,
+      },
+      {
+        path: "/projects",
+        element: <ProjectsPage />,
       },
       {
         path: "/admin/skills",

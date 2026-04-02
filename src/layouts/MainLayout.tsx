@@ -1,4 +1,4 @@
-import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
+import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { FloatingChat } from "@/components/FloatingChat";
 import logo from "@/assets/logo.svg";
 import { Button } from "@/components/ui/button";
@@ -45,20 +45,24 @@ export default function MainLayout() {
             <LayoutDashboard className="h-4 w-4" />
             Dashboard
           </NavLink>
-          <Link
-            to="/"
-            className="flex items-center gap-2 rounded-md px-3 py-2 text-muted-foreground hover:bg-accent"
+          <NavLink
+            to="/projects"
+            className={({ isActive }) =>
+              `flex items-center gap-2 rounded-md px-3 py-2 transition-colors ${
+                isActive ? "bg-accent font-medium" : "hover:bg-accent"
+              }`
+            }
           >
             <FolderKanban className="h-4 w-4" />
-            Dự án (sắp có)
-          </Link>
-          <Link
+            Dự án
+          </NavLink>
+          <NavLink
             to="/"
             className="flex items-center gap-2 rounded-md px-3 py-2 text-muted-foreground hover:bg-accent"
           >
             <ListChecks className="h-4 w-4" />
             Công việc (sắp có)
-          </Link>
+          </NavLink>
         </nav>
 
         <div className="mt-auto">

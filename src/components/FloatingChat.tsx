@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { MessageCircle, X, Send } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Maximize2, MessageCircle, Minus, Send, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   AssistantRuntimeProvider,
@@ -213,26 +213,151 @@ const chatModelAdapter: ChatModelAdapter = {
 
 export function FloatingChat() {
   const [isOpen, setIsOpen] = useState(false);
+  const [displayMode, setDisplayMode] = useState<"mini" | "sidebar">("mini");
+  const [sidebarWidth, setSidebarWidth] = useState(420);
+  const [isResizingSidebar, setIsResizingSidebar] = useState(false);
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  const resizingWidthRef = useRef(sidebarWidth);
+  const resizeRafRef = useRef<number | null>(null);
   const runtime = useLocalRuntime(chatModelAdapter);
+
+  const isMiniMode = displayMode === "mini";
+
+  const panelWrapperClass = isMiniMode
+    ? "fixed bottom-6 right-6 z-50"
+    : "fixed inset-y-0 right-0 z-50";
+
+  const panelClass = isMiniMode
+    ? "relative w-[400px] h-[600px] bg-background border shadow-2xl rounded-2xl overflow-hidden flex flex-col animate-in fade-in slide-in-from-bottom-10 duration-300"
+    : "relative h-full bg-background border-l shadow-2xl overflow-hidden flex flex-col animate-in fade-in slide-in-from-right-10 duration-300";
+
+  const switchToSidebar = () => {
+    setDisplayMode("sidebar");
+    setIsOpen(true);
+  };
+
+  const minimizeToDefaultArea = () => {
+    setDisplayMode("mini");
+    setIsOpen(false);
+  };
+
+  useEffect(() => {
+    if (!isResizingSidebar || displayMode !== "sidebar") {
+      return;
+    }
+
+    const handleMouseMove = (event: MouseEvent) => {
+      const viewportWidth = window.innerWidth;
+      const nextWidth = viewportWidth - event.clientX;
+      const minWidth = 320;
+      const maxWidth = Math.min(860, Math.floor(viewportWidth * 0.8));
+      const clampedWidth = Math.min(maxWidth, Math.max(minWidth, nextWidth));
+      resizingWidthRef.current = clampedWidth;
+
+      if (resizeRafRef.current !== null) {
+        return;
+      }
+
+      resizeRafRef.current = window.requestAnimationFrame(() => {
+        if (panelRef.current) {
+          panelRef.current.style.width = `${resizingWidthRef.current}px`;
+        }
+        resizeRafRef.current = null;
+      });
+    };
+
+    const handleMouseUp = () => {
+      setIsResizingSidebar(false);
+      setSidebarWidth(resizingWidthRef.current);
+    };
+
+    const previousUserSelect = document.body.style.userSelect;
+    const previousCursor = document.body.style.cursor;
+    document.body.style.userSelect = "none";
+    document.body.style.cursor = "col-resize";
+
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+      document.body.style.userSelect = previousUserSelect;
+      document.body.style.cursor = previousCursor;
+
+      if (resizeRafRef.current !== null) {
+        window.cancelAnimationFrame(resizeRafRef.current);
+        resizeRafRef.current = null;
+      }
+    };
+  }, [displayMode, isResizingSidebar]);
+
+  useEffect(() => {
+    resizingWidthRef.current = sidebarWidth;
+  }, [sidebarWidth]);
+
+  useEffect(() => {
+    if (!panelRef.current) {
+      return;
+    }
+
+    if (displayMode === "sidebar") {
+      panelRef.current.style.width = `${sidebarWidth}px`;
+      return;
+    }
+
+    panelRef.current.style.removeProperty("width");
+  }, [displayMode, sidebarWidth]);
 
   return (
     <AssistantRuntimeProvider runtime={runtime}>
-      <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end">
-        {isOpen && (
-          <div className="mb-4 w-[400px] h-[600px] bg-background border shadow-2xl rounded-2xl overflow-hidden flex flex-col animate-in fade-in slide-in-from-bottom-10 duration-300">
+      {isOpen && (
+        <div className={panelWrapperClass}>
+          <div ref={panelRef} className={panelClass}>
+            {!isMiniMode && (
+              <button
+                type="button"
+                onMouseDown={() => setIsResizingSidebar(true)}
+                className="absolute left-0 top-0 h-full w-2 -translate-x-1/2 cursor-col-resize"
+                aria-label="Điều chỉnh độ rộng chat"
+              />
+            )}
             <div className="bg-slate-900 text-white p-3 flex justify-between items-center shadow-md">
               <div className="flex items-center gap-2">
                 <span className="text-xl">🤖</span>
                 <h3 className="font-bold">TaskPilot Copilot</h3>
               </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setIsOpen(false)}
-                className="text-white hover:text-red-400 hover:bg-slate-800 rounded-full h-8 w-8"
-              >
-                <X className="h-5 w-5" />
-              </Button>
+              <div className="flex items-center gap-2">
+                {isMiniMode ? (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={switchToSidebar}
+                    className="text-white hover:bg-slate-800 rounded-full h-8 w-8"
+                    aria-label="Mở dạng sidebar"
+                  >
+                    <Maximize2 className="h-4 w-4" />
+                  </Button>
+                ) : (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={minimizeToDefaultArea}
+                    className="text-white hover:bg-slate-800 rounded-full h-8 w-8"
+                    aria-label="Thu nhỏ về vùng chat ban đầu"
+                  >
+                    <Minus className="h-5 w-5" />
+                  </Button>
+                )}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setIsOpen(false)}
+                  className="text-white hover:text-red-400 hover:bg-slate-800 rounded-full h-8 w-8"
+                >
+                  <X className="h-5 w-5" />
+                </Button>
+              </div>
             </div>
 
             <ThreadPrimitive.Root className="flex-1 flex flex-col overflow-hidden">
@@ -267,17 +392,19 @@ export function FloatingChat() {
               </div>
             </ThreadPrimitive.Root>
           </div>
-        )}
+        </div>
+      )}
 
-        {!isOpen && (
+      {!isOpen && (
+        <div className="fixed bottom-6 right-6 z-50">
           <Button
             onClick={() => setIsOpen(true)}
             className="rounded-full w-14 h-14 shadow-[0_0_20px_rgba(37,99,235,0.4)] bg-blue-600 hover:bg-blue-700 hover:scale-110 transition-all duration-300"
           >
             <MessageCircle className="h-6 w-6 text-white" />
           </Button>
-        )}
-      </div>
+        </div>
+      )}
     </AssistantRuntimeProvider>
   );
 }
