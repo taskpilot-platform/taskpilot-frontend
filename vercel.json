@@ -1,6 +1,10 @@
 {
   "rewrites": [
     {
+      "source": "/api/:path*",
+      "destination": "https://taskpilot952476-taskpilot.hf.space/api/:path*"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }
