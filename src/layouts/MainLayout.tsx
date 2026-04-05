@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { FloatingChat } from "@/components/FloatingChat";
 import logo from "@/assets/logo.svg";
@@ -5,14 +6,30 @@ import { Button } from "@/components/ui/button";
 import { getApiErrorMessage } from "@/lib/http";
 import { useAuthStore } from "@/stores/auth.store";
 import { toast } from "react-toastify";
-import { LayoutDashboard, ShieldCheck, UserRound, LogOut, FolderKanban, ListChecks, Globe } from "lucide-react";
+import { LayoutDashboard, ShieldCheck, UserRound, LogOut, FolderKanban, ListChecks, Globe, Users, Code, Settings, Menu, ChevronLeft } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { profileService } from "@/services/profile.service";
 
 export default function MainLayout() {
   const logout = useAuthStore((state) => state.logout);
   const isLoading = useAuthStore((state) => state.isLoading);
   const navigate = useNavigate();
   const { t, i18n } = useTranslation();
+  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [userRole, setUserRole] = useState<string | null>(localStorage.getItem("userRole"));
+
+  useEffect(() => {
+    // Lấy thông tin user để kiểm tra phân quyền Sidebar
+    profileService.getMe()
+      .then(res => {
+        setUserRole(res.data.role);
+        localStorage.setItem("userRole", res.data.role);
+      })
+      .catch(() => {
+        setUserRole("USER");
+        localStorage.removeItem("userRole");
+      });
+  }, []);
 
   const toggleLanguage = () => {
     const newLang = i18n.language === "vi" ? "en" : "vi";
@@ -23,7 +40,7 @@ export default function MainLayout() {
   const handleLogout = async () => {
     try {
       await logout();
-      toast.success("Đăng xuất thành công");
+      toast.success(t("layout.logout_success"));
       navigate("/login");
     } catch (error) {
       toast.error(getApiErrorMessage(error));
@@ -32,49 +49,72 @@ export default function MainLayout() {
 
   return (
     <div className="flex h-screen bg-background text-foreground">
-      <aside className="flex w-64 flex-col border-r bg-card p-4 text-card-foreground">
-        <div className="mb-4 flex items-center justify-between">
+      <aside 
+        className={`flex flex-col border-r bg-card py-4 text-card-foreground transition-all duration-300 ${
+          isCollapsed ? "w-16 items-center px-2" : "w-64 px-4"
+        }`}
+      >
+        <div className={`mb-4 flex items-center ${isCollapsed ? "flex-col gap-4" : "justify-between"}`}>
           <div className="flex items-center gap-2">
-            <img src={logo} alt="TaskPilot logo" className="h-8 w-8" />
-            <h2 className="text-lg font-bold tracking-tight">
-              <span className="text-[#103E6A]">task</span>
-              <span className="text-[#0394B1]">pilot</span>
-            </h2>
+            {!isCollapsed && (
+              <img src={logo} alt="TaskPilot logo" className="h-8 w-8" />
+            )}
+            {!isCollapsed && (
+              <h2 className="text-lg font-bold tracking-tight">
+                <span className="text-[#103E6A]">task</span>
+                <span className="text-[#0394B1]">pilot</span>
+              </h2>
+            )}
           </div>
-          <Button variant="ghost" size="icon" onClick={toggleLanguage} title="Change Language">
-            <Globe className="h-4 w-4" />
-          </Button>
+          <div className={`flex items-center ${isCollapsed ? "flex-col gap-2" : "gap-1"}`}>
+            <Button variant="ghost" size="icon" onClick={() => setIsCollapsed(!isCollapsed)} title="Toggle Sidebar">
+              {isCollapsed ? <Menu className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+            </Button>
+            {!isCollapsed && (
+              <Button variant="ghost" size="icon" onClick={toggleLanguage} title={t("layout.change_lang", { defaultValue: "Change Language" })}>
+                <Globe className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
         </div>
 
-        <nav className="space-y-2">
+        <nav className="space-y-2 w-full">
+          {isCollapsed && (
+            <Button variant="ghost" size="icon" onClick={toggleLanguage} title={t("layout.change_lang", { defaultValue: "Change Language" })} className="mb-4 w-full">
+              <Globe className="h-4 w-4" />
+            </Button>
+          )}
           <NavLink
             to="/"
             className={({ isActive }) =>
-              `flex items-center gap-2 rounded-md px-3 py-2 transition-colors ${
+              `flex items-center gap-2 rounded-md ${isCollapsed ? 'justify-center px-0' : 'px-3'} py-2 transition-colors ${
                 isActive ? "bg-accent font-medium" : "hover:bg-accent"
               }`
             }
+            title={t("layout.dashboard")}
           >
-            <LayoutDashboard className="h-4 w-4" />
-            {t("layout.dashboard")}
+            <LayoutDashboard className="h-4 w-4 shrink-0" />
+            {!isCollapsed && <span>{t("layout.dashboard")}</span>}
           </NavLink>
           <NavLink
             to="/projects"
             className={({ isActive }) =>
-              `flex items-center gap-2 rounded-md px-3 py-2 transition-colors ${
+              `flex items-center gap-2 rounded-md ${isCollapsed ? 'justify-center px-0' : 'px-3'} py-2 transition-colors ${
                 isActive ? "bg-accent font-medium" : "hover:bg-accent"
               }`
             }
+            title={t("layout.projects")}
           >
-            <FolderKanban className="h-4 w-4" />
-            {t("layout.projects")}
+            <FolderKanban className="h-4 w-4 shrink-0" />
+            {!isCollapsed && <span>{t("layout.projects")}</span>}
           </NavLink>
           <NavLink
             to="/"
-            className="flex items-center gap-2 rounded-md px-3 py-2 text-muted-foreground hover:bg-accent"
+            className={`flex items-center gap-2 rounded-md ${isCollapsed ? 'justify-center px-0' : 'px-3'} py-2 text-muted-foreground hover:bg-accent`}
+            title={t("layout.tasks_upcoming")}
           >
-            <ListChecks className="h-4 w-4" />
-            {t("layout.tasks_upcoming")}
+            <ListChecks className="h-4 w-4 shrink-0" />
+            {!isCollapsed && <span>{t("layout.tasks_upcoming")}</span>}
           </NavLink>
         </nav>
 
@@ -83,36 +123,82 @@ export default function MainLayout() {
             <NavLink
               to="/profile"
               className={({ isActive }) =>
-                `flex items-center gap-2 rounded-md px-3 py-2 transition-colors ${
+                `flex items-center gap-2 rounded-md ${isCollapsed ? 'justify-center px-0' : 'px-3'} py-2 transition-colors ${
                   isActive ? "bg-accent font-medium" : "hover:bg-accent"
                 }`
               }
+              title={t("layout.profile")}
             >
-              <UserRound className="h-4 w-4" />
-              {t("layout.profile")}
+              <UserRound className="h-4 w-4 shrink-0" />
+              {!isCollapsed && <span>{t("layout.profile")}</span>}
             </NavLink>
 
             <NavLink
               to="/my-skills"
               className={({ isActive }) =>
-                `flex items-center gap-2 rounded-md px-3 py-2 transition-colors ${
+                `flex items-center gap-2 rounded-md ${isCollapsed ? 'justify-center px-0' : 'px-3'} py-2 transition-colors ${
                   isActive ? "bg-accent font-medium" : "hover:bg-accent"
                 }`
               }
+              title={t("layout.my_skills")}
             >
-              <ShieldCheck className="h-4 w-4" />
-              {t("layout.my_skills")}
+              <ShieldCheck className="h-4 w-4 shrink-0" />
+              {!isCollapsed && <span>{t("layout.my_skills")}</span>}
             </NavLink>
+
+            {userRole === "ADMIN" && (
+              <div className="pt-2">
+                {!isCollapsed && <p className="px-3 text-xs font-semibold uppercase text-muted-foreground">Admin</p>}
+                {isCollapsed && <div className="mx-auto my-2 block h-px w-8 bg-border" />}
+                <NavLink
+                  to="/admin/users"
+                  className={({ isActive }) =>
+                    `mt-2 flex items-center gap-2 rounded-md ${isCollapsed ? 'justify-center px-0' : 'px-3'} py-2 transition-colors ${
+                      isActive ? "bg-accent font-medium" : "hover:bg-accent"
+                    }`
+                  }
+                  title={t("admin.users_title")}
+                >
+                  <Users className="h-4 w-4 shrink-0" />
+                  {!isCollapsed && <span>{t("admin.users_title")}</span>}
+                </NavLink>
+                <NavLink
+                  to="/admin/skills"
+                  className={({ isActive }) =>
+                    `mt-1 flex items-center gap-2 rounded-md ${isCollapsed ? 'justify-center px-0' : 'px-3'} py-2 transition-colors ${
+                      isActive ? "bg-accent font-medium" : "hover:bg-accent"
+                    }`
+                  }
+                  title={t("admin.global_skills")}
+                >
+                  <Code className="h-4 w-4 shrink-0" />
+                  {!isCollapsed && <span>{t("admin.global_skills")}</span>}
+                </NavLink>
+                <NavLink
+                  to="/admin/settings"
+                  className={({ isActive }) =>
+                    `mt-1 flex items-center gap-2 rounded-md ${isCollapsed ? 'justify-center px-0' : 'px-3'} py-2 transition-colors ${
+                      isActive ? "bg-accent font-medium" : "hover:bg-accent"
+                    }`
+                  }
+                  title={t("admin.system_settings.title", { defaultValue: "Cấu hình AI & Hệ thống" })}
+                >
+                  <Settings className="h-4 w-4 shrink-0" />
+                  {!isCollapsed && <span className="truncate">{t("admin.system_settings.title", { defaultValue: "Cấu hình AI & Hệ thống" })}</span>}
+                </NavLink>
+              </div>
+            )}
           </div>
 
           <Button
             onClick={handleLogout}
             variant="outline"
-            className="w-full gap-2"
+            className={`w-full gap-2 ${isCollapsed ? 'px-0 justify-center' : ''}`}
             disabled={isLoading}
+            title={isLoading ? t("layout.logging_out") : t("layout.logout")}
           >
-            <LogOut className="h-4 w-4" />
-            {isLoading ? t("layout.logging_out") : t("layout.logout")}
+            <LogOut className="h-4 w-4 shrink-0" />
+            {!isCollapsed && <span>{isLoading ? t("layout.logging_out") : t("layout.logout")}</span>}
           </Button>
         </div>
       </aside>

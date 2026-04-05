@@ -32,7 +32,7 @@ export default function LoginPage() {
     if (!isFormValid) return;
     try {
       await login({ email, password });
-      toast.success("Đăng nhập thành công");
+      toast.success(t("auth.login_success", { defaultValue: "Logged in successfully" }));
       navigate("/");
     } catch (error) {
       toast.error(getApiErrorMessage(error));

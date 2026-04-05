@@ -27,7 +27,7 @@ export default function ForgotPasswordPage() {
     setIsSubmitting(true);
     try {
       const response = await authService.forgotPassword({ email });
-      toast.success(response.message || "Đã gửi yêu cầu đặt lại mật khẩu");
+      toast.success(response.message || t("auth.forgot_success", { defaultValue: "Reset request sent successfully" }));
       navigate("/reset-password");
     } catch (error) {
       toast.error(getApiErrorMessage(error));

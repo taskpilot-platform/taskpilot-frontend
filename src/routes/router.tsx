@@ -14,6 +14,9 @@ import DashboardPage from "@/pages/DashboardPage";
 import ProfilePage from "@/pages/ProfilePage";
 import MySkillsPage from "@/pages/MySkillsPage";
 import ProjectsPage from "@/pages/ProjectsPage";
+import AdminUsersPage from "@/pages/AdminUsersPage";
+import AdminGlobalSkillsPage from "@/pages/AdminGlobalSkillsPage";
+import AdminSettingsPage from "@/pages/AdminSettingsPage";
 
 // Import Guard
 import ProtectedRoute from "./ProtectedRoute";
@@ -68,6 +71,20 @@ export const router = createBrowserRouter([
       },
       // Thêm các route khác của TaskPilot vào đây sau:
       // { path: "/tasks", element: <TasksPage /> },
+      
+      // Admin
+      {
+        path: "/admin/users",
+        element: <AdminUsersPage />,
+      },
+      {
+        path: "/admin/skills",
+        element: <AdminGlobalSkillsPage />,
+      },
+      {
+        path: "/admin/settings",
+        element: <AdminSettingsPage />,
+      },
     ],
   },
 ]);

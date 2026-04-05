@@ -11,3 +11,11 @@ export interface ApiErrorResponse {
   data?: unknown;
   timestamp?: string;
 }
+
+export interface PaginatedResponse<T> {
+  content: T[];
+  totalElements: number;
+  totalPages: number;
+  size: number;
+  number: number;
+}

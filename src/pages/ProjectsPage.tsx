@@ -9,6 +9,7 @@ import {
   Search,
   Users,
   Wrench,
+  X
 } from "lucide-react";
 import { toast } from "react-toastify";
 import { useTranslation } from "react-i18next";
@@ -50,9 +51,12 @@ export default function ProjectsPage() {
   const [projects, setProjects] = useState<MyProject[]>([]);
   const [totalElements, setTotalElements] = useState(0);
   const [currentPage, setCurrentPage] = useState(0);
-  const [pageSize] = useState(8);
+  const [pageSize, setPageSize] = useState(8);
+  const [keyword, setKeyword] = useState("");
 
   const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
+  const [mode, setMode] = useState<"list" | "create" | "detail">("list");
+
   const [projectDetail, setProjectDetail] = useState<Project | null>(null);
   const [projectSummary, setProjectSummary] = useState<ProjectSummary | null>(null);
   const [projectMembers, setProjectMembers] = useState<ProjectMember[]>([]);
@@ -84,10 +88,16 @@ export default function ProjectsPage() {
 
   const totalPages = useMemo(() => Math.max(1, Math.ceil(totalElements / pageSize)), [totalElements, pageSize]);
 
-  const loadMyProjects = async (targetPage = currentPage) => {
+  const filteredProjects = useMemo(() => {
+    if (!keyword.trim()) return projects;
+    const lowerKeyword = keyword.toLowerCase();
+    return projects.filter((p) => p.name?.toLowerCase().includes(lowerKeyword));
+  }, [projects, keyword]);
+
+  const loadMyProjects = async (targetPage = currentPage, limit = pageSize) => {
     setIsLoading(true);
     try {
-      const response = await projectService.getMyProjects(targetPage, pageSize);
+      const response = await projectService.getMyProjects(targetPage, limit);
       setProjects(response.data.content);
       setTotalElements(response.data.totalElements);
       setCurrentPage(response.data.number);
@@ -97,8 +107,10 @@ export default function ProjectsPage() {
         setProjectDetail(null);
         setProjectSummary(null);
         setProjectMembers([]);
-      } else if (!response.data.content.some((p) => p.id === selectedProjectId)) {
-        setSelectedProjectId(response.data.content[0].id);
+        setMode("list");
+      } else if (selectedProjectId && !response.data.content.some((p) => p.id === selectedProjectId)) {
+        setSelectedProjectId(null);
+        setMode("list");
       }
     } catch (error) {
       toast.error(getApiErrorMessage(error));
@@ -125,13 +137,15 @@ export default function ProjectsPage() {
       setEditHeuristicMode(detailResponse.data.heuristicMode);
       setEditStartDate(detailResponse.data.startDate || "");
       setEditEndDate(detailResponse.data.endDate || "");
+      setMode("detail");
     } catch (error) {
       toast.error(getApiErrorMessage(error));
     }
   };
 
   useEffect(() => {
-    void loadMyProjects(0);
+    void loadMyProjects(0, pageSize);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -139,6 +153,18 @@ export default function ProjectsPage() {
       void loadSelectedProjectData(selectedProjectId);
     }
   }, [selectedProjectId]);
+
+  const handleModeChange = (newMode: "create" | "list" | "detail") => {
+    if (newMode === "list" || newMode === "create") {
+      setSelectedProjectId(null);
+    }
+    setMode(newMode);
+  };
+
+  const handlePageSizeChange = (newSize: number) => {
+    setPageSize(newSize);
+    void loadMyProjects(0, newSize);
+  };
 
   const handleCreateProject = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -153,13 +179,14 @@ export default function ProjectsPage() {
         endDate: createEndDate || undefined,
       });
 
-      toast.success("Tạo dự án thành công");
+      toast.success(t("projects.create_success"));
       setCreateName("");
       setCreateDescription("");
       setCreateHeuristicMode("BALANCED");
       setCreateStartDate("");
       setCreateEndDate("");
-      await loadMyProjects(0);
+      setMode("list");
+      await loadMyProjects(0, pageSize);
     } catch (error) {
       toast.error(getApiErrorMessage(error));
     } finally {
@@ -171,16 +198,17 @@ export default function ProjectsPage() {
     event.preventDefault();
 
     if (!joinCode.trim()) {
-      toast.error("Vui lòng nhập mã dự án");
+      toast.error(t("projects.join_error_empty"));
       return;
     }
 
     setIsMutating(true);
     try {
       await projectService.joinProject({ projectCode: joinCode.trim() });
-      toast.success("Tham gia dự án thành công");
+      toast.success(t("projects.join_success"));
       setJoinCode("");
-      await loadMyProjects(0);
+      setMode("list");
+      await loadMyProjects(0, pageSize);
     } catch (error) {
       toast.error(getApiErrorMessage(error));
     } finally {
@@ -192,7 +220,7 @@ export default function ProjectsPage() {
     event.preventDefault();
 
     if (!selectedProjectId) {
-      toast.error("Vui lòng chọn dự án cần cập nhật");
+      toast.error(t("projects.update_error_empty"));
       return;
     }
 
@@ -207,8 +235,8 @@ export default function ProjectsPage() {
         endDate: editEndDate || undefined,
       });
 
-      toast.success("Cập nhật dự án thành công");
-      await Promise.all([loadMyProjects(currentPage), loadSelectedProjectData(selectedProjectId)]);
+      toast.success(t("projects.update_success"));
+      await Promise.all([loadMyProjects(currentPage, pageSize), loadSelectedProjectData(selectedProjectId)]);
     } catch (error) {
       toast.error(getApiErrorMessage(error));
     } finally {
@@ -217,7 +245,7 @@ export default function ProjectsPage() {
   };
 
   const handleLeaveProject = async (projectId: number) => {
-    const confirmed = window.confirm("Bạn có chắc chắn muốn rời dự án này?");
+    const confirmed = window.confirm(t("projects.leave_confirm"));
     if (!confirmed) {
       return;
     }
@@ -225,8 +253,11 @@ export default function ProjectsPage() {
     setIsMutating(true);
     try {
       await projectService.leaveProject(projectId);
-      toast.success("Đã rời dự án");
-      await loadMyProjects(0);
+      toast.success(t("projects.leave_success"));
+      if (selectedProjectId === projectId) {
+        setMode("list");
+      }
+      await loadMyProjects(currentPage, pageSize);
     } catch (error) {
       toast.error(getApiErrorMessage(error));
     } finally {
@@ -235,34 +266,57 @@ export default function ProjectsPage() {
   };
 
   return (
-    <div className="min-h-screen space-y-6 p-6 md:p-8">
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+    <div className="min-h-screen space-y-6 p-6 md:p-8 flex flex-col h-screen overflow-hidden">
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between shrink-0">
         <div className="space-y-1">
           <h1 className="text-3xl font-bold tracking-tight">{t("projects.title")}</h1>
-          <p className="text-muted-foreground">Theo dõi dự án đã tham gia, tạo dự án mới và quản trị thông tin dự án.</p>
+          <p className="text-muted-foreground">{t("projects.desc")}</p>
         </div>
 
-        <Button
-          type="button"
-          variant="secondary"
-          className="gap-2"
-          onClick={() => void loadMyProjects(currentPage)}
-          disabled={isMutating || isLoading}
-        >
-          <RefreshCw className="h-4 w-4" />
-          Tải lại
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            className="gap-2"
+            onClick={() => handleModeChange(mode === "create" ? "list" : "create")}
+            disabled={isMutating || isLoading}
+          >
+            <PlusCircle className="h-4 w-4" />
+            {mode === "create" ? t("projects.cancel_btn") : t("projects.create_title")}
+          </Button>
+          <Button
+            type="button"
+            variant="secondary"
+            className="gap-2"
+            onClick={() => void loadMyProjects(currentPage, pageSize)}
+            disabled={isMutating || isLoading}
+          >
+            <RefreshCw className="h-4 w-4" />
+            {t("skills.reload_btn")}
+          </Button>
+        </div>
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-3">
-        <Card className="xl:col-span-2">
-          <CardHeader>
+      <div className="grid gap-4 xl:grid-cols-3 flex-1 overflow-hidden min-h-0">
+        <Card className={`${mode === "list" ? "xl:col-span-3 transition-all duration-300" : "xl:col-span-2 transition-all duration-300"} flex flex-col overflow-hidden`}>
+          <CardHeader className="shrink-0">
             <CardTitle>{t("projects.title")}</CardTitle>
             <CardDescription>
               {t("projects.total", { total: totalElements })} {t("projects.page", { page: currentPage + 1, totalPages })}
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="flex flex-col flex-1 overflow-hidden min-h-0">
+            <div className="mb-4 flex gap-2 shrink-0">
+              <Input
+                placeholder={t("projects.search")}
+                value={keyword}
+                onChange={(e) => setKeyword(e.target.value)}
+                className="max-w-sm"
+              />
+              <Button type="button" variant="secondary" size="icon" disabled={isLoading}>
+                <Search className="h-4 w-4" />
+              </Button>
+            </div>
+
             {isLoading ? (
               <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -270,6 +324,7 @@ export default function ProjectsPage() {
               </div>
             ) : (
               <>
+                <div className="flex-1 overflow-auto rounded-md border min-h-0">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -277,31 +332,32 @@ export default function ProjectsPage() {
                       <TableHead>{t("projects.col_role")}</TableHead>
                       <TableHead>{t("projects.col_status")}</TableHead>
                       <TableHead>{t("projects.col_joined")}</TableHead>
-                      <TableHead className="w-[160px]">{t("projects.col_actions")}</TableHead>
+                      <TableHead className="w-[100px] text-right">{t("projects.col_actions")}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {projects.length === 0 ? (
+                    {filteredProjects.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
                           {t("projects.empty")}
                         </TableCell>
                       </TableRow>
                     ) : (
-                      projects.map((project) => (
+                      filteredProjects.map((project) => (
                         <TableRow
                           key={project.id}
-                          className={selectedProjectId === project.id ? "bg-accent/40" : ""}
+                          className={selectedProjectId === project.id ? "bg-accent/40 cursor-pointer" : "cursor-pointer"}
+                          onClick={() => {
+                            if (selectedProjectId === project.id) {
+                              handleModeChange("list");
+                            } else {
+                              setSelectedProjectId(project.id);
+                            }
+                          }}
                         >
                           <TableCell>
-                            <button
-                              type="button"
-                              onClick={() => setSelectedProjectId(project.id)}
-                              className="text-left hover:underline"
-                            >
-                              <div className="font-medium">{project.name}</div>
-                              <div className="text-xs text-muted-foreground">ID: {project.id}</div>
-                            </button>
+                            <div className="font-medium">{project.name}</div>
+                            <div className="text-xs text-muted-foreground">ID: {project.id}</div>
                           </TableCell>
                           <TableCell>
                             <Badge variant={project.myRole === "MANAGER" ? "default" : "secondary"}>
@@ -312,16 +368,19 @@ export default function ProjectsPage() {
                             <Badge variant="outline">{project.status}</Badge>
                           </TableCell>
                           <TableCell>{new Date(project.joinedAt).toLocaleDateString("vi-VN")}</TableCell>
-                          <TableCell>
+                          <TableCell className="text-right">
                             <Button
                               type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                void handleLeaveProject(project.id);
+                              }}
                               variant="outline"
                               size="sm"
-                              className="gap-1"
-                              onClick={() => void handleLeaveProject(project.id)}
+                              className="gap-1 h-7 text-xs"
                               disabled={isMutating}
                             >
-                              <LogOut className="h-3.5 w-3.5" />
+                              <LogOut className="h-3 w-3" />
                               Rời
                             </Button>
                           </TableCell>
@@ -330,307 +389,341 @@ export default function ProjectsPage() {
                     )}
                   </TableBody>
                 </Table>
+                </div>
 
-                <div className="mt-4 flex items-center justify-end gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => void loadMyProjects(Math.max(0, currentPage - 1))}
-                    disabled={currentPage === 0 || isMutating || isLoading}
-                  >
-                    {t("projects.btn_prev")}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => void loadMyProjects(Math.min(totalPages - 1, currentPage + 1))}
-                    disabled={currentPage >= totalPages - 1 || isMutating || isLoading}
-                  >
-                    {t("projects.btn_next")}
-                  </Button>
+                <div className="mt-4 flex items-center justify-between shrink-0">
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <span>{t("projects.show")}</span>
+                    <select
+                      className="h-8 rounded-md border bg-background px-2 py-1 text-sm"
+                      value={pageSize}
+                      onChange={(e) => handlePageSizeChange(Number(e.target.value))}
+                    >
+                      <option value={8}>8</option>
+                      <option value={16}>16</option>
+                      <option value={40}>40</option>
+                    </select>
+                    <span>{t("projects.rows")}</span>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => void loadMyProjects(Math.max(0, currentPage - 1), pageSize)}
+                      disabled={currentPage === 0 || isMutating || isLoading}
+                    >
+                      {t("projects.btn_prev")}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => void loadMyProjects(Math.min(totalPages - 1, currentPage + 1), pageSize)}
+                      disabled={currentPage >= totalPages - 1 || isMutating || isLoading}
+                    >
+                      {t("projects.btn_next")}
+                    </Button>
+                  </div>
                 </div>
               </>
             )}
           </CardContent>
         </Card>
 
-        <div className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <PlusCircle className="h-4 w-4" />
-                {t("projects.create_title")}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <form className="space-y-3" onSubmit={handleCreateProject}>
-                <div className="space-y-1.5">
-                  <Label htmlFor="projectName">{t("projects.name")}</Label>
-                  <Input
-                    id="projectName"
-                    value={createName}
-                    onChange={(event) => setCreateName(event.target.value)}
-                    placeholder={t("projects.name_placeholder")}
-                    required
-                  />
-                </div>
+        {mode !== "list" && (
+          <div className="space-y-4 overflow-y-auto pr-2 pb-2">
+            {mode === "create" && (
+              <>
+                <Card className="animate-in slide-in-from-right-8 duration-300">
+                  <CardHeader>
+                    <CardTitle className="flex items-center justify-between gap-2 text-base">
+                      <div className="flex items-center gap-2">
+                        <PlusCircle className="h-4 w-4" />
+                        {t("projects.create_title")}
+                      </div>
+                      <Button variant="ghost" size="icon" onClick={() => handleModeChange("list")} className="h-6 w-6">
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <form className="space-y-3" onSubmit={handleCreateProject}>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="projectName">{t("projects.name")}</Label>
+                        <Input
+                          id="projectName"
+                          value={createName}
+                          onChange={(event) => setCreateName(event.target.value)}
+                          placeholder={t("projects.name_placeholder")}
+                          required
+                        />
+                      </div>
 
-                <div className="space-y-1.5">
-                  <Label htmlFor="projectDescription">{t("projects.desc")}</Label>
-                  <textarea
-                    id="projectDescription"
-                    value={createDescription}
-                    onChange={(event) => setCreateDescription(event.target.value)}
-                    rows={3}
-                    className="w-full rounded-md border bg-background px-3 py-2 text-sm"
-                    placeholder={t("projects.desc_placeholder")}
-                  />
-                </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="projectDescription">{t("projects.desc")}</Label>
+                        <textarea
+                          id="projectDescription"
+                          value={createDescription}
+                          onChange={(event) => setCreateDescription(event.target.value)}
+                          rows={3}
+                          className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                          placeholder={t("projects.desc_placeholder")}
+                        />
+                      </div>
 
-                <div className="space-y-1.5">
-                  <Label htmlFor="heuristicMode">{t("projects.mode")}</Label>
-                  <select
-                    id="heuristicMode"
-                    value={createHeuristicMode}
-                    onChange={(event) => setCreateHeuristicMode(event.target.value as HeuristicMode)}
-                    className="w-full rounded-md border bg-background px-3 py-2 text-sm"
-                  >
-                    {heuristicModes.map((mode) => (
-                      <option key={mode} value={mode}>
-                        {mode}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="heuristicMode">{t("projects.mode")}</Label>
+                        <select
+                          id="heuristicMode"
+                          value={createHeuristicMode}
+                          onChange={(event) => setCreateHeuristicMode(event.target.value as HeuristicMode)}
+                          className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                        >
+                          {heuristicModes.map((m) => (
+                            <option key={m} value={m}>
+                              {m}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
 
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="startDate">{t("projects.start_date")}</Label>
-                    <Input
-                      id="startDate"
-                      type="date"
-                      value={createStartDate}
-                      onChange={(event) => setCreateStartDate(event.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="endDate">{t("projects.end_date")}</Label>
-                    <Input
-                      id="endDate"
-                      type="date"
-                      value={createEndDate}
-                      onChange={(event) => setCreateEndDate(event.target.value)}
-                    />
-                  </div>
-                </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="space-y-1.5">
+                          <Label htmlFor="startDate">{t("projects.start_date")}</Label>
+                          <Input
+                            id="startDate"
+                            type="date"
+                            value={createStartDate}
+                            onChange={(event) => setCreateStartDate(event.target.value)}
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label htmlFor="endDate">{t("projects.end_date")}</Label>
+                          <Input
+                            id="endDate"
+                            type="date"
+                            value={createEndDate}
+                            onChange={(event) => setCreateEndDate(event.target.value)}
+                          />
+                        </div>
+                      </div>
 
-                <Button type="submit" className="w-full gap-2" disabled={isMutating}>
-                  <PlusCircle className="h-4 w-4" />
-                  {isMutating ? t("projects.creating_btn") : t("projects.create_btn")}
-                </Button>
-              </form>
-            </CardContent>
-          </Card>
+                      <Button type="submit" className="w-full gap-2" disabled={isMutating}>
+                        <PlusCircle className="h-4 w-4" />
+                        {isMutating ? t("projects.creating_btn") : t("projects.create_btn")}
+                      </Button>
+                    </form>
+                  </CardContent>
+                </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <Search className="h-4 w-4" />
-                {t("projects.join_title")}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <form className="space-y-3" onSubmit={handleJoinProject}>
-                <div className="space-y-1.5">
-                  <Label htmlFor="joinCode">{t("projects.join_code")}</Label>
-                  <Input
-                    id="joinCode"
-                    value={joinCode}
-                    onChange={(event) => setJoinCode(event.target.value)}
-                    placeholder={t("projects.join_code_placeholder")}
-                    required
-                  />
-                </div>
-                <Button type="submit" className="w-full" disabled={isMutating}>
-                  {t("projects.join_btn")}
-                </Button>
-              </form>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-
-      <div className="grid gap-4 xl:grid-cols-3">
-        <Card className="xl:col-span-2">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Wrench className="h-4 w-4" />
-              {t("projects.detail_title")}
-            </CardTitle>
-            <CardDescription>
-              {selectedProjectMeta
-                ? t("projects.detail_desc_selected", { name: selectedProjectMeta.name, role: selectedProjectMeta.myRole })
-                : t("projects.detail_desc_unselected")}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {!projectDetail ? (
-              <p className="text-sm text-muted-foreground">{t("projects.detail_empty")}</p>
-            ) : (
-              <form className="grid gap-3 md:grid-cols-2" onSubmit={handleUpdateProject}>
-                <div className="space-y-1.5 md:col-span-2">
-                  <Label htmlFor="editName">Tên dự án</Label>
-                  <Input
-                    id="editName"
-                    value={editName}
-                    onChange={(event) => setEditName(event.target.value)}
-                    disabled={!isSelectedProjectManager}
-                    required
-                  />
-                </div>
-
-                <div className="space-y-1.5 md:col-span-2">
-                  <Label htmlFor="editDescription">Mô tả</Label>
-                  <textarea
-                    id="editDescription"
-                    value={editDescription}
-                    onChange={(event) => setEditDescription(event.target.value)}
-                    rows={3}
-                    className="w-full rounded-md border bg-background px-3 py-2 text-sm"
-                    disabled={!isSelectedProjectManager}
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label htmlFor="editStatus">Trạng thái</Label>
-                  <select
-                    id="editStatus"
-                    value={editStatus}
-                    onChange={(event) => setEditStatus(event.target.value as ProjectStatus)}
-                    className="w-full rounded-md border bg-background px-3 py-2 text-sm"
-                    disabled={!isSelectedProjectManager}
-                  >
-                    {projectStatuses.map((status) => (
-                      <option key={status} value={status}>
-                        {status}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label htmlFor="editMode">Heuristic mode</Label>
-                  <select
-                    id="editMode"
-                    value={editHeuristicMode}
-                    onChange={(event) => setEditHeuristicMode(event.target.value as HeuristicMode)}
-                    className="w-full rounded-md border bg-background px-3 py-2 text-sm"
-                    disabled={!isSelectedProjectManager}
-                  >
-                    {heuristicModes.map((mode) => (
-                      <option key={mode} value={mode}>
-                        {mode}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label htmlFor="editStartDate">Ngày bắt đầu</Label>
-                  <Input
-                    id="editStartDate"
-                    type="date"
-                    value={editStartDate}
-                    onChange={(event) => setEditStartDate(event.target.value)}
-                    disabled={!isSelectedProjectManager}
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label htmlFor="editEndDate">Ngày kết thúc</Label>
-                  <Input
-                    id="editEndDate"
-                    type="date"
-                    value={editEndDate}
-                    onChange={(event) => setEditEndDate(event.target.value)}
-                    disabled={!isSelectedProjectManager}
-                  />
-                </div>
-
-                <div className="md:col-span-2">
-                  <Button type="submit" className="gap-2" disabled={isMutating || !isSelectedProjectManager}>
-                    <Wrench className="h-4 w-4" />
-                    {t("projects.update_btn")}
-                  </Button>
-                </div>
-              </form>
+                <Card className="animate-in slide-in-from-right-8 duration-300">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-base">
+                      <Search className="h-4 w-4" />
+                      {t("projects.join_title")}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <form className="space-y-3" onSubmit={handleJoinProject}>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="joinCode">{t("projects.join_code")}</Label>
+                        <Input
+                          id="joinCode"
+                          value={joinCode}
+                          onChange={(event) => setJoinCode(event.target.value)}
+                          placeholder={t("projects.join_code_placeholder")}
+                          required
+                        />
+                      </div>
+                      <Button type="submit" className="w-full gap-2" disabled={isMutating}>
+                        <Search className="h-4 w-4" />
+                        {t("projects.join_btn")}
+                      </Button>
+                    </form>
+                  </CardContent>
+                </Card>
+              </>
             )}
-          </CardContent>
-        </Card>
 
-        <div className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <Users className="h-4 w-4" />
-                {t("projects.overview_title")}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2 text-sm">
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">{t("projects.member_count")}</span>
-                <strong>{projectSummary?.totalMembers ?? 0}</strong>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">{t("projects.task_count")}</span>
-                <strong>{projectSummary?.totalTasks ?? 0}</strong>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">{t("projects.task_done")}</span>
-                <strong>{projectSummary?.completedTasks ?? 0}</strong>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">{t("projects.task_wip")}</span>
-                <strong>{projectSummary?.inProgressTasks ?? 0}</strong>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">{t("projects.task_todo")}</span>
-                <strong>{projectSummary?.pendingTasks ?? 0}</strong>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">{t("projects.progress")}</span>
-                <strong>{Number(projectSummary?.completionRate ?? 0).toFixed(1)}%</strong>
-              </div>
-            </CardContent>
-          </Card>
+            {mode === "detail" && (
+              <>
+                <Card className="animate-in slide-in-from-right-4 duration-300">
+                  <CardHeader>
+                    <CardTitle className="flex items-center justify-between gap-2 text-base">
+                      <div className="flex items-center gap-2">
+                        <Wrench className="h-4 w-4" />
+                        {t("projects.detail_title")}
+                      </div>
+                      <Button variant="ghost" size="icon" onClick={() => handleModeChange("list")} className="h-6 w-6">
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </CardTitle>
+                    <CardDescription>
+                      {selectedProjectMeta
+                        ? t("projects.detail_desc_selected", { name: selectedProjectMeta.name, role: selectedProjectMeta.myRole })
+                        : t("projects.detail_desc_unselected")}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {!projectDetail ? (
+                      <p className="text-sm text-muted-foreground">{t("projects.detail_empty")}</p>
+                    ) : (
+                      <form className="grid gap-3 md:grid-cols-2" onSubmit={handleUpdateProject}>
+                        <div className="space-y-1.5 md:col-span-2">
+                          <Label htmlFor="editName">{t("projects.name")}</Label>
+                          <Input
+                            id="editName"
+                            value={editName}
+                            onChange={(event) => setEditName(event.target.value)}
+                            disabled={!isSelectedProjectManager}
+                            required
+                          />
+                        </div>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <CalendarDays className="h-4 w-4" />
-                {t("projects.members_title")}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {projectMembers.length === 0 ? (
-                <p className="text-sm text-muted-foreground">{t("projects.members_empty")}</p>
-              ) : (
-                <div className="space-y-2">
-                  {projectMembers.slice(0, 8).map((member) => (
-                    <div key={`${member.projectId}-${member.userId}`} className="flex items-center justify-between rounded-md border px-3 py-2 text-sm">
-                      <span>{t("projects.member_id", { id: member.userId })}</span>
-                      <Badge variant={member.role === "MANAGER" ? "default" : "outline"}>
-                        {member.role}
-                      </Badge>
+                        <div className="space-y-1.5 md:col-span-2">
+                          <Label htmlFor="editDescription">{t("projects.desc")}</Label>
+                          <textarea
+                            id="editDescription"
+                            value={editDescription}
+                            onChange={(event) => setEditDescription(event.target.value)}
+                            rows={3}
+                            className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                            disabled={!isSelectedProjectManager}
+                          />
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <Label htmlFor="editStatus">{t("projects.col_status")}</Label>
+                          <select
+                            id="editStatus"
+                            value={editStatus}
+                            onChange={(event) => setEditStatus(event.target.value as ProjectStatus)}
+                            className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                            disabled={!isSelectedProjectManager}
+                          >
+                            {projectStatuses.map((status) => (
+                              <option key={status} value={status}>
+                                {status}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <Label htmlFor="editMode">Heuristic mode</Label>
+                          <select
+                            id="editMode"
+                            value={editHeuristicMode}
+                            onChange={(event) => setEditHeuristicMode(event.target.value as HeuristicMode)}
+                            className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                            disabled={!isSelectedProjectManager}
+                          >
+                            {heuristicModes.map((m) => (
+                              <option key={m} value={m}>
+                                {m}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <Label htmlFor="editStartDate">{t("projects.start_date")}</Label>
+                          <Input
+                            id="editStartDate"
+                            type="date"
+                            value={editStartDate}
+                            onChange={(event) => setEditStartDate(event.target.value)}
+                            disabled={!isSelectedProjectManager}
+                          />
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <Label htmlFor="editEndDate">{t("projects.end_date")}</Label>
+                          <Input
+                            id="editEndDate"
+                            type="date"
+                            value={editEndDate}
+                            onChange={(event) => setEditEndDate(event.target.value)}
+                            disabled={!isSelectedProjectManager}
+                          />
+                        </div>
+
+                        <div className="md:col-span-2">
+                          <Button type="submit" className="gap-2 w-full" disabled={isMutating || !isSelectedProjectManager}>
+                            <Wrench className="h-4 w-4" />
+                            {t("projects.update_btn")}
+                          </Button>
+                        </div>
+                      </form>
+                    )}
+                  </CardContent>
+                </Card>
+
+                <Card className="animate-in slide-in-from-right-4 duration-300">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-base">
+                      <Users className="h-4 w-4" />
+                      {t("projects.overview_title")}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-2 text-sm">
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">{t("projects.member_count")}</span>
+                      <strong>{projectSummary?.totalMembers ?? 0}</strong>
                     </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">{t("projects.task_count")}</span>
+                      <strong>{projectSummary?.totalTasks ?? 0}</strong>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">{t("projects.task_done")}</span>
+                      <strong>{projectSummary?.completedTasks ?? 0}</strong>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">{t("projects.task_wip")}</span>
+                      <strong>{projectSummary?.inProgressTasks ?? 0}</strong>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">{t("projects.task_todo")}</span>
+                      <strong>{projectSummary?.pendingTasks ?? 0}</strong>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">{t("projects.progress")}</span>
+                      <strong>{Number(projectSummary?.completionRate ?? 0).toFixed(1)}%</strong>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="animate-in slide-in-from-right-4 duration-300 shrink-0">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-base">
+                      <CalendarDays className="h-4 w-4" />
+                      {t("projects.members_title")}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {projectMembers.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">{t("projects.members_empty")}</p>
+                    ) : (
+                      <div className="space-y-2 max-h-[200px] overflow-y-auto pr-1">
+                        {projectMembers.map((member) => (
+                          <div key={`${member.projectId}-${member.userId}`} className="flex items-center justify-between rounded-md border px-3 py-2 text-sm">
+                            <span>{t("projects.member_id", { id: member.userId })}</span>
+                            <Badge variant={member.role === "MANAGER" ? "default" : "outline"}>
+                              {member.role}
+                            </Badge>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

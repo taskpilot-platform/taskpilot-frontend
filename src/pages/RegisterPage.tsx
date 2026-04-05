@@ -41,7 +41,7 @@ export default function RegisterPage() {
 
     try {
       await register({ fullName, email, password });
-      toast.success("Đăng ký thành công, vui lòng đăng nhập");
+      toast.success(t("auth.register_success", { defaultValue: "Registered successfully, please login" }));
       navigate("/login");
     } catch (error) {
       toast.error(getApiErrorMessage(error));

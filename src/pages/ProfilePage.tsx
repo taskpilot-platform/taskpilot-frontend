@@ -134,8 +134,8 @@ export default function ProfilePage() {
     setIsDeletingAccount(true);
     try {
       await profileService.deleteMe();
+      toast.success(t("admin.deactivate_success"));
       await logout();
-      toast.success("Tài khoản đã được vô hiệu hóa");
       navigate("/login", { replace: true });
     } catch (error) {
       toast.error(getApiErrorMessage(error));

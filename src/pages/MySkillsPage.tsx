@@ -88,7 +88,7 @@ export default function MySkillsPage() {
 
     const parsedLevel = Number(newSkillLevel);
     if (Number.isNaN(parsedLevel) || parsedLevel < 1 || parsedLevel > 5) {
-      toast.error("Level phải nằm trong khoảng 1 đến 5");
+      toast.error(t("skills.level_invalid", { defaultValue: "Level must be between 1 and 5" }));
       return;
     }
 
@@ -98,7 +98,7 @@ export default function MySkillsPage() {
         name: newSkillName.trim(),
         level: parsedLevel,
       });
-      toast.success("Đã thêm skill mới");
+      toast.success(t("skills.add_success"));
       setNewSkillName("");
       setNewSkillLevel("3");
       await loadPageData();
@@ -112,14 +112,14 @@ export default function MySkillsPage() {
   const handleUpdateSkill = async (skillId: number) => {
     const parsedLevel = Number(levelDrafts[skillId]);
     if (Number.isNaN(parsedLevel) || parsedLevel < 1 || parsedLevel > 5) {
-      toast.error("Level phải nằm trong khoảng 1 đến 5");
+      toast.error(t("skills.level_invalid", { defaultValue: "Level must be between 1 and 5" }));
       return;
     }
 
     setIsMutating(true);
     try {
       await skillService.updateMySkill(skillId, { level: parsedLevel });
-      toast.success("Đã cập nhật level skill");
+      toast.success(t("skills.update_success", { defaultValue: "Skill level updated" }));
       await loadPageData();
     } catch (error) {
       toast.error(getApiErrorMessage(error));
@@ -129,7 +129,7 @@ export default function MySkillsPage() {
   };
 
   const handleDeleteSkill = async (skillId: number) => {
-    const shouldDelete = window.confirm("Bạn có chắc chắn muốn xóa skill này?");
+    const shouldDelete = window.confirm(t("skills.delete_confirm", { defaultValue: "Are you sure you want to delete this skill?" }));
     if (!shouldDelete) {
       return;
     }
@@ -137,7 +137,7 @@ export default function MySkillsPage() {
     setIsMutating(true);
     try {
       await skillService.deleteMySkill(skillId);
-      toast.success("Đã xóa skill");
+      toast.success(t("skills.delete_success", { defaultValue: "Skill deleted" }));
       await loadPageData();
     } catch (error) {
       toast.error(getApiErrorMessage(error));
@@ -197,7 +197,7 @@ export default function MySkillsPage() {
         <Card>
           <CardContent className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" />
-            Đang tải dữ liệu skills...
+            {t("skills.loading", { defaultValue: "Đang tải dữ liệu..." })}
           </CardContent>
         </Card>
       ) : activeTab === "overview" ? (
@@ -252,7 +252,7 @@ export default function MySkillsPage() {
             <CardContent>
               <form className="grid gap-3 md:grid-cols-4" onSubmit={handleAddSkill}>
                 <div className="space-y-2 md:col-span-2">
-                  <Label htmlFor="newSkillName">Tên skill</Label>
+                  <Label htmlFor="newSkillName">{t("skills.col_skill")}</Label>
                   <Input
                     id="newSkillName"
                     value={newSkillName}
@@ -278,7 +278,7 @@ export default function MySkillsPage() {
                 <div className="flex items-end">
                   <Button type="submit" className="w-full gap-2" disabled={isMutating}>
                     <PlusCircle className="h-4 w-4" />
-                    Thêm skill
+                    {t("skills.add_btn", { defaultValue: "Thêm skill" })}
                   </Button>
                 </div>
               </form>
@@ -304,7 +304,7 @@ export default function MySkillsPage() {
                   {skills.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={4} className="py-8 text-center text-muted-foreground">
-                        Chưa có skill nào.
+                        {t("skills.no_data")}
                       </TableCell>
                     </TableRow>
                   ) : (
