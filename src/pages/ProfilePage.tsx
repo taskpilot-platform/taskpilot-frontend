@@ -12,6 +12,7 @@ import {
   UserCog,
 } from "lucide-react";
 import { toast } from "react-toastify";
+import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -25,6 +26,7 @@ import type { UserProfile } from "@/types/user";
 type ProfileTab = "profile" | "security";
 
 export default function ProfilePage() {
+  const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<ProfileTab>("profile");
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -40,6 +42,19 @@ export default function ProfilePage() {
   const [showOldPassword, setShowOldPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
+  const [touchedFullName, setTouchedFullName] = useState(false);
+  const [touchedOldPassword, setTouchedOldPassword] = useState(false);
+  const [touchedNewPassword, setTouchedNewPassword] = useState(false);
+  const [touchedConfirmPassword, setTouchedConfirmPassword] = useState(false);
+
+  const isFullNameInvalid = touchedFullName && !fullName.trim();
+  const isProfileFormValid = fullName.trim() !== "";
+
+  const isOldPasswordInvalid = touchedOldPassword && !oldPassword;
+  const isNewPasswordInvalid = touchedNewPassword && (!newPassword || newPassword.length < 8);
+  const isConfirmInvalid = touchedConfirmPassword && confirmPassword.length > 0 && newPassword !== confirmPassword;
+  const isPasswordFormValid = oldPassword && newPassword.length >= 8 && newPassword === confirmPassword;
 
   const navigate = useNavigate();
   const logout = useAuthStore((state) => state.logout);
@@ -67,6 +82,8 @@ export default function ProfilePage() {
   const handleUpdateProfile = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
+    if (!isProfileFormValid) return;
+
     setIsSavingProfile(true);
     try {
       const response = await profileService.updateMe({
@@ -74,7 +91,7 @@ export default function ProfilePage() {
         avatarUrl: avatarUrl.trim() ? avatarUrl.trim() : null,
       });
       setProfile(response.data);
-      toast.success("Cập nhật profile thành công");
+      toast.success(t("profile.save_btn"));
     } catch (error) {
       toast.error(getApiErrorMessage(error));
     } finally {
@@ -85,10 +102,7 @@ export default function ProfilePage() {
   const handleChangePassword = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
-    if (newPassword !== confirmPassword) {
-      toast.error("Mật khẩu xác nhận chưa khớp");
-      return;
-    }
+    if (!isPasswordFormValid) return;
 
     setIsChangingPassword(true);
     try {
@@ -100,7 +114,7 @@ export default function ProfilePage() {
       setOldPassword("");
       setNewPassword("");
       setConfirmPassword("");
-      toast.success("Đổi mật khẩu thành công");
+      toast.success(t("profile.change_pw_btn"));
     } catch (error) {
       toast.error(getApiErrorMessage(error));
     } finally {
@@ -110,7 +124,7 @@ export default function ProfilePage() {
 
   const handleDeleteAccount = async () => {
     const shouldDelete = window.confirm(
-      "Bạn chắc chắn muốn vô hiệu hóa tài khoản? Hành động này sẽ đăng xuất ngay lập tức.",
+      t("profile.delete_confirm"),
     );
 
     if (!shouldDelete) {
@@ -136,8 +150,8 @@ export default function ProfilePage() {
     <div className="min-h-screen space-y-6 p-6 md:p-8">
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div className="space-y-1">
-          <h1 className="text-3xl font-bold tracking-tight">Profile</h1>
-          <p className="text-muted-foreground">Quản lý thông tin cá nhân và bảo mật tài khoản.</p>
+          <h1 className="text-3xl font-bold tracking-tight">{t("profile.title")}</h1>
+          <p className="text-muted-foreground">{t("profile.desc")}</p>
         </div>
 
         <div className="rounded-lg border p-1">
@@ -148,7 +162,7 @@ export default function ProfilePage() {
             onClick={() => setActiveTab("profile")}
           >
             <UserCog className="h-4 w-4" />
-            Hồ sơ
+            {t("profile.tab_profile")}
           </Button>
           <Button
             type="button"
@@ -157,7 +171,7 @@ export default function ProfilePage() {
             onClick={() => setActiveTab("security")}
           >
             <KeyRound className="h-4 w-4" />
-            Bảo mật
+            {t("profile.tab_security")}
           </Button>
         </div>
       </div>
@@ -166,7 +180,7 @@ export default function ProfilePage() {
         <Card>
           <CardContent className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" />
-            Đang tải profile...
+            {t("profile.loading")}
           </CardContent>
         </Card>
       ) : activeTab === "profile" ? (
@@ -175,21 +189,21 @@ export default function ProfilePage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <UserCircle2 className="h-5 w-5" />
-                Thông tin hiện tại
+                {t("profile.current_info_title")}
               </CardTitle>
-              <CardDescription>Dữ liệu lấy từ endpoint /api/v1/users/me.</CardDescription>
+              <CardDescription>{t("profile.current_info_desc")}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3 text-sm">
               <div>
-                <p className="text-muted-foreground">Email</p>
+                <p className="text-muted-foreground">{t("auth.email")}</p>
                 <p className="font-medium">{profile?.email || "-"}</p>
               </div>
               <div>
-                <p className="text-muted-foreground">Vai trò</p>
+                <p className="text-muted-foreground">{t("profile.role")}</p>
                 <p className="font-medium">{profile?.role || "-"}</p>
               </div>
               <div>
-                <p className="text-muted-foreground">Trạng thái</p>
+                <p className="text-muted-foreground">{t("profile.status")}</p>
                 <p className="font-medium">{statusLabel}</p>
               </div>
             </CardContent>
@@ -197,24 +211,29 @@ export default function ProfilePage() {
 
           <Card className="lg:col-span-2">
             <CardHeader>
-              <CardTitle>Chỉnh sửa profile</CardTitle>
-              <CardDescription>Cập nhật họ tên và avatar URL của bạn.</CardDescription>
+              <CardTitle>{t("profile.edit_title")}</CardTitle>
+              <CardDescription>{t("profile.edit_desc")}</CardDescription>
             </CardHeader>
             <CardContent>
               <form className="space-y-4" onSubmit={handleUpdateProfile}>
                 <div className="space-y-2">
-                  <Label htmlFor="fullName">Họ và tên</Label>
+                  <Label htmlFor="fullName">{t("auth.fullname")}</Label>
                   <Input
                     id="fullName"
                     value={fullName}
                     onChange={(event) => setFullName(event.target.value)}
+                    onBlur={() => setTouchedFullName(true)}
+                    className={isFullNameInvalid ? "border-destructive focus-visible:ring-destructive" : ""}
                     placeholder="Nguyen Van A"
                     required
                   />
+                  {isFullNameInvalid && (
+                    <p className="text-[0.8rem] font-medium text-destructive">{t("auth.fullname_invalid")}</p>
+                  )}
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="avatarUrl">Avatar URL</Label>
+                  <Label htmlFor="avatarUrl">{t("profile.avatar_url")}</Label>
                   <Input
                     id="avatarUrl"
                     value={avatarUrl}
@@ -223,9 +242,9 @@ export default function ProfilePage() {
                   />
                 </div>
 
-                <Button type="submit" className="gap-2" disabled={isSavingProfile}>
+                <Button type="submit" className="gap-2" disabled={isSavingProfile || !isProfileFormValid}>
                   {isSavingProfile ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                  {isSavingProfile ? "Đang lưu..." : "Lưu thay đổi"}
+                  {isSavingProfile ? t("profile.saving_btn") : t("profile.save_btn")}
                 </Button>
               </form>
             </CardContent>
@@ -235,20 +254,21 @@ export default function ProfilePage() {
         <div className="grid gap-4 lg:grid-cols-3">
           <Card className="lg:col-span-2">
             <CardHeader>
-              <CardTitle>Đổi mật khẩu</CardTitle>
-              <CardDescription>Sử dụng endpoint /api/v1/users/me/password.</CardDescription>
+              <CardTitle>{t("profile.change_pw_title")}</CardTitle>
+              <CardDescription>{t("profile.change_pw_desc")}</CardDescription>
             </CardHeader>
             <CardContent>
               <form className="space-y-4" onSubmit={handleChangePassword}>
                 <div className="space-y-2">
-                  <Label htmlFor="oldPassword">Mật khẩu hiện tại</Label>
+                  <Label htmlFor="oldPassword">{t("profile.old_pw")}</Label>
                   <div className="relative">
                     <Input
                       id="oldPassword"
                       type={showOldPassword ? "text" : "password"}
                       value={oldPassword}
                       onChange={(event) => setOldPassword(event.target.value)}
-                      className="pr-10"
+                      onBlur={() => setTouchedOldPassword(true)}
+                      className={`pr-10 ${isOldPasswordInvalid ? 'border-destructive focus-visible:ring-destructive' : ''}`}
                       required
                     />
                     <button
@@ -260,17 +280,21 @@ export default function ProfilePage() {
                       {showOldPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </button>
                   </div>
+                  {isOldPasswordInvalid && (
+                    <p className="text-[0.8rem] font-medium text-destructive">{t("profile.old_pw_invalid")}</p>
+                  )}
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="newPassword">Mật khẩu mới</Label>
+                  <Label htmlFor="newPassword">{t("profile.new_pw")}</Label>
                   <div className="relative">
                     <Input
                       id="newPassword"
                       type={showNewPassword ? "text" : "password"}
                       value={newPassword}
                       onChange={(event) => setNewPassword(event.target.value)}
-                      className="pr-10"
+                      onBlur={() => setTouchedNewPassword(true)}
+                      className={`pr-10 ${isNewPasswordInvalid ? 'border-destructive focus-visible:ring-destructive' : ''}`}
                       required
                     />
                     <button
@@ -282,17 +306,21 @@ export default function ProfilePage() {
                       {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </button>
                   </div>
+                  {isNewPasswordInvalid && (
+                    <p className="text-[0.8rem] font-medium text-destructive">{t("profile.new_pw_invalid")}</p>
+                  )}
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="confirmPassword">Xác nhận mật khẩu mới</Label>
+                  <Label htmlFor="confirmPassword">{t("auth.confirm_password")}</Label>
                   <div className="relative">
                     <Input
                       id="confirmPassword"
                       type={showConfirmPassword ? "text" : "password"}
                       value={confirmPassword}
                       onChange={(event) => setConfirmPassword(event.target.value)}
-                      className="pr-10"
+                      onBlur={() => setTouchedConfirmPassword(true)}
+                      className={`pr-10 ${isConfirmInvalid ? 'border-destructive focus-visible:ring-destructive' : ''}`}
                       required
                     />
                     <button
@@ -304,11 +332,14 @@ export default function ProfilePage() {
                       {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </button>
                   </div>
+                  {isConfirmInvalid && (
+                    <p className="text-[0.8rem] font-medium text-destructive">{t("auth.confirm_password_invalid")}</p>
+                  )}
                 </div>
 
-                <Button type="submit" className="gap-2" disabled={isChangingPassword}>
+                <Button type="submit" className="gap-2" disabled={isChangingPassword || !isPasswordFormValid}>
                   {isChangingPassword ? <Loader2 className="h-4 w-4 animate-spin" /> : <KeyRound className="h-4 w-4" />}
-                  {isChangingPassword ? "Đang cập nhật..." : "Đổi mật khẩu"}
+                  {isChangingPassword ? t("auth.reset_btn_loading") : t("profile.change_pw_btn")}
                 </Button>
               </form>
             </CardContent>
@@ -318,10 +349,10 @@ export default function ProfilePage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-destructive">
                 <ShieldAlert className="h-5 w-5" />
-                Khu vực nguy hiểm
+                {t("profile.danger_zone")}
               </CardTitle>
               <CardDescription>
-                Vô hiệu hóa tài khoản hiện tại và đăng xuất khỏi hệ thống.
+                {t("profile.danger_desc")}
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -332,7 +363,7 @@ export default function ProfilePage() {
                 onClick={handleDeleteAccount}
                 disabled={isDeletingAccount}
               >
-                {isDeletingAccount ? "Đang xử lý..." : "Vô hiệu hóa tài khoản"}
+                {isDeletingAccount ? t("profile.deleting_account_btn") : t("profile.delete_account_btn")}
               </Button>
             </CardContent>
           </Card>

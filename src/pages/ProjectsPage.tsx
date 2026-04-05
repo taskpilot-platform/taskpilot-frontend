@@ -11,6 +11,7 @@ import {
   Wrench,
 } from "lucide-react";
 import { toast } from "react-toastify";
+import { useTranslation } from "react-i18next";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -45,6 +46,7 @@ const heuristicModes: HeuristicMode[] = [
 const projectStatuses: ProjectStatus[] = ["PLANNING", "ACTIVE", "COMPLETED", "ARCHIVED"];
 
 export default function ProjectsPage() {
+  const { t } = useTranslation();
   const [projects, setProjects] = useState<MyProject[]>([]);
   const [totalElements, setTotalElements] = useState(0);
   const [currentPage, setCurrentPage] = useState(0);
@@ -236,7 +238,7 @@ export default function ProjectsPage() {
     <div className="min-h-screen space-y-6 p-6 md:p-8">
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div className="space-y-1">
-          <h1 className="text-3xl font-bold tracking-tight">Quản lý dự án</h1>
+          <h1 className="text-3xl font-bold tracking-tight">{t("projects.title")}</h1>
           <p className="text-muted-foreground">Theo dõi dự án đã tham gia, tạo dự án mới và quản trị thông tin dự án.</p>
         </div>
 
@@ -255,34 +257,34 @@ export default function ProjectsPage() {
       <div className="grid gap-4 xl:grid-cols-3">
         <Card className="xl:col-span-2">
           <CardHeader>
-            <CardTitle>Danh sách dự án của tôi</CardTitle>
+            <CardTitle>{t("projects.title")}</CardTitle>
             <CardDescription>
-              Tổng {totalElements} dự án. Trang {currentPage + 1}/{totalPages}
+              {t("projects.total", { total: totalElements })} {t("projects.page", { page: currentPage + 1, totalPages })}
             </CardDescription>
           </CardHeader>
           <CardContent>
             {isLoading ? (
               <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                Đang tải danh sách dự án...
+                {t("projects.loading")}
               </div>
             ) : (
               <>
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Dự án</TableHead>
-                      <TableHead>Vai trò</TableHead>
-                      <TableHead>Trạng thái</TableHead>
-                      <TableHead>Ngày tham gia</TableHead>
-                      <TableHead className="w-[160px]">Thao tác</TableHead>
+                      <TableHead>{t("projects.col_project")}</TableHead>
+                      <TableHead>{t("projects.col_role")}</TableHead>
+                      <TableHead>{t("projects.col_status")}</TableHead>
+                      <TableHead>{t("projects.col_joined")}</TableHead>
+                      <TableHead className="w-[160px]">{t("projects.col_actions")}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {projects.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
-                          Bạn chưa tham gia dự án nào.
+                          {t("projects.empty")}
                         </TableCell>
                       </TableRow>
                     ) : (
@@ -337,7 +339,7 @@ export default function ProjectsPage() {
                     onClick={() => void loadMyProjects(Math.max(0, currentPage - 1))}
                     disabled={currentPage === 0 || isMutating || isLoading}
                   >
-                    Trước
+                    {t("projects.btn_prev")}
                   </Button>
                   <Button
                     type="button"
@@ -346,7 +348,7 @@ export default function ProjectsPage() {
                     onClick={() => void loadMyProjects(Math.min(totalPages - 1, currentPage + 1))}
                     disabled={currentPage >= totalPages - 1 || isMutating || isLoading}
                   >
-                    Sau
+                    {t("projects.btn_next")}
                   </Button>
                 </div>
               </>
@@ -359,36 +361,36 @@ export default function ProjectsPage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
                 <PlusCircle className="h-4 w-4" />
-                Tạo dự án
+                {t("projects.create_title")}
               </CardTitle>
             </CardHeader>
             <CardContent>
               <form className="space-y-3" onSubmit={handleCreateProject}>
                 <div className="space-y-1.5">
-                  <Label htmlFor="projectName">Tên dự án</Label>
+                  <Label htmlFor="projectName">{t("projects.name")}</Label>
                   <Input
                     id="projectName"
                     value={createName}
                     onChange={(event) => setCreateName(event.target.value)}
-                    placeholder="Ví dụ: TaskPilot Sprint 1"
+                    placeholder={t("projects.name_placeholder")}
                     required
                   />
                 </div>
 
                 <div className="space-y-1.5">
-                  <Label htmlFor="projectDescription">Mô tả</Label>
+                  <Label htmlFor="projectDescription">{t("projects.desc")}</Label>
                   <textarea
                     id="projectDescription"
                     value={createDescription}
                     onChange={(event) => setCreateDescription(event.target.value)}
                     rows={3}
                     className="w-full rounded-md border bg-background px-3 py-2 text-sm"
-                    placeholder="Mục tiêu, phạm vi, ghi chú..."
+                    placeholder={t("projects.desc_placeholder")}
                   />
                 </div>
 
                 <div className="space-y-1.5">
-                  <Label htmlFor="heuristicMode">Chế độ phân việc</Label>
+                  <Label htmlFor="heuristicMode">{t("projects.mode")}</Label>
                   <select
                     id="heuristicMode"
                     value={createHeuristicMode}
@@ -405,7 +407,7 @@ export default function ProjectsPage() {
 
                 <div className="grid grid-cols-2 gap-2">
                   <div className="space-y-1.5">
-                    <Label htmlFor="startDate">Bắt đầu</Label>
+                    <Label htmlFor="startDate">{t("projects.start_date")}</Label>
                     <Input
                       id="startDate"
                       type="date"
@@ -414,7 +416,7 @@ export default function ProjectsPage() {
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <Label htmlFor="endDate">Kết thúc</Label>
+                    <Label htmlFor="endDate">{t("projects.end_date")}</Label>
                     <Input
                       id="endDate"
                       type="date"
@@ -426,7 +428,7 @@ export default function ProjectsPage() {
 
                 <Button type="submit" className="w-full gap-2" disabled={isMutating}>
                   <PlusCircle className="h-4 w-4" />
-                  Tạo dự án
+                  {isMutating ? t("projects.creating_btn") : t("projects.create_btn")}
                 </Button>
               </form>
             </CardContent>
@@ -436,23 +438,23 @@ export default function ProjectsPage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
                 <Search className="h-4 w-4" />
-                Tham gia dự án
+                {t("projects.join_title")}
               </CardTitle>
             </CardHeader>
             <CardContent>
               <form className="space-y-3" onSubmit={handleJoinProject}>
                 <div className="space-y-1.5">
-                  <Label htmlFor="joinCode">Mã dự án</Label>
+                  <Label htmlFor="joinCode">{t("projects.join_code")}</Label>
                   <Input
                     id="joinCode"
                     value={joinCode}
                     onChange={(event) => setJoinCode(event.target.value)}
-                    placeholder="PRJ-12 hoặc 12"
+                    placeholder={t("projects.join_code_placeholder")}
                     required
                   />
                 </div>
                 <Button type="submit" className="w-full" disabled={isMutating}>
-                  Tham gia
+                  {t("projects.join_btn")}
                 </Button>
               </form>
             </CardContent>
@@ -465,17 +467,17 @@ export default function ProjectsPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Wrench className="h-4 w-4" />
-              Chi tiết và cập nhật dự án
+              {t("projects.detail_title")}
             </CardTitle>
             <CardDescription>
               {selectedProjectMeta
-                ? `Đang chọn: ${selectedProjectMeta.name} (${selectedProjectMeta.myRole})`
-                : "Chọn một dự án từ bảng để xem chi tiết"}
+                ? t("projects.detail_desc_selected", { name: selectedProjectMeta.name, role: selectedProjectMeta.myRole })
+                : t("projects.detail_desc_unselected")}
             </CardDescription>
           </CardHeader>
           <CardContent>
             {!projectDetail ? (
-              <p className="text-sm text-muted-foreground">Chưa có dự án nào được chọn.</p>
+              <p className="text-sm text-muted-foreground">{t("projects.detail_empty")}</p>
             ) : (
               <form className="grid gap-3 md:grid-cols-2" onSubmit={handleUpdateProject}>
                 <div className="space-y-1.5 md:col-span-2">
@@ -560,7 +562,7 @@ export default function ProjectsPage() {
                 <div className="md:col-span-2">
                   <Button type="submit" className="gap-2" disabled={isMutating || !isSelectedProjectManager}>
                     <Wrench className="h-4 w-4" />
-                    Cập nhật dự án
+                    {t("projects.update_btn")}
                   </Button>
                 </div>
               </form>
@@ -573,32 +575,32 @@ export default function ProjectsPage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
                 <Users className="h-4 w-4" />
-                Tổng quan nhanh
+                {t("projects.overview_title")}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-2 text-sm">
               <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">Số thành viên</span>
+                <span className="text-muted-foreground">{t("projects.member_count")}</span>
                 <strong>{projectSummary?.totalMembers ?? 0}</strong>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">Tổng task</span>
+                <span className="text-muted-foreground">{t("projects.task_count")}</span>
                 <strong>{projectSummary?.totalTasks ?? 0}</strong>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">Hoàn thành</span>
+                <span className="text-muted-foreground">{t("projects.task_done")}</span>
                 <strong>{projectSummary?.completedTasks ?? 0}</strong>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">Đang làm</span>
+                <span className="text-muted-foreground">{t("projects.task_wip")}</span>
                 <strong>{projectSummary?.inProgressTasks ?? 0}</strong>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">Chưa làm</span>
+                <span className="text-muted-foreground">{t("projects.task_todo")}</span>
                 <strong>{projectSummary?.pendingTasks ?? 0}</strong>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">Tiến độ</span>
+                <span className="text-muted-foreground">{t("projects.progress")}</span>
                 <strong>{Number(projectSummary?.completionRate ?? 0).toFixed(1)}%</strong>
               </div>
             </CardContent>
@@ -608,17 +610,17 @@ export default function ProjectsPage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
                 <CalendarDays className="h-4 w-4" />
-                Thành viên đang hoạt động
+                {t("projects.members_title")}
               </CardTitle>
             </CardHeader>
             <CardContent>
               {projectMembers.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Không có dữ liệu thành viên.</p>
+                <p className="text-sm text-muted-foreground">{t("projects.members_empty")}</p>
               ) : (
                 <div className="space-y-2">
                   {projectMembers.slice(0, 8).map((member) => (
                     <div key={`${member.projectId}-${member.userId}`} className="flex items-center justify-between rounded-md border px-3 py-2 text-sm">
-                      <span>User #{member.userId}</span>
+                      <span>{t("projects.member_id", { id: member.userId })}</span>
                       <Badge variant={member.role === "MANAGER" ? "default" : "outline"}>
                         {member.role}
                       </Badge>

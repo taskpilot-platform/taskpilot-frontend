@@ -2,6 +2,7 @@ import { useTheme } from "next-themes"
 import { useColorTheme, COLOR_THEMES, type ColorTheme } from "./color-theme-provider"
 import { Button } from "@/components/ui/button"
 import { Moon, Sun, Monitor } from "lucide-react"
+import { useTranslation } from "react-i18next"
 
 /**
  * Cấu hình hiển thị cho từng color theme
@@ -25,13 +26,14 @@ const colorThemeConfig: Record<ColorTheme, { label: string; bgClass: string }> =
  * Cả hai được lưu tự động vào localStorage.
  */
 export function ThemeSelector() {
+  const { t } = useTranslation()
   const { theme, setTheme } = useTheme()
   const { colorTheme, setColorTheme } = useColorTheme()
 
   return (
     <div className="space-y-4">
       {/* ========== Chế độ Sáng / Tối ========== */}
-      <div>
+      <div className="hidden">
         <p className="text-sm font-medium mb-2 text-muted-foreground">Chế độ hiển thị</p>
         <div className="flex gap-2">
           <Button
@@ -40,7 +42,7 @@ export function ThemeSelector() {
             onClick={() => setTheme("light")}
           >
             <Sun className="h-4 w-4 mr-1" />
-            Sáng
+            {t("theme.light")}
           </Button>
           <Button
             variant={theme === "dark" ? "default" : "outline"}
@@ -48,7 +50,7 @@ export function ThemeSelector() {
             onClick={() => setTheme("dark")}
           >
             <Moon className="h-4 w-4 mr-1" />
-            Tối
+            {t("theme.dark")}
           </Button>
           <Button
             variant={theme === "system" ? "default" : "outline"}
@@ -56,14 +58,14 @@ export function ThemeSelector() {
             onClick={() => setTheme("system")}
           >
             <Monitor className="h-4 w-4 mr-1" />
-            Hệ thống
+            {t("theme.system")}
           </Button>
         </div>
       </div>
 
       {/* ========== Màu chủ đạo ========== */}
       <div>
-        <p className="text-sm font-medium mb-2 text-muted-foreground">Màu chủ đạo</p>
+        <p className="text-sm font-medium mb-2 text-muted-foreground">{t("theme.primary_color")}</p>
         <div className="flex gap-2 flex-wrap">
           {COLOR_THEMES.map((t) => {
             const config = colorThemeConfig[t]

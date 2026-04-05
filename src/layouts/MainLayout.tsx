@@ -5,12 +5,20 @@ import { Button } from "@/components/ui/button";
 import { getApiErrorMessage } from "@/lib/http";
 import { useAuthStore } from "@/stores/auth.store";
 import { toast } from "react-toastify";
-import { LayoutDashboard, ShieldCheck, UserRound, LogOut, FolderKanban, ListChecks } from "lucide-react";
+import { LayoutDashboard, ShieldCheck, UserRound, LogOut, FolderKanban, ListChecks, Globe } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 export default function MainLayout() {
   const logout = useAuthStore((state) => state.logout);
   const isLoading = useAuthStore((state) => state.isLoading);
   const navigate = useNavigate();
+  const { t, i18n } = useTranslation();
+
+  const toggleLanguage = () => {
+    const newLang = i18n.language === "vi" ? "en" : "vi";
+    i18n.changeLanguage(newLang);
+    localStorage.setItem("i18nextLng", newLang);
+  };
 
   const handleLogout = async () => {
     try {
@@ -25,12 +33,17 @@ export default function MainLayout() {
   return (
     <div className="flex h-screen bg-background text-foreground">
       <aside className="flex w-64 flex-col border-r bg-card p-4 text-card-foreground">
-        <div className="mb-4 flex items-center gap-2">
-          <img src={logo} alt="TaskPilot logo" className="h-8 w-8" />
-          <h2 className="text-lg font-bold tracking-tight">
-            <span className="text-[#103E6A]">task</span>
-            <span className="text-[#0394B1]">pilot</span>
-          </h2>
+        <div className="mb-4 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <img src={logo} alt="TaskPilot logo" className="h-8 w-8" />
+            <h2 className="text-lg font-bold tracking-tight">
+              <span className="text-[#103E6A]">task</span>
+              <span className="text-[#0394B1]">pilot</span>
+            </h2>
+          </div>
+          <Button variant="ghost" size="icon" onClick={toggleLanguage} title="Change Language">
+            <Globe className="h-4 w-4" />
+          </Button>
         </div>
 
         <nav className="space-y-2">
@@ -43,7 +56,7 @@ export default function MainLayout() {
             }
           >
             <LayoutDashboard className="h-4 w-4" />
-            Dashboard
+            {t("layout.dashboard")}
           </NavLink>
           <NavLink
             to="/projects"
@@ -54,14 +67,14 @@ export default function MainLayout() {
             }
           >
             <FolderKanban className="h-4 w-4" />
-            Dự án
+            {t("layout.projects")}
           </NavLink>
           <NavLink
             to="/"
             className="flex items-center gap-2 rounded-md px-3 py-2 text-muted-foreground hover:bg-accent"
           >
             <ListChecks className="h-4 w-4" />
-            Công việc (sắp có)
+            {t("layout.tasks_upcoming")}
           </NavLink>
         </nav>
 
@@ -76,11 +89,11 @@ export default function MainLayout() {
               }
             >
               <UserRound className="h-4 w-4" />
-              Profile
+              {t("layout.profile")}
             </NavLink>
 
             <NavLink
-              to="/admin/skills"
+              to="/my-skills"
               className={({ isActive }) =>
                 `flex items-center gap-2 rounded-md px-3 py-2 transition-colors ${
                   isActive ? "bg-accent font-medium" : "hover:bg-accent"
@@ -88,7 +101,7 @@ export default function MainLayout() {
               }
             >
               <ShieldCheck className="h-4 w-4" />
-              Quản lý skills
+              {t("layout.my_skills")}
             </NavLink>
           </div>
 
@@ -99,7 +112,7 @@ export default function MainLayout() {
             disabled={isLoading}
           >
             <LogOut className="h-4 w-4" />
-            {isLoading ? "Đang đăng xuất..." : "Đăng xuất"}
+            {isLoading ? t("layout.logging_out") : t("layout.logout")}
           </Button>
         </div>
       </aside>

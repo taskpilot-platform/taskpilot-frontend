@@ -11,6 +11,7 @@ import {
   Wrench,
 } from "lucide-react";
 import { toast } from "react-toastify";
+import { useTranslation } from "react-i18next";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -32,7 +33,8 @@ import type { UserProfile, UserSkill } from "@/types/user";
 
 type SkillsTab = "overview" | "manage";
 
-export default function AdminSkillsPage() {
+export default function MySkillsPage() {
+  const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<SkillsTab>("overview");
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [skills, setSkills] = useState<UserSkill[]>([]);
@@ -148,9 +150,9 @@ export default function AdminSkillsPage() {
     <div className="min-h-screen space-y-6 p-6 md:p-8">
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div className="space-y-1">
-          <h1 className="text-3xl font-bold tracking-tight">Skills Management</h1>
+          <h1 className="text-3xl font-bold tracking-tight">{t("skills.title")}</h1>
           <p className="text-muted-foreground">
-            Trang quản lý skills tổng quát (admin) với tab, action button và icon.
+            {t("skills.desc")}
           </p>
         </div>
 
@@ -162,7 +164,7 @@ export default function AdminSkillsPage() {
             onClick={() => setActiveTab("overview")}
           >
             <ChartColumn className="h-4 w-4" />
-            Tổng quan
+            {t("skills.tab_overview")}
           </Button>
           <Button
             type="button"
@@ -171,7 +173,7 @@ export default function AdminSkillsPage() {
             onClick={() => setActiveTab("manage")}
           >
             <Wrench className="h-4 w-4" />
-            Quản lý
+            {t("skills.tab_manage")}
           </Button>
         </div>
       </div>
@@ -181,12 +183,12 @@ export default function AdminSkillsPage() {
           <div className="flex items-center gap-2">
             <Shield className="h-4 w-4" />
             <span>
-              Role hiện tại: <strong>{profile?.role || "-"}</strong>
+              {t("skills.current_role")}<strong>{profile?.role || "-"}</strong>
             </span>
             {isAdmin ? <Badge>Admin</Badge> : <Badge variant="secondary">User</Badge>}
           </div>
           <p className="text-muted-foreground">
-            Lưu ý: backend hiện mới có endpoint theo user (/api/v1/users/me/skills), chưa có skills global.
+            {t("skills.api_note")}
           </p>
         </CardContent>
       </Card>
@@ -202,8 +204,8 @@ export default function AdminSkillsPage() {
         <div className="grid gap-4 md:grid-cols-3">
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle>Tổng số skills</CardTitle>
-              <CardDescription>Số lượng kỹ năng hiện có</CardDescription>
+              <CardTitle>{t("skills.total_skills")}</CardTitle>
+              <CardDescription>{t("skills.total_skills_desc")}</CardDescription>
             </CardHeader>
             <CardContent>
               <p className="text-3xl font-bold">{skills.length}</p>
@@ -212,8 +214,8 @@ export default function AdminSkillsPage() {
 
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle>Level trung bình</CardTitle>
-              <CardDescription>Thang điểm từ 1 đến 5</CardDescription>
+              <CardTitle>{t("skills.average_level")}</CardTitle>
+              <CardDescription>{t("skills.average_level_desc")}</CardDescription>
             </CardHeader>
             <CardContent>
               <p className="text-3xl font-bold">{averageLevel}</p>
@@ -222,12 +224,12 @@ export default function AdminSkillsPage() {
 
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle>Danh sách nhanh</CardTitle>
-              <CardDescription>Top skills hiện tại</CardDescription>
+              <CardTitle>{t("skills.quick_list")}</CardTitle>
+              <CardDescription>{t("skills.quick_list_desc")}</CardDescription>
             </CardHeader>
             <CardContent>
               {skills.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Chưa có dữ liệu</p>
+                <p className="text-sm text-muted-foreground">{t("skills.no_data")}</p>
               ) : (
                 <div className="flex flex-wrap gap-2">
                   {skills.slice(0, 6).map((skill) => (
@@ -244,8 +246,8 @@ export default function AdminSkillsPage() {
         <div className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Thêm skill mới</CardTitle>
-              <CardDescription>Điền tên skill và level (1-5).</CardDescription>
+              <CardTitle>{t("skills.add_title")}</CardTitle>
+              <CardDescription>{t("skills.desc")}</CardDescription>
             </CardHeader>
             <CardContent>
               <form className="grid gap-3 md:grid-cols-4" onSubmit={handleAddSkill}>
@@ -285,17 +287,17 @@ export default function AdminSkillsPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Danh sách skills</CardTitle>
-              <CardDescription>Chỉnh level hoặc xóa skill bằng các action button.</CardDescription>
+              <CardTitle>{t("skills.list_title")}</CardTitle>
+              <CardDescription>{t("skills.desc")}</CardDescription>
             </CardHeader>
             <CardContent>
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead>ID</TableHead>
-                    <TableHead>Tên skill</TableHead>
-                    <TableHead>Level</TableHead>
-                    <TableHead className="w-[240px]">Thao tác</TableHead>
+                    <TableHead>{t("skills.col_skill")}</TableHead>
+                    <TableHead>{t("skills.col_level")}</TableHead>
+                    <TableHead className="w-[240px]">{t("skills.col_actions")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -336,7 +338,7 @@ export default function AdminSkillsPage() {
                               onClick={() => void handleUpdateSkill(skill.skillId)}
                             >
                               <Pencil className="h-3.5 w-3.5" />
-                              Sửa
+                              {t("skills.action_edit")}
                             </Button>
                             <Button
                               type="button"
@@ -347,7 +349,7 @@ export default function AdminSkillsPage() {
                               onClick={() => void handleDeleteSkill(skill.skillId)}
                             >
                               <Trash2 className="h-3.5 w-3.5" />
-                              Xóa
+                              {t("skills.action_delete")}
                             </Button>
                           </div>
                         </TableCell>
@@ -366,7 +368,7 @@ export default function AdminSkillsPage() {
                   disabled={isMutating}
                 >
                   <RefreshCw className="h-4 w-4" />
-                  Tải lại dữ liệu
+                  {t("skills.reload_btn")}
                 </Button>
               </div>
             </CardContent>

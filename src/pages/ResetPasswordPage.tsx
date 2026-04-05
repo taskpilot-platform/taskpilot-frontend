@@ -8,29 +8,34 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "react-toastify";
 import { useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 export default function ResetPasswordPage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const [token, setToken] = useState(searchParams.get("token") || "");
+  const token = searchParams.get("token") || "";
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [touchedPassword, setTouchedPassword] = useState(false);
+  const [touchedConfirm, setTouchedConfirm] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const isPasswordInvalid = touchedPassword && newPassword.length > 0 && newPassword.length < 8;
+  const isConfirmInvalid = touchedConfirm && confirmPassword.length > 0 && newPassword !== confirmPassword;
+  const isFormValid = newPassword.length >= 8 && newPassword === confirmPassword && token !== "";
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (newPassword !== confirmPassword) {
-      toast.error("Mật khẩu xác nhận không khớp");
-      return;
-    }
+    if (!isFormValid) return;
 
     setIsSubmitting(true);
     try {
       const response = await authService.resetPassword({ token, newPassword });
-      toast.success(response.message || "Đặt lại mật khẩu thành công");
+      toast.success(response.message || t("auth.reset_success"));
       navigate("/login");
     } catch (error) {
       toast.error(getApiErrorMessage(error));
@@ -41,36 +46,26 @@ export default function ResetPasswordPage() {
 
   return (
     <AuthShell
-      title="Đặt lại mật khẩu"
-      description="Tạo mật khẩu mới để bảo vệ tài khoản của bạn"
+      title={t("auth.reset_title")}
+      description={t("auth.reset_desc")}
       footer={
         <Link to="/login" className="font-medium text-primary hover:underline">
-          Quay lại đăng nhập
+          {t("auth.back_to_login")}
         </Link>
       }
     >
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="space-y-2">
-          <Label htmlFor="token">Mã token đặt lại mật khẩu</Label>
-          <Input
-            id="token"
-            placeholder="Dán token từ email"
-            value={token}
-            onChange={(e) => setToken(e.target.value)}
-            required
-          />
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="newPassword">Mật khẩu mới</Label>
+          <Label htmlFor="newPassword">{t("auth.password")}</Label>
           <div className="relative">
             <Input
               id="newPassword"
               type={showNewPassword ? "text" : "password"}
-              placeholder="Tối thiểu 8 ký tự"
+              placeholder={t("auth.password_min_placeholder")}
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
-              className="pr-10"
+              onBlur={() => setTouchedPassword(true)}
+              className={`pr-10 ${isPasswordInvalid ? 'border-destructive focus-visible:ring-destructive' : ''}`}
               required
             />
             <button
@@ -82,18 +77,22 @@ export default function ResetPasswordPage() {
               {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
             </button>
           </div>
+          {isPasswordInvalid && (
+            <p className="text-[0.8rem] font-medium text-destructive">{t("auth.password_min_invalid")}</p>
+          )}
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="confirmPassword">Xác nhận mật khẩu mới</Label>
+          <Label htmlFor="confirmPassword">{t("auth.confirm_password")}</Label>
           <div className="relative">
             <Input
               id="confirmPassword"
               type={showConfirmPassword ? "text" : "password"}
-              placeholder="Nhập lại mật khẩu mới"
+              placeholder={t("auth.confirm_password_placeholder")}
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
-              className="pr-10"
+              onBlur={() => setTouchedConfirm(true)}
+              className={`pr-10 ${isConfirmInvalid ? 'border-destructive focus-visible:ring-destructive' : ''}`}
               required
             />
             <button
@@ -105,10 +104,13 @@ export default function ResetPasswordPage() {
               {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
             </button>
           </div>
+          {isConfirmInvalid && (
+            <p className="text-[0.8rem] font-medium text-destructive">{t("auth.confirm_password_invalid")}</p>
+          )}
         </div>
 
-        <Button type="submit" className="w-full" disabled={isSubmitting}>
-          {isSubmitting ? "Đang cập nhật..." : "Cập nhật mật khẩu"}
+        <Button type="submit" className="w-full" disabled={isSubmitting || !isFormValid}>
+          {isSubmitting ? t("auth.reset_btn_loading") : t("auth.reset_btn")}
         </Button>
       </form>
     </AuthShell>

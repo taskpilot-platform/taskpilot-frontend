@@ -12,7 +12,7 @@ import ForgotPasswordPage from "@/pages/ForgotPasswordPage";
 import ResetPasswordPage from "@/pages/ResetPasswordPage";
 import DashboardPage from "@/pages/DashboardPage";
 import ProfilePage from "@/pages/ProfilePage";
-import AdminSkillsPage from "@/pages/AdminSkillsPage";
+import MySkillsPage from "@/pages/MySkillsPage";
 import ProjectsPage from "@/pages/ProjectsPage";
 
 // Import Guard
@@ -63,8 +63,8 @@ export const router = createBrowserRouter([
         element: <ProjectsPage />,
       },
       {
-        path: "/admin/skills",
-        element: <AdminSkillsPage />,
+        path: "/my-skills",
+        element: <MySkillsPage />,
       },
       // Thêm các route khác của TaskPilot vào đây sau:
       // { path: "/tasks", element: <TasksPage /> },

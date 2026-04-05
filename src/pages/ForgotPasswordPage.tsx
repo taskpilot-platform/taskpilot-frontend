@@ -7,14 +7,22 @@ import { authService } from "@/services/auth.service";
 import { Link, useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 
 export default function ForgotPasswordPage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [touchedEmail, setTouchedEmail] = useState(false);
+
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const isEmailInvalid = touchedEmail && (!email || !emailRegex.test(email));
+  const isFormValid = email && emailRegex.test(email);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isFormValid) return;
 
     setIsSubmitting(true);
     try {
@@ -30,29 +38,34 @@ export default function ForgotPasswordPage() {
 
   return (
     <AuthShell
-      title="Quên mật khẩu"
-      description="Nhập email để nhận hướng dẫn đặt lại mật khẩu"
+      title={t("auth.forgot_title")}
+      description={t("auth.forgot_desc")}
       footer={
         <Link to="/login" className="font-medium text-primary hover:underline">
-          Quay lại đăng nhập
+          {t("auth.forgot_back")}
         </Link>
       }
     >
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="space-y-2">
-          <Label htmlFor="email">Email</Label>
+          <Label htmlFor="email">{t("auth.email")}</Label>
           <Input
             id="email"
             type="email"
-            placeholder="you@example.com"
+            placeholder={t("auth.email_placeholder")}
             value={email}
             onChange={(e) => setEmail(e.target.value)}
+            onBlur={() => setTouchedEmail(true)}
+            className={isEmailInvalid ? "border-destructive focus-visible:ring-destructive" : ""}
             required
           />
+          {isEmailInvalid && (
+            <p className="text-[0.8rem] font-medium text-destructive">{t("auth.email_invalid")}</p>
+          )}
         </div>
 
-        <Button type="submit" className="w-full" disabled={isSubmitting}>
-          {isSubmitting ? "Đang gửi..." : "Gửi yêu cầu đặt lại mật khẩu"}
+        <Button type="submit" className="w-full" disabled={isSubmitting || !isFormValid}>
+          {isSubmitting ? t("auth.forgot_btn_loading") : t("auth.forgot_btn")}
         </Button>
       </form>
     </AuthShell>

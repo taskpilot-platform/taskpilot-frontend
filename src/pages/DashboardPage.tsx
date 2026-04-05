@@ -11,23 +11,25 @@ import { ThemeSelector } from "@/components/theme-selector";
 import "react-toastify/dist/ReactToastify.css";
 import { toast } from "react-toastify";
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import type { UserProfile, UserSkill } from "@/types/user";
 import { profileService } from "@/services/profile.service";
 import { skillService } from "@/services/skill.service";
 import { getApiErrorMessage } from "@/lib/http";
 
 export default function DashboardPage() {
+  const { t } = useTranslation();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [skills, setSkills] = useState<UserSkill[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   const workloadLabel = useMemo(() => {
     if (!profile?.currentWorkload) {
-      return "Chưa có dữ liệu";
+      return t("dashboard.no_data");
     }
 
-    return `${profile.currentWorkload} nhiệm vụ đang xử lý`;
-  }, [profile?.currentWorkload]);
+    return t("dashboard.tasks_active", { count: profile.currentWorkload });
+  }, [profile?.currentWorkload, t]);
 
   useEffect(() => {
     const loadData = async () => {
@@ -58,34 +60,32 @@ export default function DashboardPage() {
     <div className="min-h-screen space-y-6 p-6 md:p-8">
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div className="space-y-1">
-          <h1 className="text-3xl font-bold tracking-tight">TaskPilot Dashboard</h1>
-          <p className="text-muted-foreground">
-            Giao diện đã đồng bộ với API auth/profile/skills của backend.
-          </p>
+          <h1 className="text-3xl font-bold tracking-tight">{t("dashboard.title")}</h1>
+          <p className="text-muted-foreground">{t("dashboard.desc")}</p>
         </div>
 
         <div className="flex items-center gap-3">
           <ThemeSelector />
-          <Button onClick={handleShowToast}>Kiểm tra kết nối</Button>
+          <Button onClick={handleShowToast}>{t("dashboard.check_conn_btn")}</Button>
         </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-3">
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle>Người dùng hiện tại</CardTitle>
-            <CardDescription>{isLoading ? "Đang tải..." : profile?.email || "-"}</CardDescription>
+            <CardTitle>{t("dashboard.current_user")}</CardTitle>
+            <CardDescription>{isLoading ? t("dashboard.loading") : profile?.email || "-"}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
-            <p className="text-sm text-muted-foreground">Họ tên</p>
+            <p className="text-sm text-muted-foreground">{t("dashboard.fullname")}</p>
             <p className="font-semibold">{profile?.fullName || "-"}</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle>Trạng thái tài khoản</CardTitle>
-            <CardDescription>Dữ liệu từ endpoint /api/v1/users/me</CardDescription>
+            <CardTitle>{t("dashboard.account_status")}</CardTitle>
+            <CardDescription>{t("dashboard.account_status_desc")}</CardDescription>
           </CardHeader>
           <CardContent className="flex items-center gap-2">
             <Badge>{profile?.status || "UNKNOWN"}</Badge>
@@ -95,25 +95,25 @@ export default function DashboardPage() {
 
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle>Khối lượng công việc</CardTitle>
-            <CardDescription>Từ profile.currentWorkload</CardDescription>
+            <CardTitle>{t("dashboard.workload")}</CardTitle>
+            <CardDescription>{t("dashboard.workload_desc")}</CardDescription>
           </CardHeader>
           <CardContent>
-            <p className="font-semibold">{isLoading ? "Đang tải..." : workloadLabel}</p>
+            <p className="font-semibold">{isLoading ? t("dashboard.loading") : workloadLabel}</p>
           </CardContent>
         </Card>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Kỹ năng của tôi</CardTitle>
-          <CardDescription>Endpoint: /api/v1/users/me/skills</CardDescription>
+          <CardTitle>{t("dashboard.my_skills")}</CardTitle>
+          <CardDescription>{t("dashboard.my_skills_desc")}</CardDescription>
         </CardHeader>
         <CardContent>
           {isLoading ? (
-            <p className="text-sm text-muted-foreground">Đang tải danh sách kỹ năng...</p>
+            <p className="text-sm text-muted-foreground">{t("dashboard.loading")}</p>
           ) : skills.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Chưa có kỹ năng nào.</p>
+            <p className="text-sm text-muted-foreground">{t("dashboard.my_skills_empty")}</p>
           ) : (
             <div className="flex flex-wrap gap-2">
               {skills.map((skill) => (

@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { RouterProvider } from "react-router-dom";
 import { router } from "./routes/router";
 import "./index.css";
+import "./lib/i18n";
 import "react-toastify/dist/ReactToastify.css";
 import { ToastContainer } from "react-toastify";
 import { ThemeProvider } from "./components/theme-provider.tsx";

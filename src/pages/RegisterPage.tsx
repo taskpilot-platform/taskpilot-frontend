@@ -8,8 +8,10 @@ import { Link, useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import { useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 export default function RegisterPage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const register = useAuthStore((state) => state.register);
   const isLoading = useAuthStore((state) => state.isLoading);
@@ -19,14 +21,23 @@ export default function RegisterPage() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [touchedName, setTouchedName] = useState(false);
+  const [touchedEmail, setTouchedEmail] = useState(false);
+  const [touchedPassword, setTouchedPassword] = useState(false);
+  const [touchedConfirm, setTouchedConfirm] = useState(false);
+
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const isNameInvalid = touchedName && !fullName.trim();
+  const isEmailInvalid = touchedEmail && (!email || !emailRegex.test(email));
+  const isPasswordInvalid = touchedPassword && (!password || password.length < 8);
+  const isConfirmInvalid = touchedConfirm && confirmPassword.length > 0 && password !== confirmPassword;
+  
+  const isFormValid = fullName.trim() && emailRegex.test(email) && password.length >= 8 && password === confirmPassword;
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (password !== confirmPassword) {
-      toast.error("Mật khẩu xác nhận không khớp");
-      return;
-    }
+    if (!isFormValid) return;
 
     try {
       await register({ fullName, email, password });
@@ -39,51 +50,62 @@ export default function RegisterPage() {
 
   return (
     <AuthShell
-      title="Tạo tài khoản mới"
-      description="Bắt đầu quản lý công việc với TaskPilot"
+      title={t("auth.register_title")}
+      description={t("auth.register_desc")}
       footer={
         <>
-          Đã có tài khoản?{" "}
+          {t("auth.has_account")}{" "}
           <Link to="/login" className="font-medium text-primary hover:underline">
-            Đăng nhập
+            {t("auth.login_link")}
           </Link>
         </>
       }
     >
       <form onSubmit={handleRegister} className="space-y-4">
         <div className="space-y-2">
-          <Label htmlFor="name">Họ và tên</Label>
+          <Label htmlFor="name">{t("auth.fullname")}</Label>
           <Input
             id="name"
-            placeholder="Nguyen Van A"
+            placeholder={t("auth.fullname_placeholder")}
             value={fullName}
             onChange={(e) => setFullName(e.target.value)}
+            onBlur={() => setTouchedName(true)}
+            className={isNameInvalid ? "border-destructive focus-visible:ring-destructive" : ""}
             required
           />
+          {isNameInvalid && (
+            <p className="text-[0.8rem] font-medium text-destructive">{t("auth.fullname_invalid")}</p>
+          )}
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="email">Email</Label>
+          <Label htmlFor="email">{t("auth.email")}</Label>
           <Input
             id="email"
             type="email"
-            placeholder="you@example.com"
+            placeholder={t("auth.email_placeholder")}
             value={email}
             onChange={(e) => setEmail(e.target.value)}
+            onBlur={() => setTouchedEmail(true)}
+            className={isEmailInvalid ? "border-destructive focus-visible:ring-destructive" : ""}
             required
           />
+          {isEmailInvalid && (
+            <p className="text-[0.8rem] font-medium text-destructive">{t("auth.email_invalid")}</p>
+          )}
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="password">Mật khẩu</Label>
+          <Label htmlFor="password">{t("auth.password")}</Label>
           <div className="relative">
             <Input
               id="password"
               type={showPassword ? "text" : "password"}
-              placeholder="Tối thiểu 8 ký tự"
+              placeholder={t("auth.password_min_placeholder")}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="pr-10"
+              onBlur={() => setTouchedPassword(true)}
+              className={`pr-10 ${isPasswordInvalid ? 'border-destructive focus-visible:ring-destructive' : ''}`}
               required
             />
             <button
@@ -95,18 +117,22 @@ export default function RegisterPage() {
               {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
             </button>
           </div>
+          {isPasswordInvalid && (
+            <p className="text-[0.8rem] font-medium text-destructive">{t("auth.password_min_invalid")}</p>
+          )}
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="confirmPassword">Xác nhận mật khẩu</Label>
+          <Label htmlFor="confirmPassword">{t("auth.confirm_password")}</Label>
           <div className="relative">
             <Input
               id="confirmPassword"
               type={showConfirmPassword ? "text" : "password"}
-              placeholder="Nhập lại mật khẩu"
+              placeholder={t("auth.confirm_password_placeholder")}
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
-              className="pr-10"
+              onBlur={() => setTouchedConfirm(true)}
+              className={`pr-10 ${isConfirmInvalid ? 'border-destructive focus-visible:ring-destructive' : ''}`}
               required
             />
             <button
@@ -118,10 +144,13 @@ export default function RegisterPage() {
               {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
             </button>
           </div>
+          {isConfirmInvalid && (
+            <p className="text-[0.8rem] font-medium text-destructive">{t("auth.confirm_password_invalid")}</p>
+          )}
         </div>
 
-        <Button type="submit" className="w-full" disabled={isLoading}>
-          {isLoading ? "Đang tạo tài khoản..." : "Tạo tài khoản"}
+        <Button type="submit" className="w-full" disabled={isLoading || !isFormValid}>
+          {isLoading ? t("auth.register_btn_loading") : t("auth.register_btn")}
         </Button>
       </form>
     </AuthShell>
