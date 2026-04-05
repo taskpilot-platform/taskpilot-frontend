@@ -35,7 +35,8 @@ export default function AdminSettingsPage() {
   const [settings, setSettings] = useState<SystemSettingResponse[]>([]);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [mode, setMode] = useState<"list" | "create" | "detail">("list");
-  const [keyword, setKeyword] = useState("");
+  const [searchInput, setSearchInput] = useState(""); // what user types live
+  const [keyword, setKeyword] = useState("");           // committed search sent to server
 
   const [isLoading, setIsLoading] = useState(true);
   const [isMutating, setIsMutating] = useState(false);
@@ -54,18 +55,10 @@ export default function AdminSettingsPage() {
     [settings, selectedKey],
   );
 
-  const filteredSettings = useMemo(() => {
-    if (!keyword.trim()) return settings;
-    const lower = keyword.toLowerCase();
-    return settings.filter(
-      (s) => s.keyName?.toLowerCase().includes(lower) || s.description?.toLowerCase().includes(lower)
-    );
-  }, [settings, keyword]);
-
-  const loadSettingsList = async () => {
+  const loadSettingsList = async (kw = keyword) => {
     setIsLoading(true);
     try {
-      const response = await adminSettingsService.getAllSettings();
+      const response = await adminSettingsService.getAllSettings(kw);
       setSettings(response.data);
 
       if (response.data.length === 0) {
@@ -98,6 +91,13 @@ export default function AdminSettingsPage() {
       setEditDescription(selectedSetting.description || "");
     }
   }, [selectedSetting]);
+
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    const kw = searchInput.trim();
+    setKeyword(kw);
+    void loadSettingsList(kw);
+  };
 
   const handleModeChange = (newMode: "create" | "list" | "detail") => {
     if (newMode === "list" || newMode === "create") {
@@ -212,17 +212,18 @@ export default function AdminSettingsPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="mb-4 flex gap-2">
+            <form onSubmit={handleSearch} className="mb-4 flex gap-2">
               <Input
                 placeholder={t("admin.system_settings.search")}
-                value={keyword}
-                onChange={(e) => setKeyword(e.target.value)}
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
                 className="max-w-sm"
               />
-              <Button type="button" variant="secondary" size="icon" disabled={isLoading}>
+              <Button type="submit" variant="secondary" className="gap-2" disabled={isLoading}>
                 <Search className="h-4 w-4" />
+                {t("admin.system_settings.search_btn")}
               </Button>
-            </div>
+            </form>
 
             {isLoading ? (
               <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
@@ -239,14 +240,14 @@ export default function AdminSettingsPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredSettings.length === 0 ? (
+                  {settings.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={3} className="py-8 text-center text-muted-foreground">
                         {t("skills.no_data")}
                       </TableCell>
                     </TableRow>
                   ) : (
-                    filteredSettings.map((setting) => (
+                    settings.map((setting) => (
                       <TableRow
                         key={setting.keyName}
                         className={selectedKey === setting.keyName ? "bg-accent/40 cursor-pointer" : "cursor-pointer"}

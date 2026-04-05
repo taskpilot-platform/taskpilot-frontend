@@ -12,9 +12,9 @@ import type {
 } from "@/types/project";
 
 export const projectService = {
-  async getMyProjects(page = 0, size = 10): Promise<ApiResponse<PageResult<MyProject>>> {
+  async getMyProjects(page = 0, size = 10, keyword?: string): Promise<ApiResponse<PageResult<MyProject>>> {
     const response = await http.get<ApiResponse<PageResult<MyProject>>>("/v1/projects/my", {
-      params: { page, size },
+      params: { page, size, ...(keyword?.trim() ? { keyword: keyword.trim() } : {}) },
     });
     return response.data;
   },

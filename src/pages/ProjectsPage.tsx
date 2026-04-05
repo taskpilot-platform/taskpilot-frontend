@@ -52,7 +52,8 @@ export default function ProjectsPage() {
   const [totalElements, setTotalElements] = useState(0);
   const [currentPage, setCurrentPage] = useState(0);
   const [pageSize, setPageSize] = useState(8);
-  const [keyword, setKeyword] = useState("");
+  const [searchInput, setSearchInput] = useState(""); // what user types live
+  const [keyword, setKeyword] = useState("");           // committed search sent to server
 
   const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
   const [mode, setMode] = useState<"list" | "create" | "detail">("list");
@@ -88,16 +89,10 @@ export default function ProjectsPage() {
 
   const totalPages = useMemo(() => Math.max(1, Math.ceil(totalElements / pageSize)), [totalElements, pageSize]);
 
-  const filteredProjects = useMemo(() => {
-    if (!keyword.trim()) return projects;
-    const lowerKeyword = keyword.toLowerCase();
-    return projects.filter((p) => p.name?.toLowerCase().includes(lowerKeyword));
-  }, [projects, keyword]);
-
-  const loadMyProjects = async (targetPage = currentPage, limit = pageSize) => {
+  const loadMyProjects = async (targetPage = currentPage, limit = pageSize, kw = keyword) => {
     setIsLoading(true);
     try {
-      const response = await projectService.getMyProjects(targetPage, limit);
+      const response = await projectService.getMyProjects(targetPage, limit, kw);
       setProjects(response.data.content);
       setTotalElements(response.data.totalElements);
       setCurrentPage(response.data.number);
@@ -163,7 +158,14 @@ export default function ProjectsPage() {
 
   const handlePageSizeChange = (newSize: number) => {
     setPageSize(newSize);
-    void loadMyProjects(0, newSize);
+    void loadMyProjects(0, newSize, keyword);
+  };
+
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    const kw = searchInput.trim();
+    setKeyword(kw);
+    void loadMyProjects(0, pageSize, kw);
   };
 
   const handleCreateProject = async (event: FormEvent<HTMLFormElement>) => {
@@ -305,17 +307,18 @@ export default function ProjectsPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col flex-1 overflow-hidden min-h-0">
-            <div className="mb-4 flex gap-2 shrink-0">
+            <form onSubmit={handleSearch} className="mb-4 flex gap-2 shrink-0">
               <Input
                 placeholder={t("projects.search")}
-                value={keyword}
-                onChange={(e) => setKeyword(e.target.value)}
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
                 className="max-w-sm"
               />
-              <Button type="button" variant="secondary" size="icon" disabled={isLoading}>
+              <Button type="submit" variant="secondary" className="gap-2" disabled={isLoading}>
                 <Search className="h-4 w-4" />
+                {t("projects.search_btn")}
               </Button>
-            </div>
+            </form>
 
             {isLoading ? (
               <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
@@ -336,14 +339,14 @@ export default function ProjectsPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredProjects.length === 0 ? (
+                    {projects.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
                           {t("projects.empty")}
                         </TableCell>
                       </TableRow>
                     ) : (
-                      filteredProjects.map((project) => (
+                      projects.map((project) => (
                         <TableRow
                           key={project.id}
                           className={selectedProjectId === project.id ? "bg-accent/40 cursor-pointer" : "cursor-pointer"}

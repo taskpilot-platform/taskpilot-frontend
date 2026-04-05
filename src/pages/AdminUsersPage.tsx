@@ -34,50 +34,45 @@ import type { AdminUserResponse } from "@/types/admin";
 
 export default function AdminUsersPage() {
   const { t } = useTranslation();
-  
+
   const [users, setUsers] = useState<AdminUserResponse[]>([]);
   const [totalElements, setTotalElements] = useState(0);
   const [currentPage, setCurrentPage] = useState(0);
   const [pageSize, setPageSize] = useState(10);
-  const [keyword, setKeyword] = useState("");
-
-  const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
-  const [mode, setMode] = useState<"list" | "create" | "detail">("list");
-  
-  const [isLoading, setIsLoading] = useState(true);
+  const [searchInput, setSearchInput] = useState(""); // what user types live
+  const [keyword, setKeyword] = useState("");           // committed search sent to server
+  const [isLoading, setIsLoading] = useState(false);
   const [isMutating, setIsMutating] = useState(false);
 
-  // Form Create
-  const [createEmail, setCreateEmail] = useState("");
-  const [createFullName, setCreateFullName] = useState("");
-  const [createRole, setCreateRole] = useState("MEMBER");
+  // User selection and mode state
+  const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
+  const [mode, setMode] = useState<"list" | "create" | "detail">("list");
 
-  // Form Edit
-  const [editRole, setEditRole] = useState("MEMBER");
-  const [editStatus, setEditStatus] = useState("AVAILABLE");
+  // Edit form state
+  const [editRole, setEditRole] = useState<string>("USER");
+  const [editStatus, setEditStatus] = useState<string>("AVAILABLE");
   const [editWorkload, setEditWorkload] = useState<number>(0);
 
-  const totalPages = useMemo(() => Math.max(1, Math.ceil(totalElements / pageSize)), [totalElements, pageSize]);
+  // Create form state
+  const [createEmail, setCreateEmail] = useState("");
+  const [createFullName, setCreateFullName] = useState("");
+  const [createRole, setCreateRole] = useState("USER");
+
+  // Computed values
+  const totalPages = useMemo(
+    () => Math.max(1, Math.ceil(totalElements / pageSize)),
+    [totalElements, pageSize]
+  );
 
   const selectedUser = useMemo(
     () => users.find((u) => u.id === selectedUserId) || null,
-    [users, selectedUserId],
+    [users, selectedUserId]
   );
 
-  const filteredUsers = useMemo(() => {
-    if (!keyword.trim()) return users;
-    const lowerKeyword = keyword.toLowerCase();
-    return users.filter(
-      (u) =>
-        u.email?.toLowerCase().includes(lowerKeyword) ||
-        u.fullName?.toLowerCase().includes(lowerKeyword)
-    );
-  }, [users, keyword]);
-
-  const loadUsersList = async (targetPage = currentPage, limit = pageSize) => {
+  const loadUsersList = async (targetPage = currentPage, limit = pageSize, kw = keyword) => {
     setIsLoading(true);
     try {
-      const response = await adminUserService.getAllUsers(targetPage, limit);
+      const response = await adminUserService.getAllUsers(targetPage, limit, kw);
       setUsers(response.data.content);
       setTotalElements(response.data.totalElements);
       setCurrentPage(response.data.number);
@@ -86,6 +81,13 @@ export default function AdminUsersPage() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    const kw = searchInput.trim();
+    setKeyword(kw);
+    void loadUsersList(0, pageSize, kw);
   };
 
   useEffect(() => {
@@ -127,7 +129,7 @@ export default function AdminUsersPage() {
       toast.success(t("admin.create_success")); // user created
       setCreateEmail("");
       setCreateFullName("");
-      setCreateRole("MEMBER");
+      setCreateRole("USER");
       setMode("list");
       await loadUsersList(0, pageSize);
     } catch (error) {
@@ -221,24 +223,25 @@ export default function AdminUsersPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Users className="h-5 w-5" />
-              {t("admin.users")}
+              {t("admin.users_title")}
             </CardTitle>
             <CardDescription>
               {t("admin.users.total", { total: totalElements })} {t("admin.page", { page: currentPage + 1, totalPages })}
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="mb-4 flex gap-2">
+            <form onSubmit={handleSearch} className="mb-4 flex gap-2">
               <Input
                 placeholder={t("admin.users.search")}
-                value={keyword}
-                onChange={(e) => setKeyword(e.target.value)}
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
                 className="max-w-sm"
               />
-              <Button type="button" variant="secondary" size="icon" disabled={isLoading}>
+              <Button type="submit" variant="secondary" className="gap-2" disabled={isLoading}>
                 <Search className="h-4 w-4" />
+                {t("admin.users.search_btn")}
               </Button>
-            </div>
+            </form>
 
             {isLoading ? (
               <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
@@ -258,14 +261,14 @@ export default function AdminUsersPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredUsers.length === 0 ? (
+                    {users.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
                           {t("skills.no_data")}
                         </TableCell>
                       </TableRow>
                     ) : (
-                      filteredUsers.map((user) => (
+                      users.map((user) => (
                         <TableRow
                           key={user.id}
                           className={selectedUserId === user.id ? "bg-accent/40 cursor-pointer" : "cursor-pointer"}
@@ -383,8 +386,7 @@ export default function AdminUsersPage() {
                         onChange={(event) => setCreateRole(event.target.value)}
                         className="w-full rounded-md border bg-background px-3 py-2 text-sm"
                       >
-                        <option value="MEMBER">MEMBER</option>
-                        <option value="PROJECT_MANAGER">PROJECT_MANAGER</option>
+                        <option value="USER">USER</option>
                         <option value="ADMIN">ADMIN</option>
                       </select>
                     </div>
@@ -428,8 +430,7 @@ export default function AdminUsersPage() {
                             onChange={(event) => setEditRole(event.target.value)}
                             className="w-full rounded-md border bg-background px-3 py-2 text-sm"
                           >
-                            <option value="MEMBER">MEMBER</option>
-                            <option value="PROJECT_MANAGER">PROJECT_MANAGER</option>
+                            <option value="USER">USER</option>
                             <option value="ADMIN">ADMIN</option>
                           </select>
                         </div>

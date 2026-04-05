@@ -156,13 +156,13 @@ export default function AdminGlobalSkillsPage() {
   };
 
   const handleDeactivate = async (id: number) => {
-    const isConfirm = window.confirm(t("profile.delete_confirm"));
+    const isConfirm = window.confirm(t("admin.skills.delete_confirm", { defaultValue: "Are you sure you want to delete this skill?" }));
     if (!isConfirm) return;
 
     setIsMutating(true);
     try {
       await adminSkillService.deleteSkill(id);
-      toast.success(t("admin.deactivate_success"));
+      toast.success(t("admin.skills.delete_success", { defaultValue: "Skill deleted" }));
       await loadSkillsList(currentPage, pageSize, keyword);
       if (selectedSkillId === id) {
         setSelectedSkillId(null);
@@ -225,8 +225,9 @@ export default function AdminGlobalSkillsPage() {
                 onChange={(e) => setKeyword(e.target.value)}
                 className="max-w-sm"
               />
-              <Button type="submit" variant="secondary" size="icon" disabled={isLoading}>
+              <Button type="submit" variant="secondary" className="gap-2" disabled={isLoading}>
                 <Search className="h-4 w-4" />
+                {t("admin.skills.search_btn")}
               </Button>
             </form>
 
