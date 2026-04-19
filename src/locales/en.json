@@ -281,5 +281,23 @@
 		"dark": "Dark",
 		"system": "System",
 		"primary_color": "Primary Color"
+	},
+	"copilot": {
+		"title": "Copilot",
+		"error_load_sessions": "Could not load chat sessions.",
+		"error_load_messages": "Could not load messages.",
+		"error_create_session": "Error creating new chat session.",
+		"error_create_session_short": "Error creating session",
+		"success_delete_session": "Chat session deleted",
+		"error_delete_session": "Error deleting session.",
+		"error_ai_connection": "Error connecting to AI. Please try again.",
+		"new_chat": "New Chat",
+		"no_sessions": "No chat sessions yet.",
+		"welcome_title": "TaskPilot Copilot",
+		"welcome_desc": "Ask me anything about project progress, task analysis, or request automatic task assignment recommendations.",
+		"input_placeholder": "Ask AI a question or request (e.g., Which projects are overdue?)",
+		"disclaimer": "TaskPilot Copilot can make mistakes. Please verify important information.",
+		"thinking_accordion_label": "Thinking (Click to view logic)",
+		"thinking_spinner_label": "Thinking..."
 	}
 }

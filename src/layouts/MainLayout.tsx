@@ -1,12 +1,11 @@
 import { useState, useEffect } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
-import { FloatingChat } from "@/components/FloatingChat";
 import logo from "@/assets/logo.svg";
 import { Button } from "@/components/ui/button";
 import { getApiErrorMessage } from "@/lib/http";
 import { useAuthStore } from "@/stores/auth.store";
 import { toast } from "react-toastify";
-import { LayoutDashboard, ShieldCheck, UserRound, LogOut, FolderKanban, ListChecks, Globe, Users, Code, Settings, Menu, ChevronLeft } from "lucide-react";
+import { LayoutDashboard, ShieldCheck, UserRound, LogOut, FolderKanban, ListChecks, Globe, Users, Code, Settings, Menu, ChevronLeft, Bot } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { profileService } from "@/services/profile.service";
 
@@ -116,6 +115,18 @@ export default function MainLayout() {
             <ListChecks className="h-4 w-4 shrink-0" />
             {!isCollapsed && <span>{t("layout.tasks_upcoming")}</span>}
           </NavLink>
+          <NavLink
+            to="/copilot"
+            className={({ isActive }) =>
+              `flex items-center gap-2 rounded-md ${isCollapsed ? 'justify-center px-0' : 'px-3'} py-2 transition-colors ${
+                isActive ? "bg-accent font-medium text-indigo-600" : "hover:bg-accent text-indigo-600/80"
+              }`
+            }
+            title="Copilot AI Chat"
+          >
+            <Bot className="h-4 w-4 shrink-0" />
+            {!isCollapsed && <span>Copilot</span>}
+          </NavLink>
         </nav>
 
         <div className="mt-auto">
@@ -206,8 +217,6 @@ export default function MainLayout() {
       <main className="flex-1 overflow-auto">
         <Outlet />
       </main>
-
-      <FloatingChat />
     </div>
   );
 }

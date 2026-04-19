@@ -281,5 +281,23 @@
 		"dark": "Tối",
 		"system": "Hệ thống",
 		"primary_color": "Màu chủ đạo"
+	},
+	"copilot": {
+		"title": "Copilot",
+		"error_load_sessions": "Không thể tải danh sách cuộc trò chuyện.",
+		"error_load_messages": "Không thể tải tin nhắn.",
+		"error_create_session": "Lỗi khi tạo cuộc trò chuyện mới.",
+		"error_create_session_short": "Lỗi tạo session",
+		"success_delete_session": "Đã xóa cuộc trò chuyện",
+		"error_delete_session": "Lỗi khi xóa.",
+		"error_ai_connection": "Lỗi kết nối tới AI. Vui lòng thử lại.",
+		"new_chat": "Cuộc trò chuyện mới",
+		"no_sessions": "Chưa có cuộc trò chuyện nào.",
+		"welcome_title": "TaskPilot Copilot",
+		"welcome_desc": "Hỏi tôi bất cứ điều gì về tiến độ dự án, phân tích công việc, hoặc yêu cầu đề xuất phân bổ nhân sự (Auto-Assignment).",
+		"input_placeholder": "Nhập câu hỏi hoặc yêu cầu cho AI (VD: Dự án nào đang quá hạn?)",
+		"disclaimer": "TaskPilot Copilot có thể mắc lỗi. Vui lòng kiểm tra lại các thông tin quan trọng.",
+		"thinking_accordion_label": "Suy nghĩ (Click để xem logic)",
+		"thinking_spinner_label": "Đang suy nghĩ..."
 	}
 }

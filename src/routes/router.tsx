@@ -17,6 +17,7 @@ import ProjectsPage from "@/pages/ProjectsPage";
 import AdminUsersPage from "@/pages/AdminUsersPage";
 import AdminGlobalSkillsPage from "@/pages/AdminGlobalSkillsPage";
 import AdminSettingsPage from "@/pages/AdminSettingsPage";
+import AiChatPage from "@/pages/AiChatPage";
 
 // Import Guard
 import ProtectedRoute from "./ProtectedRoute";
@@ -71,6 +72,11 @@ export const router = createBrowserRouter([
       },
       // Thêm các route khác của TaskPilot vào đây sau:
       // { path: "/tasks", element: <TasksPage /> },
+      
+      {
+        path: "/copilot",
+        element: <AiChatPage />,
+      },
       
       // Admin
       {
