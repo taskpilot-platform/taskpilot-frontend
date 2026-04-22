@@ -112,12 +112,18 @@
 		"forgot_btn": "Send reset request",
 		"forgot_btn_loading": "Sending...",
 		"forgot_success": "Reset request sent successfully",
+		"forgot_sent_desc": "Please check your email and open the link to continue.",
+		"forgot_send_again": "Send another link",
+		"forgot_send_again_in": "Send another link in {{seconds}}s",
 
 		"reset_title": "Set New Password",
 		"reset_desc": "Please enter a new password below",
 		"reset_btn": "Update password",
 		"reset_btn_loading": "Updating...",
 		"reset_success": "Password updated successfully",
+		"reset_invalid_title": "Invalid reset link",
+		"reset_invalid_desc": "This page can only be opened from the password reset email link.",
+		"reset_request_new_link": "Request a new reset link",
 		"back_to_login": "Back to login"
 	},
 	"profile": {

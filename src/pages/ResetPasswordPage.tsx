@@ -14,7 +14,7 @@ export default function ResetPasswordPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const token = searchParams.get("token") || "";
+  const token = (searchParams.get("token") || "").trim();
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showNewPassword, setShowNewPassword] = useState(false);
@@ -25,7 +25,8 @@ export default function ResetPasswordPage() {
 
   const isPasswordInvalid = touchedPassword && newPassword.length > 0 && newPassword.length < 8;
   const isConfirmInvalid = touchedConfirm && confirmPassword.length > 0 && newPassword !== confirmPassword;
-  const isFormValid = newPassword.length >= 8 && newPassword === confirmPassword && token !== "";
+  const hasToken = token.length > 0;
+  const isFormValid = newPassword.length >= 8 && newPassword === confirmPassword && hasToken;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -43,6 +44,26 @@ export default function ResetPasswordPage() {
       setIsSubmitting(false);
     }
   };
+
+  if (!hasToken) {
+    return (
+      <AuthShell
+        title={t("auth.reset_invalid_title", { defaultValue: "Invalid reset link" })}
+        description={t("auth.reset_invalid_desc", {
+          defaultValue: "This page can only be opened from the password reset email link.",
+        })}
+        footer={
+          <Link to="/login" className="font-medium text-primary hover:underline">
+            {t("auth.back_to_login")}
+          </Link>
+        }
+      >
+        <Link to="/forgot-password" className="block text-center font-medium text-primary hover:underline">
+          {t("auth.reset_request_new_link", { defaultValue: "Request a new reset link" })}
+        </Link>
+      </AuthShell>
+    );
+  }
 
   return (
     <AuthShell
