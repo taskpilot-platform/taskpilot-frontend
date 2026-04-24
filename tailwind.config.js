@@ -52,9 +52,27 @@ export default {
   				'3': 'hsl(var(--chart-3))',
   				'4': 'hsl(var(--chart-4))',
   				'5': 'hsl(var(--chart-5))'
-  			}
-  		}
+  			},
+        glass: {
+          DEFAULT: 'hsl(var(--glass-bg))',
+          border: 'hsl(var(--glass-border))'
+        }
+  		},
+      backdropBlur: {
+        glass: 'var(--glass-blur)'
+      }
   	}
   },
-  plugins: [require("tailwindcss-animate")],
+  plugins: [
+    require("tailwindcss-animate"),
+    function({ addUtilities }) {
+      addUtilities({
+        '.glass': {
+          'background-color': 'hsl(var(--glass-bg))',
+          'border': '1px solid hsl(var(--glass-border))',
+          'backdrop-filter': 'blur(var(--glass-blur))',
+        },
+      })
+    }
+  ],
 }

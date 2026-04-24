@@ -25,7 +25,7 @@ useAuthStore.getState().hydrate();
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     {/* ThemeProvider: quản lý Sáng/Tối (class "dark" trên <html>) */}
-    <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+    <ThemeProvider attribute="class" defaultTheme="system" enableSystem themes={["light", "dark", "glass", "system"]}>
       {/* ColorThemeProvider: quản lý màu chủ đạo (class "theme-xxx" trên <html>) */}
       <ColorThemeProvider defaultTheme="zinc">
         {/* ToastContainer nằm ngoài cùng để hiện ở mọi trang */}

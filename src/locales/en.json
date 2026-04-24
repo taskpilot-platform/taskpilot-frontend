@@ -298,6 +298,7 @@
 	"theme": {
 		"light": "Light",
 		"dark": "Dark",
+		"glass": "Glass",
 		"system": "System",
 		"primary_color": "Primary Color"
 	},
