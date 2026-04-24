@@ -2,6 +2,8 @@ import { create } from "zustand";
 import { authService } from "@/services/auth.service";
 import { authStorage } from "@/lib/storage";
 import type { LoginRequest, RegisterRequest } from "@/types/auth";
+import { oneSignalLogin, oneSignalLogout } from "@/lib/onesignal";
+import { profileService } from "@/services/profile.service";
 
 interface AuthState {
   accessToken: string | null;
@@ -57,6 +59,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         refreshToken,
         isAuthenticated: true,
       });
+
+      try {
+        const profile = await profileService.getMe();
+        await oneSignalLogin(profile.data.id);
+      } catch {
+        // Do not block login flow if OneSignal alias sync fails.
+      }
     } finally {
       set({ isLoading: false });
     }
@@ -71,6 +80,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         await authService.logout({ refreshToken: currentRefreshToken });
       }
     } finally {
+      try {
+        await oneSignalLogout();
+      } catch {
+        // Ignore OneSignal logout errors to keep API logout stable.
+      }
+
       authStorage.clear();
       set({
         accessToken: null,

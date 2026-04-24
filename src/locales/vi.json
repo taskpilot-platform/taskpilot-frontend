@@ -2,12 +2,25 @@
 	"layout": {
 		"dashboard": "Dashboard",
 		"projects": "Dự án",
+		"notifications": "Thông báo",
 		"tasks_upcoming": "Công việc (sắp có)",
 		"profile": "Hồ sơ cá nhân",
 		"my_skills": "Kỹ năng của tôi",
 		"logout": "Đăng xuất",
 		"logging_out": "Đang đăng xuất...",
 		"logout_success": "Đăng xuất thành công"
+	},
+	"notifications": {
+		"title": "Thông báo",
+		"desc": "Theo dõi các cập nhật mới nhất dành cho bạn.",
+		"inbox_title": "Hộp thư thông báo",
+		"unread_count": "Bạn có {{count}} thông báo chưa đọc",
+		"loading": "Đang tải thông báo...",
+		"empty": "Bạn chưa có thông báo nào.",
+		"new_badge": "Mới",
+		"mark_read": "Đánh dấu đã đọc",
+		"mark_all": "Đánh dấu tất cả đã đọc",
+		"mark_all_success": "Đã đánh dấu tất cả thông báo là đã đọc"
 	},
 	"admin": {
 		"users_title": "Quản lý Người Dùng",

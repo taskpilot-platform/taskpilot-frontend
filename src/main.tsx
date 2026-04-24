@@ -9,6 +9,16 @@ import { ToastContainer } from "react-toastify";
 import { ThemeProvider } from "./components/theme-provider.tsx";
 import { ColorThemeProvider } from "./components/color-theme-provider.tsx";
 import { useAuthStore } from "@/stores/auth.store";
+import { initOneSignal } from "@/lib/onesignal";
+import { useEffect } from "react";
+
+function AppBootstrap() {
+  useEffect(() => {
+    void initOneSignal();
+  }, []);
+
+  return <RouterProvider router={router} />;
+}
 
 useAuthStore.getState().hydrate();
 
@@ -21,7 +31,7 @@ createRoot(document.getElementById("root")!).render(
         {/* ToastContainer nằm ngoài cùng để hiện ở mọi trang */}
         <ToastContainer />
         {/* Router Provider quản lý việc chuyển trang */}
-        <RouterProvider router={router} />
+        <AppBootstrap />
       </ColorThemeProvider>
     </ThemeProvider>
   </StrictMode>,
