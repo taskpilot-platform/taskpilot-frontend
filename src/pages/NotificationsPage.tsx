@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Bell, CheckCheck, Loader2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { toast } from "react-toastify";
@@ -10,31 +10,89 @@ import { getApiErrorMessage } from "@/lib/http";
 import { notificationService } from "@/services/notification.service";
 import type { NotificationItem } from "@/types/notification";
 
+const POLL_INTERVAL_MS = 5000;
+
+function sortByNewest(items: NotificationItem[]): NotificationItem[] {
+  return [...items].sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+  );
+}
+
+function mergeById(prev: NotificationItem[], incoming: NotificationItem[]): NotificationItem[] {
+  const map = new Map<number, NotificationItem>();
+
+  for (const item of prev) {
+    map.set(item.id, item);
+  }
+
+  for (const item of incoming) {
+    map.set(item.id, item);
+  }
+
+  return sortByNewest(Array.from(map.values()));
+}
+
 export default function NotificationsPage() {
   const { t } = useTranslation();
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isMutating, setIsMutating] = useState(false);
+  const latestRequestIdRef = useRef(0);
 
   const unreadCount = useMemo(
     () => notifications.filter((item) => !item.isRead).length,
     [notifications],
   );
 
-  const loadNotifications = async () => {
-    setIsLoading(true);
+  const loadNotifications = async (showLoading = true) => {
+    const requestId = ++latestRequestIdRef.current;
+
+    if (showLoading) {
+      setIsLoading(true);
+    }
+
     try {
       const response = await notificationService.getMyNotifications(0, 50);
-      setNotifications(response.data.content);
+      if (requestId !== latestRequestIdRef.current) {
+        return;
+      }
+
+      const incoming = response.data.content ?? [];
+      setNotifications((prev) => (showLoading ? sortByNewest(incoming) : mergeById(prev, incoming)));
     } catch (error) {
       toast.error(getApiErrorMessage(error));
     } finally {
-      setIsLoading(false);
+      if (showLoading && requestId === latestRequestIdRef.current) {
+        setIsLoading(false);
+      }
     }
   };
 
   useEffect(() => {
-    void loadNotifications();
+    void loadNotifications(true);
+
+    const intervalId = window.setInterval(() => {
+      void loadNotifications(false);
+    }, POLL_INTERVAL_MS);
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void loadNotifications(false);
+      }
+    };
+
+    const onWindowFocus = () => {
+      void loadNotifications(false);
+    };
+
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    window.addEventListener("focus", onWindowFocus);
+
+    return () => {
+      window.clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      window.removeEventListener("focus", onWindowFocus);
+    };
   }, []);
 
   const handleMarkAsRead = async (notificationId: number) => {
