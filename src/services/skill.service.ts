@@ -1,6 +1,6 @@
 import { http } from "@/lib/http";
 import type { ApiResponse } from "@/types/api";
-import type { AddSkillRequest, UpdateSkillRequest, UserSkill } from "@/types/user";
+import type { AddSkillRequest, SkillDirectoryItem, UpdateSkillRequest, UserSkill } from "@/types/user";
 
 export const skillService = {
   async getMySkills(): Promise<ApiResponse<UserSkill[]>> {
@@ -10,6 +10,11 @@ export const skillService = {
 
   async getMySkillDetail(skillId: number): Promise<ApiResponse<UserSkill>> {
     const response = await http.get<ApiResponse<UserSkill>>(`/v1/users/me/skills/${skillId}`);
+    return response.data;
+  },
+
+  async getSkillDirectory(): Promise<ApiResponse<SkillDirectoryItem[]>> {
+    const response = await http.get<ApiResponse<SkillDirectoryItem[]>>("/v1/users/me/skills/directory");
     return response.data;
   },
 

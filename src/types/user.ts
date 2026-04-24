@@ -16,6 +16,12 @@ export interface UserSkill {
   level: number;
 }
 
+export interface SkillDirectoryItem {
+  id: number;
+  name: string;
+  description: string | null;
+}
+
 export interface UpdateProfileRequest {
   fullName: string;
   avatarUrl: string | null;
@@ -27,7 +33,7 @@ export interface ChangePasswordRequest {
 }
 
 export interface AddSkillRequest {
-  name: string;
+  skillId: number;
   level: number;
 }
 
