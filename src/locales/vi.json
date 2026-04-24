@@ -125,12 +125,18 @@
 		"forgot_btn": "Gửi yêu cầu đặt lại mật khẩu",
 		"forgot_btn_loading": "Đang gửi...",
 		"forgot_success": "Đã gửi yêu cầu đặt lại mật khẩu",
+		"forgot_sent_desc": "Vui lòng kiểm tra email và mở liên kết trong thư để tiếp tục.",
+		"forgot_send_again": "Gửi lại liên kết",
+		"forgot_send_again_in": "Gửi lại liên kết sau {{seconds}}s",
 
 		"reset_title": "Thiết lập lại mật khẩu",
 		"reset_desc": "Vui lòng nhập mật khẩu mới phía dưới",
 		"reset_btn": "Cập nhật mật khẩu",
 		"reset_btn_loading": "Đang cập nhật...",
 		"reset_success": "Đặt lại mật khẩu thành công",
+		"reset_invalid_title": "Liên kết không hợp lệ",
+		"reset_invalid_desc": "Trang này chỉ mở được từ liên kết đặt lại mật khẩu trong email.",
+		"reset_request_new_link": "Yêu cầu liên kết mới",
 		"back_to_login": "Quay lại đăng nhập"
 	},
 	"profile": {
@@ -139,7 +145,7 @@
 		"title": "Profile",
 		"desc": "Quản lý thông tin cá nhân và bảo mật tài khoản.",
 		"loading": "Đang tải profile...",
-		"current_info_title": "Thôngợp hiện tại",
+		"current_info_title": "Thông tin hiện tại",
 		"current_info_desc": "Dữ liệu lấy từ hệ thống.",
 		"role": "Vai trò",
 		"status": "Trạng thái",

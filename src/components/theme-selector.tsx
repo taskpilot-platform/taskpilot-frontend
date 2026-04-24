@@ -32,35 +32,32 @@ export function ThemeSelector() {
 
   return (
     <div className="space-y-4">
-      {/* ========== Chế độ Sáng / Tối ========== */}
-      <div>
-        <p className="text-sm font-medium mb-2 text-muted-foreground">Chế độ hiển thị</p>
-        <div className="flex gap-2">
-          <Button
-            variant={theme === "light" ? "default" : "outline"}
-            size="sm"
-            onClick={() => setTheme("light")}
-          >
-            <Sun className="h-4 w-4 mr-1" />
-            {t("theme.light")}
-          </Button>
-          <Button
-            variant={theme === "dark" ? "default" : "outline"}
-            size="sm"
-            onClick={() => setTheme("dark")}
-          >
-            <Moon className="h-4 w-4 mr-1" />
-            {t("theme.dark")}
-          </Button>
-          <Button
-            variant={theme === "system" ? "default" : "outline"}
-            size="sm"
-            onClick={() => setTheme("system")}
-          >
-            <Monitor className="h-4 w-4 mr-1" />
-            {t("theme.system")}
-          </Button>
-        </div>
+      <p className="text-sm font-medium mb-2 text-muted-foreground">Chế độ hiển thị</p>
+      <div className="flex gap-2">
+        <Button
+          variant={theme === "light" ? "default" : "outline"}
+          size="sm"
+          onClick={() => setTheme("light")}
+        >
+          <Sun className="h-4 w-4 mr-1" />
+          {t("theme.light")}
+        </Button>
+        <Button
+          variant={theme === "dark" ? "default" : "outline"}
+          size="sm"
+          onClick={() => setTheme("dark")}
+        >
+          <Moon className="h-4 w-4 mr-1" />
+          {t("theme.dark")}
+        </Button>
+        <Button
+          variant={theme === "system" ? "default" : "outline"}
+          size="sm"
+          onClick={() => setTheme("system")}
+        >
+          <Monitor className="h-4 w-4 mr-1" />
+          {t("theme.system")}
+        </Button>
       </div>
 
       {/* ========== Màu chủ đạo ========== */}
@@ -73,11 +70,10 @@ export function ThemeSelector() {
               <button
                 key={t}
                 onClick={() => setColorTheme(t)}
-                className={`w-8 h-8 rounded-full ${config.bgClass} border-2 transition-all hover:scale-110 ${
-                  colorTheme === t
+                className={`w-8 h-8 rounded-full ${config.bgClass} border-2 transition-all hover:scale-110 ${colorTheme === t
                     ? "border-foreground scale-110 ring-2 ring-offset-2 ring-offset-background ring-foreground"
                     : "border-transparent"
-                }`}
+                  }`}
                 title={config.label}
                 aria-label={`Chọn theme ${config.label}`}
               />
