@@ -267,7 +267,13 @@
 		"level_invalid": "Level phải nằm trong khoảng 1 đến 5",
 		"update_success": "Đã cập nhật level skill",
 		"delete_success": "Đã xóa skill",
-		"delete_confirm": "Bạn có chắc chắn muốn xóa skill này?"
+		"delete_confirm": "Bạn có chắc chắn muốn xóa skill này?",
+		"predefined": {
+			"glassmorphism": "Thiết kế Glassmorphism",
+			"shadcn_ui": "Phát triển UI với Shadcn",
+			"tailwind_css": "Tailwind CSS Nâng cao",
+			"framer_motion": "Animation với Framer Motion"
+		}
 	},
 	"dashboard": {
 		"title": "TaskPilot Dashboard",
@@ -298,6 +304,7 @@
 	"theme": {
 		"light": "Sáng",
 		"dark": "Tối",
+		"glass": "Kính mờ",
 		"system": "Hệ thống",
 		"primary_color": "Màu chủ đạo"
 	},

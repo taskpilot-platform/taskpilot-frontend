@@ -199,11 +199,11 @@ export default function AiChatPage() {
       const thinking = content.substring(thinkStart + 7);
       return (
         <div className="flex flex-col gap-2">
-           <details open className="cursor-pointer text-sm text-gray-500 bg-gray-100 p-2 rounded border border-gray-200">
+           <details open className="cursor-pointer text-sm text-muted-foreground bg-background/50 p-2 rounded border border-border">
             <summary className="font-semibold animate-pulse flex items-center gap-2">
               <Loader2 className="w-4 h-4 animate-spin" /> {t("copilot.thinking_spinner_label")}
             </summary>
-            <div className="mt-2 whitespace-pre-wrap pl-4 border-l-2 border-gray-300">
+            <div className="mt-2 whitespace-pre-wrap pl-4 border-l-2 border-border">
               {thinking}
             </div>
           </details>
@@ -212,21 +212,21 @@ export default function AiChatPage() {
     }
 
     return (
-      <div className="prose prose-sm max-w-full text-gray-800">
+      <div className="max-w-full">
         <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
       </div>
     );
   };
 
   return (
-    <div className="flex h-[calc(100vh-80px)] overflow-hidden bg-white border border-gray-200 rounded-lg shadow-sm">
+    <div className="flex h-[calc(100vh-80px)] overflow-hidden bg-background border border-border rounded-lg shadow-sm">
       {/* Sidebar: Session List */}
-      <div className="w-64 border-r border-gray-200 flex flex-col bg-gray-50/50">
-        <div className="p-4 border-b border-gray-200 flex justify-between items-center bg-white">
-          <h2 className="font-semibold text-gray-800 flex items-center gap-2">
-            <Bot className="w-5 h-5 text-indigo-600" /> {t("copilot.title")}
+      <div className="w-64 border-r border-border flex flex-col bg-muted/30">
+        <div className="p-4 border-b border-border flex justify-between items-center bg-background/50">
+          <h2 className="font-semibold text-foreground flex items-center gap-2">
+            <Bot className="w-5 h-5 text-primary" /> {t("copilot.title")}
           </h2>
-          <Button variant="ghost" size="icon" onClick={handleNewSession} className="h-8 w-8 hover:bg-indigo-50 hover:text-indigo-600">
+          <Button variant="ghost" size="icon" onClick={handleNewSession} className="h-8 w-8 hover:bg-primary/10">
             <Plus className="w-4 h-4" />
           </Button>
         </div>
@@ -236,7 +236,7 @@ export default function AiChatPage() {
               key={s.id}
               onClick={() => setActiveSession(s)}
               className={`p-3 rounded-md cursor-pointer flex justify-between items-center group transition-colors ${
-                activeSession?.id === s.id ? "bg-indigo-50 text-indigo-700 font-medium" : "hover:bg-gray-100 text-gray-700"
+                activeSession?.id === s.id ? "bg-primary/10 text-primary font-medium" : "hover:bg-muted text-muted-foreground"
               }`}
             >
               <div className="flex-1 truncate text-sm">
@@ -245,7 +245,7 @@ export default function AiChatPage() {
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-6 w-6 opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 hover:bg-red-50"
+                className="h-6 w-6 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
                 onClick={(e) => handleDeleteSession(e, s.id)}
               >
                 <Trash2 className="w-3 h-3" />
@@ -253,7 +253,7 @@ export default function AiChatPage() {
             </div>
           ))}
           {sessions.length === 0 && (
-            <div className="text-center text-gray-500 text-sm mt-4">
+            <div className="text-center text-muted-foreground text-sm mt-4">
               {t("copilot.no_sessions")}
             </div>
           )}
@@ -266,12 +266,12 @@ export default function AiChatPage() {
         <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
           {messages.length === 0 && !currentStreamMsg && (
             <div className="flex flex-col items-center justify-center h-full text-center space-y-4">
-              <div className="h-16 w-16 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center">
+              <div className="h-16 w-16 bg-primary/10 text-primary rounded-full flex items-center justify-center">
                 <Bot className="w-8 h-8" />
               </div>
               <div>
-                <h3 className="text-xl font-semibold text-gray-800">{t("copilot.welcome_title")}</h3>
-                <p className="text-gray-500 mt-2 max-w-md">
+                <h3 className="text-xl font-semibold text-foreground">{t("copilot.welcome_title")}</h3>
+                <p className="text-muted-foreground mt-2 max-w-md">
                   {t("copilot.welcome_desc")}
                 </p>
               </div>
@@ -282,14 +282,14 @@ export default function AiChatPage() {
              <div key={msg.id || idx} className={`flex gap-3 ${msg.sender === "USER" ? "justify-end" : "justify-start"}`}>
                 {msg.sender !== "USER" && (
                    <Avatar className="w-8 h-8">
-                     <AvatarFallback className="bg-indigo-100 text-indigo-600"><Bot className="w-4 h-4"/></AvatarFallback>
+                     <AvatarFallback className="bg-primary/10 text-primary"><Bot className="w-4 h-4"/></AvatarFallback>
                    </Avatar>
                 )}
                 
                 <div className={`max-w-[80%] rounded-2xl px-4 py-3 ${
                   msg.sender === "USER" 
-                    ? "bg-indigo-600 text-white rounded-br-none" 
-                    : "bg-gray-100 border border-gray-200 rounded-bl-none"
+                    ? "bg-primary text-primary-foreground rounded-br-none" 
+                    : "bg-muted border border-border rounded-bl-none text-foreground"
                 }`}>
                   {msg.sender === "USER" ? (
                     <div className="whitespace-pre-wrap">{msg.content}</div>
@@ -300,7 +300,7 @@ export default function AiChatPage() {
 
                 {msg.sender === "USER" && (
                    <Avatar className="w-8 h-8">
-                     <AvatarFallback className="bg-gray-200 text-gray-600"><User className="w-4 h-4"/></AvatarFallback>
+                     <AvatarFallback className="bg-muted text-muted-foreground"><User className="w-4 h-4"/></AvatarFallback>
                    </Avatar>
                 )}
              </div>
@@ -310,11 +310,11 @@ export default function AiChatPage() {
           {currentStreamMsg && (
              <div className="flex gap-3 justify-start">
                <Avatar className="w-8 h-8">
-                 <AvatarFallback className="bg-indigo-100 text-indigo-600">
+                 <AvatarFallback className="bg-primary/10 text-primary">
                     <Loader2 className="w-4 h-4 animate-spin"/>
                  </AvatarFallback>
                </Avatar>
-               <div className="max-w-[80%] rounded-2xl p-4 bg-gray-50 border border-indigo-100 rounded-bl-none shadow-sm">
+               <div className="max-w-[80%] rounded-2xl p-4 bg-muted/50 border border-primary/20 rounded-bl-none shadow-sm text-foreground">
                   {renderAiMessage(currentStreamMsg)}
                </div>
              </div>
@@ -324,7 +324,7 @@ export default function AiChatPage() {
         </div>
 
         {/* Input Area */}
-        <div className="p-4 border-t border-gray-200 bg-white">
+        <div className="p-4 border-t border-border bg-background/50">
           <form 
             onSubmit={(e) => { e.preventDefault(); sendMessage(); }}
             className="flex items-center gap-2 max-w-4xl mx-auto relative"
@@ -333,19 +333,19 @@ export default function AiChatPage() {
               value={inputVal}
               onChange={(e) => setInputVal(e.target.value)}
               placeholder={t("copilot.input_placeholder")}
-              className="flex-1 py-6 pl-4 pr-12 rounded-full border-gray-300 focus-visible:ring-indigo-500 text-base"
+              className="flex-1 py-6 pl-4 pr-12 rounded-full border-border focus-visible:ring-primary text-base bg-background"
               disabled={isStreaming}
             />
             <Button 
               type="submit" 
               size="icon"
               disabled={!inputVal.trim() || isStreaming}
-              className="absolute right-1.5 h-10 w-10 rounded-full bg-indigo-600 hover:bg-indigo-700 flex items-center justify-center p-0"
+              className="absolute right-1.5 h-10 w-10 rounded-full bg-primary hover:bg-primary/90 flex items-center justify-center p-0"
             >
               <Send className="w-4 h-4 ml-1" />
             </Button>
           </form>
-          <div className="text-center text-xs text-gray-400 mt-2">
+          <div className="text-center text-xs text-muted-foreground mt-2">
             {t("copilot.disclaimer")}
           </div>
         </div>
