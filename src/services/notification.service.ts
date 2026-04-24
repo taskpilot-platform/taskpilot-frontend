@@ -5,7 +5,8 @@ import type { NotificationItem, NotificationPageResult } from "@/types/notificat
 export const notificationService = {
   async getMyNotifications(page = 0, size = 20): Promise<ApiResponse<NotificationPageResult>> {
     const response = await http.get<ApiResponse<NotificationPageResult>>("/v1/notifications/my", {
-      params: { page, size },
+      // Add a cache buster to avoid stale GET responses from intermediary caches.
+      params: { page, size, _t: Date.now() },
     });
     return response.data;
   },

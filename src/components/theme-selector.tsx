@@ -33,7 +33,7 @@ export function ThemeSelector() {
   return (
     <div className="space-y-4">
       {/* ========== Chế độ Sáng / Tối ========== */}
-      <div className="hidden">
+      <div>
         <p className="text-sm font-medium mb-2 text-muted-foreground">Chế độ hiển thị</p>
         <div className="flex gap-2">
           <Button
