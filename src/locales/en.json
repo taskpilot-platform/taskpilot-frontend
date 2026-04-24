@@ -2,12 +2,25 @@
 	"layout": {
 		"dashboard": "Dashboard",
 		"projects": "Projects",
+		"notifications": "Notifications",
 		"tasks_upcoming": "Tasks (Upcoming)",
 		"profile": "My Profile",
 		"my_skills": "My Skills",
 		"logout": "Logout",
 		"logging_out": "Logging out...",
 		"logout_success": "Logged out successfully"
+	},
+	"notifications": {
+		"title": "Notifications",
+		"desc": "Track the latest updates that matter to you.",
+		"inbox_title": "Notification Inbox",
+		"unread_count": "You have {{count}} unread notifications",
+		"loading": "Loading notifications...",
+		"empty": "You don't have any notifications yet.",
+		"new_badge": "New",
+		"mark_read": "Mark as read",
+		"mark_all": "Mark all as read",
+		"mark_all_success": "All notifications marked as read"
 	},
 	"admin": {
 		"users_title": "User Management",

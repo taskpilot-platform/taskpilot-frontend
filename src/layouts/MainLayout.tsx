@@ -1,21 +1,28 @@
 import { useState, useEffect } from "react";
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import logo from "@/assets/logo.svg";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { getApiErrorMessage } from "@/lib/http";
 import { useAuthStore } from "@/stores/auth.store";
 import { toast } from "react-toastify";
-import { LayoutDashboard, ShieldCheck, UserRound, LogOut, FolderKanban, ListChecks, Globe, Users, Code, Settings, Menu, ChevronLeft, Bot } from "lucide-react";
+import { LayoutDashboard, ShieldCheck, UserRound, LogOut, FolderKanban, ListChecks, Globe, Users, Code, Settings, Menu, ChevronLeft, Bot, Bell } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { profileService } from "@/services/profile.service";
+import { notificationService } from "@/services/notification.service";
 
 export default function MainLayout() {
+  const NOTIFICATION_BLINK_MS = 3000;
+
   const logout = useAuthStore((state) => state.logout);
   const isLoading = useAuthStore((state) => state.isLoading);
   const navigate = useNavigate();
+  const location = useLocation();
   const { t, i18n } = useTranslation();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [userRole, setUserRole] = useState<string | null>(localStorage.getItem("userRole"));
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [isNotificationBlinking, setIsNotificationBlinking] = useState(false);
 
   useEffect(() => {
     // Lấy thông tin user để kiểm tra phân quyền Sidebar
@@ -29,6 +36,61 @@ export default function MainLayout() {
         localStorage.removeItem("userRole");
       });
   }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+    let previousCount = -1;
+
+    const loadUnreadCount = async () => {
+      try {
+        const response = await notificationService.getUnreadCount();
+        if (!isMounted) {
+          return;
+        }
+
+        const nextCount = response.data;
+        setUnreadCount(nextCount);
+
+        if (
+          previousCount >= 0 &&
+          nextCount > previousCount &&
+          !location.pathname.startsWith("/notifications")
+        ) {
+          setIsNotificationBlinking(true);
+          window.setTimeout(() => setIsNotificationBlinking(false), NOTIFICATION_BLINK_MS);
+        }
+
+        previousCount = nextCount;
+      } catch {
+        // Ignore polling errors in sidebar.
+      }
+    };
+
+    void loadUnreadCount();
+    const intervalId = window.setInterval(() => {
+      void loadUnreadCount();
+    }, 15000);
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void loadUnreadCount();
+      }
+    };
+
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    return () => {
+      isMounted = false;
+      window.clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [location.pathname, NOTIFICATION_BLINK_MS]);
+
+  useEffect(() => {
+    if (location.pathname.startsWith("/notifications")) {
+      setIsNotificationBlinking(false);
+    }
+  }, [location.pathname]);
 
   const toggleLanguage = () => {
     const newLang = i18n.language === "vi" ? "en" : "vi";
@@ -114,6 +176,34 @@ export default function MainLayout() {
           >
             <ListChecks className="h-4 w-4 shrink-0" />
             {!isCollapsed && <span>{t("layout.tasks_upcoming")}</span>}
+          </NavLink>
+          <NavLink
+            to="/notifications"
+            className={({ isActive }) =>
+              `flex items-center gap-2 rounded-md ${isCollapsed ? "justify-center px-0" : "px-3"} py-2 transition-colors ${
+                isActive
+                  ? "bg-accent font-medium"
+                  : isNotificationBlinking
+                    ? "bg-amber-100 text-amber-900 hover:bg-amber-100 dark:bg-amber-900/30 dark:text-amber-200"
+                    : "hover:bg-accent"
+              }`
+            }
+            title={t("layout.notifications")}
+          >
+            <Bell className={`h-4 w-4 shrink-0 ${isNotificationBlinking ? "animate-pulse" : ""}`} />
+            {!isCollapsed && (
+              <div className="flex items-center gap-2">
+                <span>{t("layout.notifications")}</span>
+                {unreadCount > 0 && (
+                  <Badge className={isNotificationBlinking ? "animate-pulse bg-amber-500 text-amber-950" : ""}>
+                    {unreadCount > 99 ? "99+" : unreadCount}
+                  </Badge>
+                )}
+              </div>
+            )}
+            {isCollapsed && unreadCount > 0 && (
+              <span className={`h-2 w-2 rounded-full bg-amber-500 ${isNotificationBlinking ? "animate-ping" : ""}`} />
+            )}
           </NavLink>
           <NavLink
             to="/copilot"

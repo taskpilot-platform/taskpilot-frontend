@@ -18,6 +18,7 @@ import AdminUsersPage from "@/pages/AdminUsersPage";
 import AdminGlobalSkillsPage from "@/pages/AdminGlobalSkillsPage";
 import AdminSettingsPage from "@/pages/AdminSettingsPage";
 import AiChatPage from "@/pages/AiChatPage";
+import NotificationsPage from "@/pages/NotificationsPage";
 
 // Import Guard
 import ProtectedRoute from "./ProtectedRoute";
@@ -69,6 +70,10 @@ export const router = createBrowserRouter([
       {
         path: "/my-skills",
         element: <MySkillsPage />,
+      },
+      {
+        path: "/notifications",
+        element: <NotificationsPage />,
       },
       // Thêm các route khác của TaskPilot vào đây sau:
       // { path: "/tasks", element: <TasksPage /> },
