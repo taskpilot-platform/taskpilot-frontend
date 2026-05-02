@@ -29,6 +29,7 @@ export default function AiChatPage() {
   const [streamingSessionId, setStreamingSessionId] = useState<number | null>(null);
   const [streamPhase, setStreamPhase] = useState<ChatStreamPhase | null>(null);
   const [streamModel, setStreamModel] = useState<string>("");
+  const [toolEvents, setToolEvents] = useState<Array<{ name: string; arguments?: string; result?: string }>>([]);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const activeStreamControllerRef = useRef<AbortController | null>(null);
@@ -239,6 +240,7 @@ export default function AiChatPage() {
     setStreamModel("");
     setStreamingSessionId(targetSession.id);
     setCurrentStreamMsg("");
+    setToolEvents([]);
 
     const controller = new AbortController();
     activeStreamControllerRef.current = controller;
@@ -299,6 +301,15 @@ export default function AiChatPage() {
             }
           } else if (ev.event === "done") {
             streamCompleted = true;
+          } else if (ev.event === "tool") {
+            try {
+              const parsed = JSON.parse(ev.data) as { name?: string; arguments?: string; result?: string };
+              if (parsed?.name) {
+                setToolEvents(prev => [...prev, parsed]);
+              }
+            } catch {
+              // Ignore malformed tool events.
+            }
           } else if (ev.event === "error") {
             toast.error(ev.data);
             throw new Error(ev.data || "SSE server error");
@@ -343,6 +354,7 @@ export default function AiChatPage() {
           setIsThinking(false);
           setCurrentStreamMsg("");
           setStreamingSessionId(null);
+          setToolEvents([]);
         }
       }
     }
@@ -553,6 +565,17 @@ export default function AiChatPage() {
                   <div className="text-sm text-muted-foreground italic">{t("copilot.thinking_spinner_label")}</div>
                 ) : (
                   <div className="whitespace-pre-wrap break-words">{currentStreamMsg}</div>
+                )}
+                {toolEvents.length > 0 && (
+                  <div className="mt-3 space-y-2 text-xs text-muted-foreground">
+                    {toolEvents.map((tool, idx) => (
+                      <div key={`${tool.name}-${idx}`} className="rounded-md border border-border bg-background/70 px-2 py-1">
+                        <div className="font-semibold text-foreground">Tool: {tool.name}</div>
+                        {tool.arguments && <div className="break-words">Args: {tool.arguments}</div>}
+                        {tool.result && <div className="break-words">Result: {tool.result}</div>}
+                      </div>
+                    ))}
+                  </div>
                 )}
               </div>
             </div>
