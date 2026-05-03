@@ -304,8 +304,14 @@ export default function AiChatPage() {
           } else if (ev.event === "tool") {
             try {
               const parsed = JSON.parse(ev.data) as { name?: string; arguments?: string; result?: string };
-              if (parsed?.name) {
-                setToolEvents(prev => [...prev, parsed]);
+              const toolName = parsed.name?.trim();
+              if (toolName) {
+                const toolEvent: { name: string; arguments?: string; result?: string } = {
+                  name: toolName,
+                  arguments: parsed.arguments,
+                  result: parsed.result,
+                };
+                setToolEvents(prev => [...prev, toolEvent]);
               }
             } catch {
               // Ignore malformed tool events.
