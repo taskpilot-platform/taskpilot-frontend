@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Send, Bot, User, Trash2, Plus, Loader2, Info } from "lucide-react";
+import { Send, Bot, User, Trash2, Plus, Loader2, Info, ChevronRight, CheckCircle2, Search, BrainCircuit, Zap } from "lucide-react";
 import { fetchEventSource } from "@microsoft/fetch-event-source";
 import { toast } from "react-toastify";
 import { useTranslation } from "react-i18next";
@@ -30,6 +30,7 @@ export default function AiChatPage() {
   const [streamPhase, setStreamPhase] = useState<ChatStreamPhase | null>(null);
   const [streamModel, setStreamModel] = useState<string>("");
   const [toolEvents, setToolEvents] = useState<Array<{ name: string; arguments?: string; result?: string }>>([]);
+  const [expandedThinking, setExpandedThinking] = useState<string | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const activeStreamControllerRef = useRef<AbortController | null>(null);
@@ -241,6 +242,7 @@ export default function AiChatPage() {
     setStreamingSessionId(targetSession.id);
     setCurrentStreamMsg("");
     setToolEvents([]);
+    setExpandedThinking(null);
 
     const controller = new AbortController();
     activeStreamControllerRef.current = controller;
@@ -316,6 +318,15 @@ export default function AiChatPage() {
             } catch {
               // Ignore malformed tool events.
             }
+          } else if (ev.event === "thought_expanded") {
+            try {
+              const parsed = JSON.parse(ev.data) as { expanded?: string };
+              if (parsed.expanded) {
+                setExpandedThinking(parsed.expanded);
+              }
+            } catch {
+              // Ignore malformed expanded thinking.
+            }
           } else if (ev.event === "error") {
             toast.error(ev.data);
             throw new Error(ev.data || "SSE server error");
@@ -366,54 +377,120 @@ export default function AiChatPage() {
     }
   }
 
+  // Helper to parse thinking content into steps
+  const parseThinkingToSteps = (thinking: string, tools: typeof toolEvents) => {
+    // Split by "Step X:" or significant newlines
+    const rawSteps = thinking.split(/(?=Step \d+:)/g).filter(s => s.trim().length > 0);
+    const steps: Array<{ type: 'thought' | 'tool', content: string, title?: string, toolData?: any }> = [];
+
+    // Simple heuristic: interleaving tools based on their sequence
+    // In a real scenario, we might want the backend to emit "thinking_step" events
+    // but for now, we'll map the text steps and then append tool calls.
+    rawSteps.forEach((s, idx) => {
+      const titleMatch = s.match(/Step \d+:\s*(.*)/);
+      const title = titleMatch ? titleMatch[1].trim() : undefined;
+      const content = title ? s.replace(/Step \d+:\s*(.*)/, '').trim() : s.trim();
+
+      steps.push({
+        type: 'thought',
+        content: content || title || 'Processing...',
+        title: title || `Step ${idx + 1}`
+      });
+    });
+
+    // If no explicit steps found, treat whole thinking as one step
+    if (steps.length === 0 && thinking.trim()) {
+      steps.push({ type: 'thought', content: thinking.trim(), title: 'Analysis' });
+    }
+
+    return steps;
+  };
+
   // Helper to render AI message with <think> tag support
-  const renderAiMessage = (content: string) => {
-    // If it contains <think>, split it
+  const renderAiMessage = (content: string, tools: typeof toolEvents = [], expanded?: string | null) => {
     const thinkStart = content.indexOf("<think>");
     const thinkEnd = content.indexOf("</think>");
 
-    if (thinkStart !== -1 && thinkEnd > thinkStart) {
+    if (thinkStart !== -1) {
       const beforeThink = content.substring(0, thinkStart);
-      const thinking = content.substring(thinkStart + 7, thinkEnd);
-      const afterThink = content.substring(thinkEnd + 8);
+      const isThinkingComplete = thinkEnd > thinkStart;
+      
+      // Use expanded thinking if available and thinking is complete
+      const displayThinking = (isThinkingComplete && expanded) 
+        ? expanded 
+        : (isThinkingComplete 
+            ? content.substring(thinkStart + 7, thinkEnd) 
+            : content.substring(thinkStart + 7));
+            
+      const afterThink = isThinkingComplete ? content.substring(thinkEnd + 8) : "";
+
+      const steps = parseThinkingToSteps(displayThinking, tools);
 
       return (
-        <div className="flex flex-col gap-2">
-          {beforeThink && <ReactMarkdown remarkPlugins={[remarkGfm]}>{beforeThink}</ReactMarkdown>}
-          <details className="cursor-pointer text-sm text-gray-500 bg-gray-100 p-2 rounded border border-gray-200">
-            <summary className="font-semibold flex items-center gap-2">
-              <Info className="w-4 h-4" /> {t("copilot.thinking_accordion_label")}
-            </summary>
-            <div className="mt-2 whitespace-pre-wrap pl-4 border-l-2 border-gray-300">
-              {thinking}
+        <div className="flex flex-col gap-4">
+          {beforeThink && <div className="prose prose-sm dark:prose-invert max-w-full"><ReactMarkdown remarkPlugins={[remarkGfm]}>{beforeThink}</ReactMarkdown></div>}
+          
+          <div className="space-y-3 bg-muted/30 p-4 rounded-xl border border-border/50">
+            <div className="flex items-center gap-2 text-sm font-semibold text-primary mb-2">
+              <BrainCircuit className="w-4 h-4" />
+              <span>{t("copilot.thinking_accordion_label")}</span>
+              {!isThinkingComplete && <Loader2 className="w-3 h-3 animate-spin ml-1" />}
             </div>
-          </details>
+            
+            <div className="space-y-4 relative before:absolute before:left-[11px] before:top-2 before:bottom-2 before:w-[2px] before:bg-border/60">
+              {steps.map((step, idx) => (
+                <div key={idx} className="relative pl-8 group">
+                  <div className="absolute left-0 top-1.5 w-6 h-6 rounded-full bg-background border border-border flex items-center justify-center z-10 group-last:bg-primary/10 group-last:border-primary/30 transition-colors">
+                    {idx < steps.length - 1 || isThinkingComplete ? (
+                      <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />
+                    ) : (
+                      <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
+                    )}
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">{step.title}</span>
+                    <p className="text-sm text-foreground/80 mt-0.5 leading-relaxed">{step.content}</p>
+                  </div>
+                </div>
+              ))}
+
+              {/* Integrated Tools in the timeline */}
+              {tools.map((tool, tIdx) => (
+                <div key={`tool-${tIdx}`} className="relative pl-8 group">
+                  <div className="absolute left-0 top-1.5 w-6 h-6 rounded-full bg-background border border-border flex items-center justify-center z-10">
+                    <Search className="w-3.5 h-3.5 text-blue-500" />
+                  </div>
+                  <div className="flex flex-col bg-background/50 p-2 rounded-lg border border-border/40">
+                    <span className="text-xs font-bold text-blue-600 uppercase tracking-wider flex items-center gap-1">
+                      <Zap className="w-3 h-3" /> Action: {tool.name}
+                    </span>
+                    {tool.arguments && (
+                      <code className="text-[10px] bg-muted px-1.5 py-0.5 rounded mt-1 text-muted-foreground truncate max-w-full">
+                        {tool.arguments}
+                      </code>
+                    )}
+                    {tool.result && (
+                      <div className="mt-2 text-xs text-muted-foreground border-l-2 border-blue-200 pl-2 py-1 italic line-clamp-2">
+                        {tool.result}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
           {afterThink && (
-            <div className="prose prose-sm mt-2 max-w-full">
+            <div className="prose prose-sm dark:prose-invert max-w-full pt-2 border-t border-border/30 mt-2">
               <ReactMarkdown remarkPlugins={[remarkGfm]}>{afterThink}</ReactMarkdown>
             </div>
           )}
         </div>
       );
-    } else if (thinkStart !== -1 && thinkEnd === -1) {
-      // Still thinking...
-      const thinking = content.substring(thinkStart + 7);
-      return (
-        <div className="flex flex-col gap-2">
-          <details open className="cursor-pointer text-sm text-muted-foreground bg-background/50 p-2 rounded border border-border">
-            <summary className="font-semibold animate-pulse flex items-center gap-2">
-              <Loader2 className="w-4 h-4 animate-spin" /> {t("copilot.thinking_spinner_label")}
-            </summary>
-            <div className="mt-2 whitespace-pre-wrap pl-4 border-l-2 border-border">
-              {thinking}
-            </div>
-          </details>
-        </div>
-      );
     }
 
     return (
-      <div className="max-w-full">
+      <div className="max-w-full prose prose-sm dark:prose-invert">
         <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
       </div>
     );
@@ -566,23 +643,8 @@ export default function AiChatPage() {
                   <Loader2 className="w-4 h-4 animate-spin" />
                 </AvatarFallback>
               </Avatar>
-              <div className="max-w-[80%] rounded-2xl p-4 bg-muted/50 border border-primary/20 rounded-bl-none shadow-sm text-foreground">
-                {isThinking && !currentStreamMsg ? (
-                  <div className="text-sm text-muted-foreground italic">{t("copilot.thinking_spinner_label")}</div>
-                ) : (
-                  <div className="whitespace-pre-wrap break-words">{currentStreamMsg}</div>
-                )}
-                {toolEvents.length > 0 && (
-                  <div className="mt-3 space-y-2 text-xs text-muted-foreground">
-                    {toolEvents.map((tool, idx) => (
-                      <div key={`${tool.name}-${idx}`} className="rounded-md border border-border bg-background/70 px-2 py-1">
-                        <div className="font-semibold text-foreground">Tool: {tool.name}</div>
-                        {tool.arguments && <div className="break-words">Args: {tool.arguments}</div>}
-                        {tool.result && <div className="break-words">Result: {tool.result}</div>}
-                      </div>
-                    ))}
-                  </div>
-                )}
+              <div className="max-w-[80%] rounded-2xl p-1 bg-transparent border-none text-foreground">
+                {renderAiMessage(currentStreamMsg || (isThinking ? "<think>Step 1: Analyzing request...</think>" : ""), toolEvents, expandedThinking)}
               </div>
             </div>
           )}
