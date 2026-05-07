@@ -14,6 +14,7 @@ import DashboardPage from "@/pages/DashboardPage";
 import ProfilePage from "@/pages/ProfilePage";
 import MySkillsPage from "@/pages/MySkillsPage";
 import ProjectsPage from "@/pages/ProjectsPage";
+import TaskSprintPage from "@/pages/TaskSprintPage";
 import AdminUsersPage from "@/pages/AdminUsersPage";
 import AdminGlobalSkillsPage from "@/pages/AdminGlobalSkillsPage";
 import AdminSettingsPage from "@/pages/AdminSettingsPage";
@@ -66,6 +67,10 @@ export const router = createBrowserRouter([
       {
         path: "/projects",
         element: <ProjectsPage />,
+      },
+      {
+        path: "/tasks",
+        element: <TaskSprintPage />,
       },
       {
         path: "/my-skills",

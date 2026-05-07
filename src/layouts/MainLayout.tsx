@@ -170,12 +170,12 @@ export default function MainLayout() {
             {!isCollapsed && <span>{t("layout.projects")}</span>}
           </NavLink>
           <NavLink
-            to="/"
+            to="/tasks"
             className={`flex items-center gap-2 rounded-md ${isCollapsed ? 'justify-center px-0' : 'px-3'} py-2 text-muted-foreground hover:bg-accent`}
-            title={t("layout.tasks_upcoming")}
+            title={t("layout.tasks")}
           >
             <ListChecks className="h-4 w-4 shrink-0" />
-            {!isCollapsed && <span>{t("layout.tasks_upcoming")}</span>}
+            {!isCollapsed && <span>{t("layout.tasks")}</span>}
           </NavLink>
           <NavLink
             to="/notifications"
