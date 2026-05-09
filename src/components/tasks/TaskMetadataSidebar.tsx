@@ -28,11 +28,13 @@ export function TaskMetadataSidebar({ assigneeId, status, priority, startDate, d
   };
 
   const handleStartDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    void onUpdate({ startDate: e.target.value || undefined });
+    const val = e.target.value ? `${e.target.value}T00:00:00Z` : undefined;
+    void onUpdate({ startDate: val });
   };
 
   const handleDueDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    void onUpdate({ dueDate: e.target.value || undefined });
+    const val = e.target.value ? `${e.target.value}T23:59:59Z` : undefined;
+    void onUpdate({ dueDate: val });
   };
 
   const triggerClass = "w-36 h-8 text-xs border-transparent hover:border-input bg-muted/30 dark:bg-white/5 dark:border-white/10 dark:hover:bg-white/10 shadow-sm transition-colors focus:ring-1 text-right justify-end";

@@ -2,15 +2,19 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Trash2, ExternalLink } from "lucide-react";
 import type { TaskStatus } from "@/types/task";
+import { useParams } from "react-router-dom";
 
 interface Props {
   taskId: number;
   status: TaskStatus;
   reporterName: string;
   onDelete: () => void;
+  hideFullPageBtn?: boolean;
 }
 
-export function TaskHeader({ taskId, status, reporterName, onDelete }: Props) {
+export function TaskHeader({ taskId, status, reporterName, onDelete, hideFullPageBtn }: Props) {
+  const { projectId } = useParams();
+  
   return (
     <div className="flex items-center justify-between pb-4 border-b border-border/40 mb-6 mt-4">
       <div className="flex items-center gap-3">
@@ -29,9 +33,11 @@ export function TaskHeader({ taskId, status, reporterName, onDelete }: Props) {
          <span className="text-xs text-muted-foreground hidden sm:inline-block mr-2">
             Opened by {reporterName}
          </span>
-         <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground" title="Open in full page" onClick={() => window.open(window.location.pathname + '/tasks/' + taskId, '_blank')}>
-            <ExternalLink className="h-4 w-4" />
-         </Button>
+         {!hideFullPageBtn && (
+           <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground" title="Open in full page" onClick={() => window.open(`/projects/${projectId}/tasks/${taskId}`, '_blank')}>
+              <ExternalLink className="h-4 w-4" />
+           </Button>
+         )}
          <Button variant="ghost" size="icon" className="text-destructive hover:bg-destructive/10 hover:text-destructive h-8 w-8" onClick={onDelete} title="Delete Task">
             <Trash2 className="h-4 w-4" />
          </Button>

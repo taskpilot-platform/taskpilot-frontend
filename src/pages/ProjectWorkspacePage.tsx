@@ -62,6 +62,8 @@ const formSchema = z.object({
   description: z.string().optional(),
   priority: z.enum(["LOW", "MEDIUM", "HIGH", "URGENT"]),
   assigneeId: z.string().optional(),
+  startDate: z.string().optional(),
+  dueDate: z.string().optional(),
 });
 
 const projectFormSchema = z.object({
@@ -75,11 +77,13 @@ const projectFormSchema = z.object({
 
 export default function ProjectWorkspacePage() {
   const { t } = useTranslation();
-  const { projectId, tabId } = useParams();
+  const { projectId, tabId, taskId } = useParams();
   const navigate = useNavigate();
+  // If taskId is present, we might default to board or backlog if tabId is empty. Let's say board.
   const activeTab = (tabId as ViewMode) || "board";
   
   const currentProjectId = Number(projectId);
+  const currentTaskId = taskId ? Number(taskId) : null;
 
   const [searchInput, setSearchInput] = useState("");
   const [project, setProject] = useState<Project | null>(null);
@@ -115,21 +119,21 @@ export default function ProjectWorkspacePage() {
     defaultValues: { name: "", description: "", status: "ACTIVE" },
   });
 
-  const loadData = async (id: number) => {
+  const loadData = async (pid: number) => {
     setIsLoadingTasks(true);
     try {
-      const [projRes, memRes, taskRes, sumRes, meRes] = await Promise.all([
-        projectService.getProjectDetail(id),
-        projectService.getProjectMembers(id),
-        taskService.getTasksByProject(id),
-        projectService.getProjectSummary(id),
+      const [projRes, membersRes, tasksRes, summaryRes, profileRes] = await Promise.all([
+        projectService.getProjectDetail(pid),
+        projectService.getProjectMembers(pid),
+        taskService.getTasksByProject(pid),
+        projectService.getProjectSummary(pid),
         profileService.getMe()
       ]);
       setProject(projRes.data);
-      setProjectMembers(memRes.data);
-      setTasks(taskRes.data);
-      setProjectSummary(sumRes.data);
-      setMyUserId(meRes.data.id);
+      setProjectMembers(membersRes.data);
+      setTasks(tasksRes.data);
+      setProjectSummary(summaryRes.data);
+      setMyUserId(profileRes.data.id);
     } catch (error) {
       toast.error(getApiErrorMessage(error));
     } finally {
@@ -138,10 +142,16 @@ export default function ProjectWorkspacePage() {
   };
 
   useEffect(() => {
-    if (!isNaN(currentProjectId)) {
+    if (currentProjectId) {
       void loadData(currentProjectId);
     }
   }, [currentProjectId]);
+
+  useEffect(() => {
+    if (currentTaskId && !isTaskDetailOpen && tasks.length > 0) {
+      openTaskDetail(currentTaskId);
+    }
+  }, [currentTaskId, tasks]);
 
   const filteredTasks = useMemo(() => {
     return tasks.filter((task) => {
@@ -172,6 +182,8 @@ export default function ProjectWorkspacePage() {
         priority: values.priority,
         position: 0,
         assigneeId: values.assigneeId && values.assigneeId !== "unassigned" ? Number(values.assigneeId) : undefined,
+        startDate: values.startDate ? `${values.startDate}T00:00:00Z` : undefined,
+        dueDate: values.dueDate ? `${values.dueDate}T23:59:59Z` : undefined,
       });
       toast.success("Task created successfully");
       setIsCreateModalOpen(false);
@@ -400,6 +412,20 @@ export default function ProjectWorkspacePage() {
                       </FormItem>
                     )} />
                   </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <FormField control={form.control} name="startDate" render={({ field }) => (
+                      <FormItem><FormLabel>Start Date</FormLabel>
+                        <FormControl><Input type="date" {...field} value={field.value || ""} /></FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                    <FormField control={form.control} name="dueDate" render={({ field }) => (
+                      <FormItem><FormLabel>Due Date</FormLabel>
+                        <FormControl><Input type="date" {...field} value={field.value || ""} /></FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                  </div>
                   <DialogFooter>
                     <Button type="button" variant="outline" onClick={() => setIsCreateModalOpen(false)}>Cancel</Button>
                     <Button type="submit" disabled={form.formState.isSubmitting}>
@@ -514,24 +540,32 @@ export default function ProjectWorkspacePage() {
                       <CardContent className="p-6">
                         <div className="flex flex-col sm:flex-row sm:items-start justify-between border-b pb-6 mb-6 gap-4">
                           <div>
-                            <h2 className="text-2xl font-bold flex items-center gap-3">
-                                {project?.name}
-                                <Badge variant="secondary" className="text-xs font-medium">{project?.status}</Badge>
+                            <div className="flex items-center gap-3 mb-3">
+                                <h2 className="text-3xl font-bold tracking-tight text-foreground">{project?.name}</h2>
+                                <Badge variant="secondary" className="text-sm px-2 py-0.5">{project?.status}</Badge>
+                            </div>
+                            
+                            <div className="flex flex-wrap items-center gap-4 text-sm mt-4">
+                                <div className="flex items-center gap-1.5 text-muted-foreground bg-muted/30 px-2.5 py-1 rounded-md border border-border/40">
+                                    <span className="font-mono text-xs font-medium text-foreground">PRJ-{project?.id}</span>
+                                </div>
+                                <div className="flex items-center gap-1.5 text-muted-foreground bg-muted/30 px-2.5 py-1 rounded-md border border-border/40">
+                                    <span className="font-medium text-foreground">{projectMembers.length}</span> Members
+                                </div>
                                 {project?.heuristicMode && project.heuristicMode !== 'BALANCED' && (
-                                    <Badge variant="outline" className="text-xs font-mono border-primary/30 text-primary">{project.heuristicMode}</Badge>
+                                    <div className="flex items-center gap-1.5 text-primary bg-primary/5 px-2.5 py-1 rounded-md border border-primary/20">
+                                        <span className="font-semibold text-xs tracking-wider uppercase">{project.heuristicMode} MODE</span>
+                                    </div>
                                 )}
-                            </h2>
-                            <p className="text-sm text-muted-foreground mt-2 flex flex-wrap items-center gap-2">
-                                <span className="font-mono bg-muted/50 px-1.5 py-0.5 rounded">PRJ-{project?.id}</span> •
-                                <span>{projectMembers.length} Members</span> •
-                                <span>Created {project ? new Date(project.createdAt).toLocaleDateString() : ""}</span>
                                 {project?.startDate && (
-                                    <>
-                                        <span>•</span>
-                                        <span>Timeline: {new Date(project.startDate).toLocaleDateString()} - {project?.endDate ? new Date(project.endDate).toLocaleDateString() : 'Ongoing'}</span>
-                                    </>
+                                    <div className="flex items-center gap-1.5 text-foreground bg-muted/30 px-2.5 py-1 rounded-md border border-border/40">
+                                        <span className="text-muted-foreground">Timeline:</span> 
+                                        <span className="font-medium">{new Date(project.startDate).toLocaleDateString()}</span>
+                                        <span className="text-muted-foreground mx-0.5">→</span>
+                                        <span className="font-medium">{project?.endDate ? new Date(project.endDate).toLocaleDateString() : 'Ongoing'}</span>
+                                    </div>
                                 )}
-                            </p>
+                            </div>
                           </div>
                           {isManager && !isEditingProject && (
                             <Button variant="outline" size="sm" onClick={() => {
