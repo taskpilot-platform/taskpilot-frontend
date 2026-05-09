@@ -35,7 +35,6 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 
@@ -43,6 +42,7 @@ import { getApiErrorMessage } from "@/lib/http";
 import { projectService } from "@/services/project.service";
 import { taskService } from "@/services/task.service";
 import { profileService } from "@/services/profile.service";
+import { TaskDetailSheet } from "@/components/tasks/TaskDetailSheet";
 import type { Project, ProjectMember, ProjectSummary } from "@/types/project";
 import type { TaskDetailDto, TaskDto, TaskPriority, TaskStatus } from "@/types/task";
 
@@ -62,14 +62,6 @@ const formSchema = z.object({
   description: z.string().optional(),
   priority: z.enum(["LOW", "MEDIUM", "HIGH", "URGENT"]),
   assigneeId: z.string().optional(),
-});
-
-const editFormSchema = formSchema.extend({
-  status: z.enum(["TODO", "IN_PROGRESS", "REVIEW", "DONE"]),
-});
-
-const subtaskFormSchema = z.object({
-  title: z.string().min(1, "Title is required").max(100, "Title is too long"),
 });
 
 const projectFormSchema = z.object({
@@ -112,16 +104,6 @@ export default function ProjectWorkspacePage() {
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: { title: "", description: "", priority: "MEDIUM", assigneeId: "unassigned" },
-  });
-
-  const editForm = useForm<z.infer<typeof editFormSchema>>({
-    resolver: zodResolver(editFormSchema),
-    defaultValues: { title: "", description: "", priority: "MEDIUM", status: "TODO", assigneeId: "unassigned" },
-  });
-
-  const subtaskForm = useForm<z.infer<typeof subtaskFormSchema>>({
-    resolver: zodResolver(subtaskFormSchema),
-    defaultValues: { title: "" },
   });
 
   const projectForm = useForm<z.infer<typeof projectFormSchema>>({
@@ -200,35 +182,25 @@ export default function ProjectWorkspacePage() {
     try {
       const res = await taskService.getTaskById(taskId);
       setSelectedTaskDetail(res.data);
-      editForm.reset({
-        title: res.data.task.title,
-        description: res.data.task.description || "",
-        priority: res.data.task.priority,
-        status: res.data.task.status,
-        assigneeId: res.data.task.assigneeId ? res.data.task.assigneeId.toString() : "unassigned",
-      });
       setIsTaskDetailOpen(true);
     } catch (error) {
       toast.error(getApiErrorMessage(error));
     }
   };
 
-  const onSubmitEdit = async (values: z.infer<typeof editFormSchema>) => {
+  const onUpdateTask = async (payload: { title?: string; description?: string; assigneeId?: number; status?: TaskStatus; priority?: TaskPriority }) => {
     if (!selectedTaskDetail) return;
     try {
-      await taskService.updateTask(selectedTaskDetail.task.id, {
-        title: values.title,
-        description: values.description,
-        priority: values.priority,
-        status: values.status,
-        assigneeId: values.assigneeId && values.assigneeId !== "unassigned" ? Number(values.assigneeId) : undefined,
-      });
+      await taskService.updateTask(selectedTaskDetail.task.id, payload);
       toast.success("Task updated successfully");
-      setTasks(prev => prev.map(t => t.id === selectedTaskDetail.task.id ? { ...t, ...values, assigneeId: values.assigneeId && values.assigneeId !== "unassigned" ? Number(values.assigneeId) : undefined } as TaskDto : t));
+      
+      setTasks(prev => prev.map(t => t.id === selectedTaskDetail.task.id ? { ...t, ...payload } as TaskDto : t));
+      
       const res = await taskService.getTaskById(selectedTaskDetail.task.id);
       setSelectedTaskDetail(res.data);
     } catch (error) {
       toast.error(getApiErrorMessage(error));
+      throw error; // Let the component handle loading states
     }
   };
 
@@ -246,22 +218,23 @@ export default function ProjectWorkspacePage() {
     }
   };
 
-  const onCreateSubtask = async (values: z.infer<typeof subtaskFormSchema>) => {
+  const onCreateSubtask = async (title: string) => {
     if (!selectedTaskDetail) return;
     try {
       await taskService.createTask({
         projectId: currentProjectId,
         parentId: selectedTaskDetail.task.id,
-        title: values.title,
+        title,
         position: 0,
       });
       toast.success("Subtask created");
-      subtaskForm.reset();
+      
       const res = await taskService.getTaskById(selectedTaskDetail.task.id);
       setSelectedTaskDetail(res.data);
       void loadData(currentProjectId);
     } catch (error) {
       toast.error(getApiErrorMessage(error));
+      throw error;
     }
   };
 
@@ -721,7 +694,7 @@ export default function ProjectWorkspacePage() {
                     </div>
                     <div className="flex items-center space-x-2 bg-background px-3 py-1.5 rounded-md border shadow-sm">
                       <Checkbox id="show-subtasks" checked={showSubtasks} onCheckedChange={(c) => setShowSubtasks(c as boolean)} />
-                      <Label htmlFor="show-subtasks" className="text-sm cursor-pointer select-none">Expand Subtasks</Label>
+                      <Label htmlFor="show-subtasks" className="text-sm cursor-pointer select-none">Show Subtasks</Label>
                     </div>
                   </CardHeader>
                   <CardContent className="p-4">
@@ -743,144 +716,17 @@ export default function ProjectWorkspacePage() {
         )}
       </div>
 
-      {/* TASK DETAIL SHEET (GitHub Issue / Jira Panel Style) */}
-      <Sheet open={isTaskDetailOpen} onOpenChange={setIsTaskDetailOpen}>
-        <SheetContent className="w-full sm:max-w-2xl overflow-y-auto sm:border-l sm:shadow-2xl">
-          <SheetHeader className="mb-6 pb-4 border-b">
-            <div className="flex items-center justify-between mt-4">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-mono bg-muted text-muted-foreground px-2 py-1 rounded">TP-{selectedTaskDetail?.task.id}</span>
-                <SheetTitle className="text-xl">{selectedTaskDetail?.task.title}</SheetTitle>
-              </div>
-              <Button variant="ghost" size="sm" className="text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={handleDeleteTask}>
-                <Trash2 className="h-4 w-4" />
-              </Button>
-            </div>
-            <SheetDescription>
-              Opened by {selectedTaskDetail?.reporter?.fullName || "Unknown"}
-            </SheetDescription>
-          </SheetHeader>
-
-          {selectedTaskDetail && (
-            <div className="space-y-8 pb-10">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                
-                {/* Main Content Area (2/3) */}
-                <div className="md:col-span-2 space-y-6">
-                  {/* Inline Description Editing */}
-                  <Form {...editForm}>
-                    <form onSubmit={editForm.handleSubmit(onSubmitEdit)} className="space-y-4">
-                      <FormField control={editForm.control} name="title" render={({ field }) => (
-                        <FormItem>
-                          <FormControl><Input className="font-semibold text-lg border-transparent hover:border-input focus-visible:border-ring transition-colors shadow-none px-0" {...field} onBlur={() => editForm.handleSubmit(onSubmitEdit)()} /></FormControl>
-                        </FormItem>
-                      )} />
-                      <FormField control={editForm.control} name="description" render={({ field }) => (
-                        <FormItem>
-                          <FormControl><Textarea className="min-h-[120px] resize-y border-muted bg-muted/30 focus-visible:bg-background transition-colors" placeholder="Add a description..." {...field} onBlur={() => editForm.handleSubmit(onSubmitEdit)()} /></FormControl>
-                        </FormItem>
-                      )} />
-                    </form>
-                  </Form>
-
-                  {/* Subtasks Section */}
-                  <div className="space-y-4 pt-2">
-                    <h3 className="text-sm font-semibold flex items-center gap-2 text-muted-foreground uppercase tracking-wider">
-                      <ListChecks className="h-4 w-4" /> Subtasks
-                    </h3>
-                    
-                    <div className="space-y-2">
-                      {selectedTaskDetail.subtasks.map((sub) => (
-                        <div key={sub.id} className="group flex items-center justify-between p-2.5 rounded-md border bg-card hover:border-primary/50 transition-colors">
-                          <div className="flex items-center gap-3">
-                            <Badge variant={sub.status === "DONE" ? "default" : "secondary"} className={`text-[10px] ${sub.status === "DONE" ? "bg-emerald-500 hover:bg-emerald-600" : ""}`}>
-                              {sub.status}
-                            </Badge>
-                            <span className={`text-sm ${sub.status === "DONE" ? "line-through text-muted-foreground" : "font-medium"}`}>
-                              {sub.title}
-                            </span>
-                          </div>
-                          <Button variant="ghost" size="sm" className="h-8 opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => openTaskDetail(sub.id)}>
-                            Open
-                          </Button>
-                        </div>
-                      ))}
-                    </div>
-
-                    <Form {...subtaskForm}>
-                      <form onSubmit={subtaskForm.handleSubmit(onCreateSubtask)} className="flex items-center gap-2 mt-2">
-                        <FormField control={subtaskForm.control} name="title" render={({ field }) => (
-                          <FormItem className="flex-1"><FormControl><Input className="h-9" placeholder="Create new subtask..." {...field} /></FormControl></FormItem>
-                        )} />
-                        <Button type="submit" variant="secondary" size="sm" className="h-9" disabled={subtaskForm.formState.isSubmitting}>
-                          Add
-                        </Button>
-                      </form>
-                    </Form>
-                  </div>
-
-                  {/* Activity/Comments Placeholder */}
-                  <div className="space-y-4 pt-6 border-t">
-                    <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Activity</h3>
-                    <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
-                      No activity yet. Comments coming soon.
-                    </div>
-                  </div>
-                </div>
-
-                {/* Sidebar Details (1/3) */}
-                <div className="space-y-6">
-                  <Form {...editForm}>
-                    <form className="space-y-5">
-                      <FormField control={editForm.control} name="assigneeId" render={({ field }) => (
-                        <FormItem className="flex flex-col gap-1 space-y-0">
-                          <FormLabel className="text-xs text-muted-foreground uppercase font-semibold">Assignee</FormLabel>
-                          <Select onValueChange={(val) => { field.onChange(val); editForm.handleSubmit(onSubmitEdit)(); }} value={field.value}>
-                            <FormControl><SelectTrigger className="h-8 border-transparent hover:border-input bg-muted/30"><SelectValue /></SelectTrigger></FormControl>
-                            <SelectContent>
-                              <SelectItem value="unassigned">Unassigned</SelectItem>
-                              {projectMembers.map((m) => (
-                                <SelectItem key={m.userId} value={m.userId.toString()}>User {m.userId}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </FormItem>
-                      )} />
-
-                      <FormField control={editForm.control} name="status" render={({ field }) => (
-                        <FormItem className="flex flex-col gap-1 space-y-0">
-                          <FormLabel className="text-xs text-muted-foreground uppercase font-semibold">Status</FormLabel>
-                          <Select onValueChange={(val) => { field.onChange(val); editForm.handleSubmit(onSubmitEdit)(); }} value={field.value}>
-                            <FormControl><SelectTrigger className="h-8 border-transparent hover:border-input bg-muted/30"><SelectValue /></SelectTrigger></FormControl>
-                            <SelectContent>
-                              <SelectItem value="TODO">TODO</SelectItem><SelectItem value="IN_PROGRESS">IN_PROGRESS</SelectItem>
-                              <SelectItem value="REVIEW">REVIEW</SelectItem><SelectItem value="DONE">DONE</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </FormItem>
-                      )} />
-
-                      <FormField control={editForm.control} name="priority" render={({ field }) => (
-                        <FormItem className="flex flex-col gap-1 space-y-0">
-                          <FormLabel className="text-xs text-muted-foreground uppercase font-semibold">Priority</FormLabel>
-                          <Select onValueChange={(val) => { field.onChange(val); editForm.handleSubmit(onSubmitEdit)(); }} value={field.value}>
-                            <FormControl><SelectTrigger className="h-8 border-transparent hover:border-input bg-muted/30"><SelectValue /></SelectTrigger></FormControl>
-                            <SelectContent>
-                              <SelectItem value="LOW">Low</SelectItem><SelectItem value="MEDIUM">Medium</SelectItem>
-                              <SelectItem value="HIGH">High</SelectItem><SelectItem value="URGENT">Urgent</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </FormItem>
-                      )} />
-                    </form>
-                  </Form>
-                </div>
-
-              </div>
-            </div>
-          )}
-        </SheetContent>
-      </Sheet>
+      {/* TASK DETAIL SHEET (GitHub Issue / Linear Panel Style) */}
+      <TaskDetailSheet 
+        isOpen={isTaskDetailOpen}
+        onOpenChange={setIsTaskDetailOpen}
+        taskDetail={selectedTaskDetail}
+        projectMembers={projectMembers}
+        onDeleteTask={handleDeleteTask}
+        onUpdateTask={onUpdateTask}
+        onCreateSubtask={onCreateSubtask}
+        onOpenTaskDetail={openTaskDetail}
+      />
     </div>
   );
 }
