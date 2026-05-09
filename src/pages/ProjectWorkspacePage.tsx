@@ -163,12 +163,11 @@ export default function ProjectWorkspacePage() {
     });
   }, [searchInput, tasks]);
 
-  // For board: only root tasks
+  // For board: include all tasks
   const groupedKanban = useMemo(() => {
-    const rootTasks = filteredTasks.filter(t => t.parentId == null);
     return statusOrder.map((status) => ({
       status,
-      tasks: rootTasks.filter((task) => task.status === status).sort((a, b) => a.position - b.position),
+      tasks: filteredTasks.filter((task) => task.status === status).sort((a, b) => a.position - b.position),
     }));
   }, [filteredTasks]);
 
@@ -505,7 +504,13 @@ export default function ProjectWorkspacePage() {
                             onDragStart={(e) => handleDragStart(e, task.id)}
                             onClick={() => openTaskDetail(task.id)}
                           >
-                            <div className="flex items-start justify-between gap-2">
+                            <div className="flex flex-col gap-1.5">
+                              {task.parentId && (
+                                <div className="flex items-center gap-1 text-[10px] text-muted-foreground font-medium uppercase tracking-tight">
+                                  <span className="opacity-70">Subtask of</span>
+                                  <span className="text-primary/70">TP-{task.parentId}</span>
+                                </div>
+                              )}
                               <p className="text-sm font-medium leading-snug group-hover:text-primary transition-colors">{task.title}</p>
                             </div>
                             {task.description && <p className="text-xs text-muted-foreground line-clamp-2 mt-1">{task.description}</p>}
