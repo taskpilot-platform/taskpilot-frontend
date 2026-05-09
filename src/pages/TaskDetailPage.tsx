@@ -4,7 +4,7 @@ import { toast } from "react-toastify";
 import { getApiErrorMessage } from "@/lib/http";
 import { taskService } from "@/services/task.service";
 import { projectService } from "@/services/project.service";
-import type { TaskDetailDto, TaskPriority, TaskStatus, TaskDto } from "@/types/task";
+import type { TaskDetailDto, TaskPriority, TaskStatus } from "@/types/task";
 import type { ProjectMember } from "@/types/project";
 
 import { TaskHeader } from "@/components/tasks/TaskHeader";

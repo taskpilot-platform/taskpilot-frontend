@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Edit2, Loader2, X } from "lucide-react";
+import { Edit2, Loader2 } from "lucide-react";
 
 interface Props {
   title: string;
@@ -43,7 +43,7 @@ export function TaskTitleSection({ title, onSave }: Props) {
   if (isEditing) {
     return (
       <div className="space-y-3 mb-6 bg-muted/10 p-4 rounded-lg border border-border/50">
-        <Input 
+        <Input
           value={val}
           onChange={(e) => setVal(e.target.value)}
           onKeyDown={handleKeyDown}
@@ -66,14 +66,14 @@ export function TaskTitleSection({ title, onSave }: Props) {
   }
 
   return (
-    <div 
+    <div
       className="group flex items-start justify-between gap-4 mb-6 p-2 -ml-2 rounded-lg hover:bg-muted/30 transition-colors cursor-text"
       onClick={() => setIsEditing(true)}
     >
       <h1 className="text-2xl font-bold leading-tight text-foreground/90">{title}</h1>
-      <Button 
-        variant="ghost" 
-        size="icon" 
+      <Button
+        variant="ghost"
+        size="icon"
         className="opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground"
       >
         <Edit2 className="h-4 w-4" />
