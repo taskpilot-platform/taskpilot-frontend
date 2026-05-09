@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { getApiErrorMessage } from "@/lib/http";
 import { useAuthStore } from "@/stores/auth.store";
 import { toast } from "react-toastify";
-import { LayoutDashboard, ShieldCheck, UserRound, LogOut, FolderKanban, ListChecks, Globe, Users, Code, Settings, Menu, ChevronLeft, Bot, Bell } from "lucide-react";
+import { LayoutDashboard, ShieldCheck, UserRound, LogOut, FolderKanban, Globe, Users, Code, Settings, Menu, ChevronLeft, Bot, Bell } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { profileService } from "@/services/profile.service";
 import { notificationService } from "@/services/notification.service";
@@ -88,7 +88,7 @@ export default function MainLayout() {
 
   useEffect(() => {
     if (location.pathname.startsWith("/notifications")) {
-      setIsNotificationBlinking(false);
+      setTimeout(() => setIsNotificationBlinking(false), 0);
     }
   }, [location.pathname]);
 
@@ -110,10 +110,9 @@ export default function MainLayout() {
 
   return (
     <div className="flex h-screen bg-background text-foreground">
-      <aside 
-        className={`flex flex-col border-r bg-card py-4 text-card-foreground transition-all duration-300 ${
-          isCollapsed ? "w-16 items-center px-2" : "w-64 px-4"
-        }`}
+      <aside
+        className={`flex flex-col border-r bg-card py-4 text-card-foreground transition-all duration-300 ${isCollapsed ? "w-16 items-center px-2" : "w-64 px-4"
+          }`}
       >
         <div className={`mb-4 flex items-center ${isCollapsed ? "flex-col gap-4" : "justify-between"}`}>
           <div className="flex items-center gap-2">
@@ -148,8 +147,7 @@ export default function MainLayout() {
           <NavLink
             to="/"
             className={({ isActive }) =>
-              `flex items-center gap-2 rounded-md ${isCollapsed ? 'justify-center px-0' : 'px-3'} py-2 transition-colors ${
-                isActive ? "bg-accent font-medium" : "hover:bg-accent"
+              `flex items-center gap-2 rounded-md ${isCollapsed ? 'justify-center px-0' : 'px-3'} py-2 transition-colors ${isActive ? "bg-accent font-medium" : "hover:bg-accent"
               }`
             }
             title={t("layout.dashboard")}
@@ -160,8 +158,7 @@ export default function MainLayout() {
           <NavLink
             to="/projects"
             className={({ isActive }) =>
-              `flex items-center gap-2 rounded-md ${isCollapsed ? 'justify-center px-0' : 'px-3'} py-2 transition-colors ${
-                isActive ? "bg-accent font-medium" : "hover:bg-accent"
+              `flex items-center gap-2 rounded-md ${isCollapsed ? 'justify-center px-0' : 'px-3'} py-2 transition-colors ${isActive ? "bg-accent font-medium" : "hover:bg-accent"
               }`
             }
             title={t("layout.projects")}
@@ -169,23 +166,15 @@ export default function MainLayout() {
             <FolderKanban className="h-4 w-4 shrink-0" />
             {!isCollapsed && <span>{t("layout.projects")}</span>}
           </NavLink>
-          <NavLink
-            to="/tasks"
-            className={`flex items-center gap-2 rounded-md ${isCollapsed ? 'justify-center px-0' : 'px-3'} py-2 text-muted-foreground hover:bg-accent`}
-            title={t("layout.tasks")}
-          >
-            <ListChecks className="h-4 w-4 shrink-0" />
-            {!isCollapsed && <span>{t("layout.tasks")}</span>}
-          </NavLink>
+
           <NavLink
             to="/notifications"
             className={({ isActive }) =>
-              `flex items-center gap-2 rounded-md ${isCollapsed ? "justify-center px-0" : "px-3"} py-2 transition-colors ${
-                isActive
-                  ? "bg-accent font-medium"
-                  : isNotificationBlinking
-                    ? "bg-amber-100 text-amber-900 hover:bg-amber-100 dark:bg-amber-900/30 dark:text-amber-200"
-                    : "hover:bg-accent"
+              `flex items-center gap-2 rounded-md ${isCollapsed ? "justify-center px-0" : "px-3"} py-2 transition-colors ${isActive
+                ? "bg-accent font-medium"
+                : isNotificationBlinking
+                  ? "bg-amber-100 text-amber-900 hover:bg-amber-100 dark:bg-amber-900/30 dark:text-amber-200"
+                  : "hover:bg-accent"
               }`
             }
             title={t("layout.notifications")}
@@ -208,8 +197,7 @@ export default function MainLayout() {
           <NavLink
             to="/copilot"
             className={({ isActive }) =>
-              `flex items-center gap-2 rounded-md ${isCollapsed ? 'justify-center px-0' : 'px-3'} py-2 transition-colors ${
-                isActive ? "bg-accent font-medium text-indigo-600" : "hover:bg-accent text-indigo-600/80"
+              `flex items-center gap-2 rounded-md ${isCollapsed ? 'justify-center px-0' : 'px-3'} py-2 transition-colors ${isActive ? "bg-accent font-medium text-indigo-600" : "hover:bg-accent text-indigo-600/80"
               }`
             }
             title="Copilot AI Chat"
@@ -224,8 +212,7 @@ export default function MainLayout() {
             <NavLink
               to="/profile"
               className={({ isActive }) =>
-                `flex items-center gap-2 rounded-md ${isCollapsed ? 'justify-center px-0' : 'px-3'} py-2 transition-colors ${
-                  isActive ? "bg-accent font-medium" : "hover:bg-accent"
+                `flex items-center gap-2 rounded-md ${isCollapsed ? 'justify-center px-0' : 'px-3'} py-2 transition-colors ${isActive ? "bg-accent font-medium" : "hover:bg-accent"
                 }`
               }
               title={t("layout.profile")}
@@ -237,8 +224,7 @@ export default function MainLayout() {
             <NavLink
               to="/my-skills"
               className={({ isActive }) =>
-                `flex items-center gap-2 rounded-md ${isCollapsed ? 'justify-center px-0' : 'px-3'} py-2 transition-colors ${
-                  isActive ? "bg-accent font-medium" : "hover:bg-accent"
+                `flex items-center gap-2 rounded-md ${isCollapsed ? 'justify-center px-0' : 'px-3'} py-2 transition-colors ${isActive ? "bg-accent font-medium" : "hover:bg-accent"
                 }`
               }
               title={t("layout.my_skills")}
@@ -254,8 +240,7 @@ export default function MainLayout() {
                 <NavLink
                   to="/admin/users"
                   className={({ isActive }) =>
-                    `mt-2 flex items-center gap-2 rounded-md ${isCollapsed ? 'justify-center px-0' : 'px-3'} py-2 transition-colors ${
-                      isActive ? "bg-accent font-medium" : "hover:bg-accent"
+                    `mt-2 flex items-center gap-2 rounded-md ${isCollapsed ? 'justify-center px-0' : 'px-3'} py-2 transition-colors ${isActive ? "bg-accent font-medium" : "hover:bg-accent"
                     }`
                   }
                   title={t("admin.users_title")}
@@ -266,8 +251,7 @@ export default function MainLayout() {
                 <NavLink
                   to="/admin/skills"
                   className={({ isActive }) =>
-                    `mt-1 flex items-center gap-2 rounded-md ${isCollapsed ? 'justify-center px-0' : 'px-3'} py-2 transition-colors ${
-                      isActive ? "bg-accent font-medium" : "hover:bg-accent"
+                    `mt-1 flex items-center gap-2 rounded-md ${isCollapsed ? 'justify-center px-0' : 'px-3'} py-2 transition-colors ${isActive ? "bg-accent font-medium" : "hover:bg-accent"
                     }`
                   }
                   title={t("admin.global_skills")}
@@ -278,8 +262,7 @@ export default function MainLayout() {
                 <NavLink
                   to="/admin/settings"
                   className={({ isActive }) =>
-                    `mt-1 flex items-center gap-2 rounded-md ${isCollapsed ? 'justify-center px-0' : 'px-3'} py-2 transition-colors ${
-                      isActive ? "bg-accent font-medium" : "hover:bg-accent"
+                    `mt-1 flex items-center gap-2 rounded-md ${isCollapsed ? 'justify-center px-0' : 'px-3'} py-2 transition-colors ${isActive ? "bg-accent font-medium" : "hover:bg-accent"
                     }`
                   }
                   title={t("admin.system_settings.title", { defaultValue: "Cấu hình AI & Hệ thống" })}
