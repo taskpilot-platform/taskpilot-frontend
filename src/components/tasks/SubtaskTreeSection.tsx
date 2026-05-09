@@ -45,30 +45,23 @@ export function SubtaskTreeSection({ subtasks, onOpenTask, onCreateSubtask }: Pr
         {subtasks.map((sub) => (
           <div 
             key={sub.id} 
-            className="group flex items-center justify-between p-2.5 rounded-lg border border-transparent hover:border-border/50 hover:bg-muted/20 transition-colors cursor-pointer"
+            className="flex items-center gap-3 py-1.5 px-2 -mx-2 rounded-md hover:bg-muted/30 transition-colors cursor-pointer"
             onClick={() => onOpenTask(sub.id)}
           >
-            <div className="flex items-center gap-3 overflow-hidden">
-              <Badge 
-                variant={sub.status === "DONE" ? "default" : "secondary"} 
-                className={`text-[10px] px-1.5 shrink-0 ${sub.status === "DONE" ? "bg-emerald-500/20 text-emerald-600 hover:bg-emerald-500/30 dark:bg-emerald-900/30 dark:text-emerald-400" : "bg-muted/50 text-muted-foreground"}`}
-              >
-                {sub.status.replace("_", " ")}
-              </Badge>
-              <span className={`text-sm truncate group-hover:text-primary transition-colors ${sub.status === "DONE" ? "line-through text-muted-foreground" : "font-medium text-foreground/90"}`}>
-                {sub.title}
-              </span>
-            </div>
+            <span className={`text-[10px] font-mono px-1.5 rounded-sm ${sub.status === "DONE" ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : "bg-muted text-muted-foreground"}`}>
+              {sub.status.replace("_", " ")}
+            </span>
+            <span className={`text-sm truncate ${sub.status === "DONE" ? "line-through text-muted-foreground" : "font-medium text-foreground/90"}`}>
+              {sub.title}
+            </span>
           </div>
         ))}
       </div>
 
-      <form onSubmit={handleSubmit} className="flex items-center gap-2 mt-2 group relative">
-        <div className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
-          <Plus className="h-4 w-4" />
-        </div>
-        <Input 
-          className="h-9 pl-9 bg-muted/10 border-transparent hover:border-input focus-visible:bg-background transition-colors placeholder:text-muted-foreground/60 shadow-none" 
+      <form onSubmit={handleSubmit} className="flex items-center gap-3 py-1.5 px-2 -mx-2 mt-1">
+        <Plus className="h-4 w-4 text-gray-400 shrink-0" />
+        <input 
+          className="flex-1 bg-transparent border-none outline-none text-sm text-foreground/90 placeholder:text-gray-400" 
           placeholder="Add a subtask..." 
           value={val}
           onChange={(e) => setVal(e.target.value)}

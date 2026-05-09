@@ -517,11 +517,20 @@ export default function ProjectWorkspacePage() {
                             <h2 className="text-2xl font-bold flex items-center gap-3">
                                 {project?.name}
                                 <Badge variant="secondary" className="text-xs font-medium">{project?.status}</Badge>
+                                {project?.heuristicMode && project.heuristicMode !== 'BALANCED' && (
+                                    <Badge variant="outline" className="text-xs font-mono border-primary/30 text-primary">{project.heuristicMode}</Badge>
+                                )}
                             </h2>
                             <p className="text-sm text-muted-foreground mt-2 flex flex-wrap items-center gap-2">
                                 <span className="font-mono bg-muted/50 px-1.5 py-0.5 rounded">PRJ-{project?.id}</span> •
                                 <span>{projectMembers.length} Members</span> •
                                 <span>Created {project ? new Date(project.createdAt).toLocaleDateString() : ""}</span>
+                                {project?.startDate && (
+                                    <>
+                                        <span>•</span>
+                                        <span>Timeline: {new Date(project.startDate).toLocaleDateString()} - {project?.endDate ? new Date(project.endDate).toLocaleDateString() : 'Ongoing'}</span>
+                                    </>
+                                )}
                             </p>
                           </div>
                           {isManager && !isEditingProject && (
