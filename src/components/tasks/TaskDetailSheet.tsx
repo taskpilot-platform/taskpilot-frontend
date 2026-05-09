@@ -14,7 +14,7 @@ interface Props {
   taskDetail: TaskDetailDto | null;
   projectMembers: ProjectMember[];
   onDeleteTask: () => void;
-  onUpdateTask: (payload: { title?: string; description?: string; assigneeId?: number; status?: TaskStatus; priority?: TaskPriority }) => Promise<void>;
+  onUpdateTask: (payload: { title?: string; description?: string; assigneeId?: number; status?: TaskStatus; priority?: TaskPriority; startDate?: string; dueDate?: string }) => Promise<void>;
   onCreateSubtask: (title: string) => Promise<void>;
   onOpenTaskDetail: (taskId: number) => void;
 }
@@ -85,6 +85,8 @@ export function TaskDetailSheet({
               assigneeId={task.assigneeId}
               status={task.status}
               priority={task.priority}
+              startDate={task.startDate}
+              dueDate={task.dueDate}
               projectMembers={projectMembers}
               onUpdate={onUpdateTask}
             />

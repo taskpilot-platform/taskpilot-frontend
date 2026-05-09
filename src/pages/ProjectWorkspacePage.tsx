@@ -68,6 +68,9 @@ const projectFormSchema = z.object({
   name: z.string().min(1, "Name is required"),
   description: z.string().optional(),
   status: z.enum(["PLANNING", "ACTIVE", "ARCHIVED", "COMPLETED"]),
+  heuristicMode: z.enum(["BALANCED", "URGENT", "TRAINING"]).optional(),
+  startDate: z.string().optional(),
+  endDate: z.string().optional(),
 });
 
 export default function ProjectWorkspacePage() {
@@ -94,6 +97,7 @@ export default function ProjectWorkspacePage() {
   // Backlog state
   const [showSubtasks, setShowSubtasks] = useState(false);
   const [expandedTasks, setExpandedTasks] = useState<Set<number>>(new Set());
+  const [sortBy, setSortBy] = useState<"position" | "createdAt" | "priority">("position");
 
   // Overview edit state
   const [isEditingProject, setIsEditingProject] = useState(false);
@@ -188,7 +192,7 @@ export default function ProjectWorkspacePage() {
     }
   };
 
-  const onUpdateTask = async (payload: { title?: string; description?: string; assigneeId?: number; status?: TaskStatus; priority?: TaskPriority }) => {
+  const onUpdateTask = async (payload: { title?: string; description?: string; assigneeId?: number; status?: TaskStatus; priority?: TaskPriority; startDate?: string; dueDate?: string }) => {
     if (!selectedTaskDetail) return;
     try {
       await taskService.updateTask(selectedTaskDetail.task.id, payload);
@@ -244,6 +248,9 @@ export default function ProjectWorkspacePage() {
         name: values.name,
         description: values.description,
         status: values.status,
+        heuristicMode: values.heuristicMode as any,
+        startDate: values.startDate || undefined,
+        endDate: values.endDate || undefined,
       });
       toast.success("Project updated successfully");
       setIsEditingProject(false);
@@ -310,7 +317,7 @@ export default function ProjectWorkspacePage() {
                 onClick={() => openTaskDetail(task.id)}
             >
                 <div className="flex items-center gap-2 flex-1 overflow-hidden">
-                    {hasSubtasks && level === 0 ? (
+                    {hasSubtasks ? (
                        <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0 z-10" onClick={(e) => { e.stopPropagation(); toggleTaskExpansion(task.id); }}>
                           {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                        </Button>
@@ -519,7 +526,14 @@ export default function ProjectWorkspacePage() {
                           </div>
                           {isManager && !isEditingProject && (
                             <Button variant="outline" size="sm" onClick={() => {
-                                projectForm.reset({ name: project?.name, description: project?.description || "", status: project?.status });
+                                projectForm.reset({ 
+                                    name: project?.name, 
+                                    description: project?.description || "", 
+                                    status: project?.status,
+                                    heuristicMode: project?.heuristicMode || "BALANCED",
+                                    startDate: project?.startDate ? project.startDate.split("T")[0] : "",
+                                    endDate: project?.endDate ? project.endDate.split("T")[0] : "",
+                                });
                                 setIsEditingProject(true);
                             }}>
                                 <Edit2 className="h-3.5 w-3.5 mr-2" /> Edit Project
@@ -537,18 +551,41 @@ export default function ProjectWorkspacePage() {
                                   <FormField control={projectForm.control} name="description" render={({ field }) => (
                                       <FormItem><FormLabel>Description (Markdown supported)</FormLabel><FormControl><Textarea className="bg-background min-h-[120px] resize-y" {...field} /></FormControl></FormItem>
                                   )} />
-                                  <FormField control={projectForm.control} name="status" render={({ field }) => (
-                                      <FormItem><FormLabel>Status</FormLabel>
-                                      <Select onValueChange={field.onChange} value={field.value}>
-                                          <FormControl><SelectTrigger className="bg-background"><SelectValue/></SelectTrigger></FormControl>
-                                          <SelectContent>
-                                              <SelectItem value="PLANNING">Planning</SelectItem>
-                                              <SelectItem value="ACTIVE">Active</SelectItem>
-                                              <SelectItem value="COMPLETED">Completed</SelectItem>
-                                              <SelectItem value="ARCHIVED">Archived</SelectItem>
-                                          </SelectContent>
-                                      </Select></FormItem>
-                                  )} />
+                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                      <FormField control={projectForm.control} name="status" render={({ field }) => (
+                                          <FormItem><FormLabel>Status</FormLabel>
+                                          <Select onValueChange={field.onChange} value={field.value}>
+                                              <FormControl><SelectTrigger className="bg-background"><SelectValue/></SelectTrigger></FormControl>
+                                              <SelectContent>
+                                                  <SelectItem value="PLANNING">Planning</SelectItem>
+                                                  <SelectItem value="ACTIVE">Active</SelectItem>
+                                                  <SelectItem value="COMPLETED">Completed</SelectItem>
+                                                  <SelectItem value="ARCHIVED">Archived</SelectItem>
+                                              </SelectContent>
+                                          </Select></FormItem>
+                                      )} />
+                                      <FormField control={projectForm.control} name="heuristicMode" render={({ field }) => (
+                                          <FormItem><FormLabel>Heuristic Mode</FormLabel>
+                                          <Select onValueChange={field.onChange} value={field.value}>
+                                              <FormControl><SelectTrigger className="bg-background"><SelectValue/></SelectTrigger></FormControl>
+                                              <SelectContent>
+                                                  <SelectItem value="BALANCED">Balanced</SelectItem>
+                                                  <SelectItem value="URGENT">Urgent First</SelectItem>
+                                                  <SelectItem value="TRAINING">Training</SelectItem>
+                                              </SelectContent>
+                                          </Select></FormItem>
+                                      )} />
+                                  </div>
+                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                      <FormField control={projectForm.control} name="startDate" render={({ field }) => (
+                                          <FormItem><FormLabel>Start Date</FormLabel>
+                                          <FormControl><Input type="date" className="bg-background" {...field} /></FormControl></FormItem>
+                                      )} />
+                                      <FormField control={projectForm.control} name="endDate" render={({ field }) => (
+                                          <FormItem><FormLabel>End Date</FormLabel>
+                                          <FormControl><Input type="date" className="bg-background" {...field} /></FormControl></FormItem>
+                                      )} />
+                                  </div>
                                   <div className="flex gap-2 pt-2">
                                       <Button type="submit" size="sm" className="gap-2"><Save className="h-4 w-4"/> Save Changes</Button>
                                       <Button type="button" variant="ghost" size="sm" onClick={() => setIsEditingProject(false)}>Cancel</Button>
@@ -687,14 +724,26 @@ export default function ProjectWorkspacePage() {
             {activeTab === "backlog" && (
               <div className="p-6 h-full overflow-auto bg-muted/5">
                 <Card className="max-w-5xl mx-auto shadow-sm border-muted/60">
-                  <CardHeader className="pb-4 border-b border-border/40 bg-muted/10 flex flex-row items-center justify-between">
+                  <CardHeader className="pb-4 border-b border-border/40 bg-muted/10 flex flex-row items-center justify-between flex-wrap gap-4">
                     <div>
                       <CardTitle className="text-xl">Backlog</CardTitle>
                       <CardDescription className="mt-1">Plan your sprints and view all tasks.</CardDescription>
                     </div>
-                    <div className="flex items-center space-x-2 bg-background px-3 py-1.5 rounded-md border shadow-sm">
-                      <Checkbox id="show-subtasks" checked={showSubtasks} onCheckedChange={(c) => setShowSubtasks(c as boolean)} />
-                      <Label htmlFor="show-subtasks" className="text-sm cursor-pointer select-none">Show Subtasks</Label>
+                    <div className="flex items-center gap-3">
+                      <Select value={sortBy} onValueChange={(v: any) => setSortBy(v)}>
+                        <SelectTrigger className="w-[140px] h-9 bg-background border shadow-sm">
+                           <SelectValue placeholder="Sort by" />
+                        </SelectTrigger>
+                        <SelectContent>
+                           <SelectItem value="position">Custom Order</SelectItem>
+                           <SelectItem value="priority">Priority</SelectItem>
+                           <SelectItem value="createdAt">Newest First</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <div className="flex items-center space-x-2 bg-background px-3 py-1.5 h-9 rounded-md border shadow-sm">
+                        <Checkbox id="show-subtasks" checked={showSubtasks} onCheckedChange={(c) => setShowSubtasks(c as boolean)} />
+                        <Label htmlFor="show-subtasks" className="text-sm cursor-pointer select-none">Show Subtasks</Label>
+                      </div>
                     </div>
                   </CardHeader>
                   <CardContent className="p-4">
@@ -705,7 +754,16 @@ export default function ProjectWorkspacePage() {
                           <p>Backlog is empty. Create tasks to start planning.</p>
                         </div>
                       ) : (
-                        tasks.filter(t => t.parentId == null).map(task => renderBacklogTask(task, 0))
+                        tasks.filter(t => t.parentId == null).sort((a,b) => {
+                            if (sortBy === "priority") {
+                                const pScore: any = { URGENT: 4, HIGH: 3, MEDIUM: 2, LOW: 1 };
+                                return (pScore[b.priority] || 0) - (pScore[a.priority] || 0);
+                            }
+                            if (sortBy === "createdAt") {
+                                return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+                            }
+                            return a.position - b.position;
+                        }).map(task => renderBacklogTask(task, 0))
                       )}
                     </div>
                   </CardContent>

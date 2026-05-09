@@ -6,11 +6,13 @@ interface Props {
   assigneeId?: number;
   status: TaskStatus;
   priority: TaskPriority;
+  startDate?: string;
+  dueDate?: string;
   projectMembers: ProjectMember[];
-  onUpdate: (payload: { assigneeId?: number; status?: TaskStatus; priority?: TaskPriority }) => Promise<void>;
+  onUpdate: (payload: { assigneeId?: number; status?: TaskStatus; priority?: TaskPriority; startDate?: string; dueDate?: string }) => Promise<void>;
 }
 
-export function TaskMetadataSidebar({ assigneeId, status, priority, projectMembers, onUpdate }: Props) {
+export function TaskMetadataSidebar({ assigneeId, status, priority, startDate, dueDate, projectMembers, onUpdate }: Props) {
   
   const handleAssigneeChange = (val: string) => {
     const newAssignee = val === "unassigned" ? undefined : Number(val);
@@ -23,6 +25,14 @@ export function TaskMetadataSidebar({ assigneeId, status, priority, projectMembe
 
   const handlePriorityChange = (val: TaskPriority) => {
     void onUpdate({ priority: val });
+  };
+
+  const handleStartDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    void onUpdate({ startDate: e.target.value || undefined });
+  };
+
+  const handleDueDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    void onUpdate({ dueDate: e.target.value || undefined });
   };
 
   return (
@@ -80,6 +90,27 @@ export function TaskMetadataSidebar({ assigneeId, status, priority, projectMembe
             <SelectItem value="URGENT">Urgent</SelectItem>
           </SelectContent>
         </Select>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-1.5">
+          <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Start Date</label>
+          <input 
+             type="date" 
+             className="flex h-9 w-full rounded-md border border-input bg-card px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+             value={startDate ? startDate.split("T")[0] : ""} 
+             onChange={handleStartDateChange} 
+          />
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Due Date</label>
+          <input 
+             type="date" 
+             className="flex h-9 w-full rounded-md border border-input bg-card px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+             value={dueDate ? dueDate.split("T")[0] : ""} 
+             onChange={handleDueDateChange} 
+          />
+        </div>
       </div>
 
       <div className="pt-4 border-t border-border/40 space-y-3">
