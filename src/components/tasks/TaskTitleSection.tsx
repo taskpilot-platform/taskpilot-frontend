@@ -26,6 +26,8 @@ export function TaskTitleSection({ title, onSave }: Props) {
     try {
       await onSave(val);
       setIsEditing(false);
+    } catch (error) {
+      console.error("Failed to save task title", error);
     } finally {
       setIsLoading(false);
     }
