@@ -324,8 +324,24 @@ export default function ProjectWorkspacePage() {
     });
   };
 
+  const tasksByParentId = useMemo(() => {
+    const grouped = new Map<number | undefined, TaskDto[]>();
+
+    tasks.forEach(task => {
+      const siblings = grouped.get(task.parentId) ?? [];
+      siblings.push(task);
+      grouped.set(task.parentId, siblings);
+    });
+
+    grouped.forEach(siblings => {
+      siblings.sort((a, b) => a.position - b.position);
+    });
+
+    return grouped;
+  }, [tasks]);
+
   const renderBacklogTask = (task: TaskDto, level = 0) => {
-    const subtasks = tasks.filter(t => t.parentId === task.id).sort((a, b) => a.position - b.position);
+    const subtasks = tasksByParentId.get(task.id) ?? [];
     const hasSubtasks = subtasks.length > 0;
     const isExpanded = showSubtasks || expandedTasks.has(task.id);
 
