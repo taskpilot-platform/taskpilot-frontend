@@ -25,9 +25,14 @@ export default function TaskDetailPage() {
 
   const currentProjectId = Number(projectId);
   const currentTaskId = Number(taskId);
-  const hasValidParams = Number.isInteger(currentProjectId) && currentProjectId > 0 && Number.isInteger(currentTaskId) && currentTaskId > 0;
 
   useEffect(() => {
+    const hasValidParams =
+      Number.isInteger(currentProjectId) &&
+      currentProjectId > 0 &&
+      Number.isInteger(currentTaskId) &&
+      currentTaskId > 0;
+
     if (!hasValidParams) {
       setIsLoading(false);
       toast.error("Invalid task URL");
@@ -52,7 +57,7 @@ export default function TaskDetailPage() {
     };
 
     void loadData();
-  }, [currentProjectId, currentTaskId, hasValidParams, navigate]);
+  }, [currentProjectId, currentTaskId, navigate]);
 
   const onUpdateTask = async (payload: { title?: string; description?: string; assigneeId?: number; status?: TaskStatus; priority?: TaskPriority; startDate?: string; dueDate?: string }) => {
     if (!taskDetail) return;
