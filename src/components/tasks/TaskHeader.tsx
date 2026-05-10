@@ -34,7 +34,16 @@ export function TaskHeader({ taskId, status, reporterName, onDelete, hideFullPag
             Opened by {reporterName}
          </span>
          {!hideFullPageBtn && (
-           <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground" title="Open in full page" onClick={() => window.open(`/projects/${projectId}/tasks/${taskId}`, '_blank')}>
+           <Button
+             variant="ghost"
+             size="icon"
+             className="h-8 w-8 text-muted-foreground hover:text-foreground"
+             title="Open in full page"
+             onClick={() => {
+               if (!projectId) return;
+               window.open(`/projects/${projectId}/tasks/${taskId}`, "_blank", "noopener,noreferrer");
+             }}
+           >
               <ExternalLink className="h-4 w-4" />
            </Button>
          )}
