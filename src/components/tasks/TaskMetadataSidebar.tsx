@@ -14,27 +14,47 @@ interface Props {
 
 export function TaskMetadataSidebar({ assigneeId, status, priority, startDate, dueDate, projectMembers, onUpdate }: Props) {
   
-  const handleAssigneeChange = (val: string) => {
+  const handleAssigneeChange = async (val: string) => {
     const newAssignee = val === "unassigned" ? undefined : Number(val);
-    void onUpdate({ assigneeId: newAssignee });
+    try {
+      await onUpdate({ assigneeId: newAssignee });
+    } catch (error) {
+      console.error("Failed to update assignee", error);
+    }
   };
 
-  const handleStatusChange = (val: TaskStatus) => {
-    void onUpdate({ status: val });
+  const handleStatusChange = async (val: TaskStatus) => {
+    try {
+      await onUpdate({ status: val });
+    } catch (error) {
+      console.error("Failed to update status", error);
+    }
   };
 
-  const handlePriorityChange = (val: TaskPriority) => {
-    void onUpdate({ priority: val });
+  const handlePriorityChange = async (val: TaskPriority) => {
+    try {
+      await onUpdate({ priority: val });
+    } catch (error) {
+      console.error("Failed to update priority", error);
+    }
   };
 
-  const handleStartDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleStartDateChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value ? `${e.target.value}T00:00:00Z` : undefined;
-    void onUpdate({ startDate: val });
+    try {
+      await onUpdate({ startDate: val });
+    } catch (error) {
+      console.error("Failed to update start date", error);
+    }
   };
 
-  const handleDueDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleDueDateChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value ? `${e.target.value}T23:59:59Z` : undefined;
-    void onUpdate({ dueDate: val });
+    try {
+      await onUpdate({ dueDate: val });
+    } catch (error) {
+      console.error("Failed to update due date", error);
+    }
   };
 
   const triggerClass = "w-36 h-8 text-xs border-transparent hover:border-input bg-muted/30 dark:bg-white/5 dark:border-white/10 dark:hover:bg-white/10 shadow-sm transition-colors focus:ring-1 text-right justify-end";
