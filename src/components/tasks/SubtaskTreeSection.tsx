@@ -21,6 +21,8 @@ export function SubtaskTreeSection({ subtasks, onOpenTask, onCreateSubtask }: Pr
     try {
       await onCreateSubtask(val);
       setVal("");
+    } catch (error) {
+      console.error("Failed to create subtask", error);
     } finally {
       setIsSubmitting(false);
     }
