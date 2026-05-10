@@ -75,6 +75,10 @@ export function TaskTitleSection({ title, onSave }: Props) {
         variant="ghost"
         size="icon"
         className="opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground"
+        onClick={(e) => {
+          e.stopPropagation();
+          setIsEditing(true);
+        }}
       >
         <Edit2 className="h-4 w-4" />
       </Button>
