@@ -88,7 +88,7 @@ export default function MainLayout() {
 
   useEffect(() => {
     if (location.pathname.startsWith("/notifications")) {
-      setTimeout(() => setIsNotificationBlinking(false), 0);
+      setIsNotificationBlinking(false);
     }
   }, [location.pathname]);
 
