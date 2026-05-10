@@ -46,6 +46,7 @@ import type { Project, ProjectMember, ProjectSummary } from "@/types/project";
 import type { TaskDetailDto, TaskDto, TaskPriority, TaskStatus } from "@/types/task";
 
 type ViewMode = "overview" | "board" | "backlog";
+const VALID_TABS: ReadonlySet<ViewMode> = new Set(["overview", "board", "backlog"]);
 
 const statusOrder: TaskStatus[] = ["TODO", "IN_PROGRESS", "REVIEW", "DONE"];
 
@@ -78,8 +79,7 @@ export default function ProjectWorkspacePage() {
   const { t } = useTranslation();
   const { projectId, tabId, taskId } = useParams();
   const navigate = useNavigate();
-  // If taskId is present, we might default to board or backlog if tabId is empty. Let's say board.
-  const activeTab = (tabId as ViewMode) || "board";
+  const activeTab: ViewMode = tabId && VALID_TABS.has(tabId as ViewMode) ? (tabId as ViewMode) : "board";
 
   const currentProjectId = Number(projectId);
   const currentTaskId = taskId ? Number(taskId) : null;
@@ -145,6 +145,12 @@ export default function ProjectWorkspacePage() {
       void loadData(currentProjectId);
     }
   }, [currentProjectId]);
+
+  useEffect(() => {
+    if (tabId && !VALID_TABS.has(tabId as ViewMode) && currentProjectId) {
+      navigate(`/projects/${currentProjectId}/board`, { replace: true });
+    }
+  }, [tabId, currentProjectId, navigate]);
 
   useEffect(() => {
     if (currentTaskId && !isTaskDetailOpen && tasks.length > 0) {
