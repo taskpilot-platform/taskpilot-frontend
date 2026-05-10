@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   CalendarDays,
   Loader2,
@@ -48,6 +49,7 @@ const projectStatuses: ProjectStatus[] = ["PLANNING", "ACTIVE", "COMPLETED", "AR
 
 export default function ProjectsPage() {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const [projects, setProjects] = useState<MyProject[]>([]);
   const [totalElements, setTotalElements] = useState(0);
   const [currentPage, setCurrentPage] = useState(0);
@@ -349,14 +351,8 @@ export default function ProjectsPage() {
                       projects.map((project) => (
                         <TableRow
                           key={project.id}
-                          className={selectedProjectId === project.id ? "bg-accent/40 cursor-pointer" : "cursor-pointer"}
-                          onClick={() => {
-                            if (selectedProjectId === project.id) {
-                              handleModeChange("list");
-                            } else {
-                              setSelectedProjectId(project.id);
-                            }
-                          }}
+                          className="cursor-pointer hover:bg-accent/40 transition-colors"
+                          onClick={() => navigate(`/projects/${project.id}`)}
                         >
                           <TableCell>
                             <div className="font-medium">{project.name}</div>
