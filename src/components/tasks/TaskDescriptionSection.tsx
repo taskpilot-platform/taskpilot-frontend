@@ -76,6 +76,10 @@ export function TaskDescriptionSection({ description, onSave }: Props) {
           variant="secondary" 
           size="sm" 
           className={`absolute top-2 right-2 h-8 opacity-0 group-hover:opacity-100 transition-opacity ${!hasContent ? "opacity-100" : ""}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            setIsEditing(true);
+          }}
         >
           <Edit2 className="h-3.5 w-3.5 mr-2" /> {hasContent ? "Edit" : "Add description"}
         </Button>
