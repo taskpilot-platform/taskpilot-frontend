@@ -45,8 +45,11 @@ import { TaskDetailSheet } from "@/components/tasks/TaskDetailSheet";
 import type { Project, ProjectMember, ProjectSummary } from "@/types/project";
 import type { TaskDetailDto, TaskDto, TaskPriority, TaskStatus } from "@/types/task";
 
-type ViewMode = "overview" | "board" | "backlog";
-const VALID_TABS: ReadonlySet<ViewMode> = new Set(["overview", "board", "backlog"]);
+const VALID_TABS = ["overview", "board", "backlog"] as const;
+type ViewMode = (typeof VALID_TABS)[number];
+const VALID_TAB_SET = new Set<string>(VALID_TABS);
+const isViewMode = (value: string | undefined): value is ViewMode =>
+  value ? VALID_TAB_SET.has(value) : false;
 
 const statusOrder: TaskStatus[] = ["TODO", "IN_PROGRESS", "REVIEW", "DONE"];
 
@@ -79,7 +82,7 @@ export default function ProjectWorkspacePage() {
   const { t } = useTranslation();
   const { projectId, tabId, taskId } = useParams();
   const navigate = useNavigate();
-  const activeTab: ViewMode = tabId && VALID_TABS.has(tabId as ViewMode) ? (tabId as ViewMode) : "board";
+  const activeTab: ViewMode = isViewMode(tabId) ? tabId : "board";
 
   const currentProjectId = Number(projectId);
   const currentTaskId = taskId ? Number(taskId) : null;
@@ -147,7 +150,7 @@ export default function ProjectWorkspacePage() {
   }, [currentProjectId]);
 
   useEffect(() => {
-    if (tabId && !VALID_TABS.has(tabId as ViewMode) && currentProjectId) {
+    if (tabId && !isViewMode(tabId) && currentProjectId) {
       navigate(`/projects/${currentProjectId}/board`, { replace: true });
     }
   }, [tabId, currentProjectId, navigate]);
