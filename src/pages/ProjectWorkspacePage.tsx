@@ -12,13 +12,14 @@ import {
   ChevronDown,
   ChevronRight,
   Edit2,
-  Save,
   Clock,
   Activity,
   CheckCircle2,
   CircleDashed,
   UserPlus,
-  FileText
+  FileText,
+  Settings,
+  Archive
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { toast } from "react-toastify";
@@ -69,14 +70,7 @@ const formSchema = z.object({
   dueDate: z.string().optional(),
 });
 
-const projectFormSchema = z.object({
-  name: z.string().min(1, "Name is required"),
-  description: z.string().optional(),
-  status: z.enum(["PLANNING", "ACTIVE", "ARCHIVED", "COMPLETED"]),
-  heuristicMode: z.enum(["BALANCED", "URGENT", "TRAINING"]).optional(),
-  startDate: z.string().optional(),
-  endDate: z.string().optional(),
-});
+
 
 export default function ProjectWorkspacePage() {
   const { t } = useTranslation();
@@ -105,21 +99,18 @@ export default function ProjectWorkspacePage() {
   const [expandedTasks, setExpandedTasks] = useState<Set<number>>(new Set());
   const [sortBy, setSortBy] = useState<"position" | "createdAt" | "priority">("position");
 
-  // Overview edit state
-  const [isEditingProject, setIsEditingProject] = useState(false);
+  // Overview edit state removed since Settings is canonical
 
   const myMemberInfo = useMemo(() => projectMembers.find(m => m.userId === myUserId), [projectMembers, myUserId]);
   const isManager = myMemberInfo?.role === "MANAGER";
+  const isArchived = project?.status === "ARCHIVED";
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: { title: "", description: "", priority: "MEDIUM", assigneeId: "unassigned" },
   });
 
-  const projectForm = useForm<z.infer<typeof projectFormSchema>>({
-    resolver: zodResolver(projectFormSchema),
-    defaultValues: { name: "", description: "", status: "ACTIVE" },
-  });
+  // Removed projectForm since it's no longer needed (Settings page is canonical)
 
   const loadData = async (pid: number) => {
     setIsLoadingTasks(true);
@@ -261,36 +252,24 @@ export default function ProjectWorkspacePage() {
     }
   };
 
-  const onSubmitProjectEdit = async (values: z.infer<typeof projectFormSchema>) => {
-    try {
-      await projectService.updateProject(currentProjectId, {
-        name: values.name,
-        description: values.description,
-        status: values.status,
-        heuristicMode: values.heuristicMode as any,
-        startDate: values.startDate || undefined,
-        endDate: values.endDate || undefined,
-      });
-      toast.success("Project updated successfully");
-      setIsEditingProject(false);
-      void loadData(currentProjectId);
-    } catch (err) {
-      toast.error(getApiErrorMessage(err));
-    }
-  };
-
   // --- NATIVE HTML5 DRAG & DROP ---
   const handleDragStart = (e: React.DragEvent, taskId: number) => {
+    if (isArchived) {
+      e.preventDefault();
+      return;
+    }
     e.dataTransfer.setData("taskId", taskId.toString());
     e.dataTransfer.effectAllowed = "move";
   };
 
   const handleDragOver = (e: React.DragEvent) => {
+    if (isArchived) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = "move";
   };
 
   const handleDrop = async (e: React.DragEvent, status: TaskStatus) => {
+    if (isArchived) return;
     e.preventDefault();
     const taskIdStr = e.dataTransfer.getData("taskId");
     if (!taskIdStr) return;
@@ -364,6 +343,14 @@ export default function ProjectWorkspacePage() {
             <span className={`font-medium truncate group-hover:text-primary transition-colors ${level > 0 ? "text-sm text-foreground/80" : ""}`}>{task.title}</span>
           </div>
           <div className="flex items-center gap-3 shrink-0 ml-4">
+            {task.labels && task.labels.length > 0 && (
+              <div className="flex items-center gap-1 mr-2">
+                {task.labels.slice(0, 2).map((label) => (
+                  <span key={label.id} className="w-2 h-2 rounded-full" style={{ backgroundColor: label.color }} title={label.name} />
+                ))}
+                {task.labels.length > 2 && <span className="text-[10px] text-muted-foreground">+{task.labels.length - 2}</span>}
+              </div>
+            )}
             <div className="flex -space-x-2 mr-2">
               {task.assigneeId && <div title={getAssigneeName(task.assigneeId)} className="h-6 w-6 rounded-full bg-primary/10 border-2 border-card flex items-center justify-center text-[9px] font-bold text-primary shadow-sm">{getAssigneeName(task.assigneeId).substring(0, 2).toUpperCase()}</div>}
             </div>
@@ -385,13 +372,27 @@ export default function ProjectWorkspacePage() {
       {/* HEADER */}
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between shrink-0">
         <div className="space-y-1">
-          <h1 className="text-3xl font-bold tracking-tight">{project?.name || t("tasks.title", "Workspace")}</h1>
+          <div className="flex items-center gap-3">
+            <h1 className="text-3xl font-bold tracking-tight">{project?.name || t("tasks.title", "Workspace")}</h1>
+            {isArchived && (
+              <Badge variant="destructive" className="bg-red-500/10 text-red-500 border-red-500/20 hover:bg-red-500/20">
+                <Archive className="w-3 h-3 mr-1" /> Archived
+              </Badge>
+            )}
+          </div>
           <p className="text-muted-foreground line-clamp-1">{project?.description || t("tasks.desc", "Manage tasks and subtasks.")}</p>
         </div>
         <div className="flex items-center gap-2">
+          {isManager && (
+            <Button variant="outline" className="gap-2 shadow-sm" onClick={() => navigate(`/projects/${currentProjectId}/settings`)}>
+              <Settings className="h-4 w-4" />
+              Settings
+            </Button>
+          )}
+
           <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
             <DialogTrigger asChild>
-              <Button className="gap-2 shadow-sm">
+              <Button className="gap-2 shadow-sm" disabled={isArchived}>
                 <PlusCircle className="h-4 w-4" />
                 Create Task
               </Button>
@@ -510,7 +511,7 @@ export default function ProjectWorkspacePage() {
                           <h3 className="text-sm font-semibold tracking-wide">{t(`tasks.col_${column.status.toLowerCase()}`, column.status.replace("_", " "))}</h3>
                           <Badge variant="secondary" className="text-xs bg-background/60">{column.tasks.length}</Badge>
                         </div>
-                        <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground" onClick={() => setIsCreateModalOpen(true)}>
+                        <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground" disabled={isArchived} onClick={() => setIsCreateModalOpen(true)}>
                           <PlusCircle className="h-4 w-4" />
                         </Button>
                       </div>
@@ -524,8 +525,8 @@ export default function ProjectWorkspacePage() {
                         {column.tasks.map((task) => (
                           <div
                             key={task.id}
-                            className="space-y-3 rounded-lg border border-border/60 bg-card p-3.5 shadow-sm cursor-grab active:cursor-grabbing hover:border-primary/40 hover:shadow-md transition-all group"
-                            draggable
+                            className={`space-y-3 rounded-lg border border-border/60 bg-card p-3.5 shadow-sm transition-all group ${!isArchived ? "cursor-grab active:cursor-grabbing hover:border-primary/40 hover:shadow-md" : ""}`}
+                            draggable={!isArchived}
                             onDragStart={(e) => handleDragStart(e, task.id)}
                             onClick={() => openTaskDetail(task.id)}
                           >
@@ -539,6 +540,15 @@ export default function ProjectWorkspacePage() {
                               <p className="text-sm font-medium leading-snug group-hover:text-primary transition-colors">{task.title}</p>
                             </div>
                             {task.description && <p className="text-xs text-muted-foreground line-clamp-2 mt-1">{task.description}</p>}
+                            {task.labels && task.labels.length > 0 && (
+                              <div className="flex flex-wrap gap-1 mt-2">
+                                {task.labels.map(label => (
+                                  <span key={label.id} className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-medium text-white shadow-sm" style={{ backgroundColor: label.color }}>
+                                    {label.name}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
                             <div className="flex items-center justify-between text-xs text-muted-foreground mt-3 pt-3 border-t border-border/40">
                               <span className="font-mono text-[10px] bg-muted/50 px-1.5 py-0.5 rounded font-medium">TP-{task.id}</span>
                               <div className="flex items-center gap-2">
@@ -596,82 +606,19 @@ export default function ProjectWorkspacePage() {
                               )}
                             </div>
                           </div>
-                          {isManager && !isEditingProject && (
-                            <Button variant="outline" size="sm" onClick={() => {
-                              projectForm.reset({
-                                name: project?.name,
-                                description: project?.description || "",
-                                status: project?.status,
-                                heuristicMode: project?.heuristicMode || "BALANCED",
-                                startDate: project?.startDate ? project.startDate.split("T")[0] : "",
-                                endDate: project?.endDate ? project.endDate.split("T")[0] : "",
-                              });
-                              setIsEditingProject(true);
-                            }}>
+                          {isManager && !isArchived && (
+                            <Button variant="outline" size="sm" onClick={() => navigate(`/projects/${currentProjectId}/settings`)}>
                               <Edit2 className="h-3.5 w-3.5 mr-2" /> Edit Project
                             </Button>
                           )}
                         </div>
 
-                        {isEditingProject ? (
-                          <Form {...projectForm}>
-                            <form onSubmit={projectForm.handleSubmit(onSubmitProjectEdit)} className="space-y-5 bg-muted/20 p-5 rounded-lg border border-border/50">
-                              <h3 className="text-sm font-semibold flex items-center gap-2"><Edit2 className="h-4 w-4 text-primary" /> Edit Project Details</h3>
-                              <FormField control={projectForm.control} name="name" render={({ field }) => (
-                                <FormItem><FormLabel>Project Name</FormLabel><FormControl><Input className="bg-background" {...field} /></FormControl></FormItem>
-                              )} />
-                              <FormField control={projectForm.control} name="description" render={({ field }) => (
-                                <FormItem><FormLabel>Description (Markdown supported)</FormLabel><FormControl><Textarea className="bg-background min-h-[120px] resize-y" {...field} /></FormControl></FormItem>
-                              )} />
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <FormField control={projectForm.control} name="status" render={({ field }) => (
-                                  <FormItem><FormLabel>Status</FormLabel>
-                                    <Select onValueChange={field.onChange} value={field.value}>
-                                      <FormControl><SelectTrigger className="bg-background"><SelectValue /></SelectTrigger></FormControl>
-                                      <SelectContent>
-                                        <SelectItem value="PLANNING">Planning</SelectItem>
-                                        <SelectItem value="ACTIVE">Active</SelectItem>
-                                        <SelectItem value="COMPLETED">Completed</SelectItem>
-                                        <SelectItem value="ARCHIVED">Archived</SelectItem>
-                                      </SelectContent>
-                                    </Select></FormItem>
-                                )} />
-                                <FormField control={projectForm.control} name="heuristicMode" render={({ field }) => (
-                                  <FormItem><FormLabel>Heuristic Mode</FormLabel>
-                                    <Select onValueChange={field.onChange} value={field.value}>
-                                      <FormControl><SelectTrigger className="bg-background"><SelectValue /></SelectTrigger></FormControl>
-                                      <SelectContent>
-                                        <SelectItem value="BALANCED">Balanced</SelectItem>
-                                        <SelectItem value="URGENT">Urgent First</SelectItem>
-                                        <SelectItem value="TRAINING">Training</SelectItem>
-                                      </SelectContent>
-                                    </Select></FormItem>
-                                )} />
-                              </div>
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <FormField control={projectForm.control} name="startDate" render={({ field }) => (
-                                  <FormItem><FormLabel>Start Date</FormLabel>
-                                    <FormControl><Input type="date" className="bg-background" {...field} /></FormControl></FormItem>
-                                )} />
-                                <FormField control={projectForm.control} name="endDate" render={({ field }) => (
-                                  <FormItem><FormLabel>End Date</FormLabel>
-                                    <FormControl><Input type="date" className="bg-background" {...field} /></FormControl></FormItem>
-                                )} />
-                              </div>
-                              <div className="flex gap-2 pt-2">
-                                <Button type="submit" size="sm" className="gap-2"><Save className="h-4 w-4" /> Save Changes</Button>
-                                <Button type="button" variant="ghost" size="sm" onClick={() => setIsEditingProject(false)}>Cancel</Button>
-                              </div>
-                            </form>
-                          </Form>
-                        ) : (
-                          <div className="prose prose-sm dark:prose-invert max-w-none">
+                        <div className="prose prose-sm dark:prose-invert max-w-none">
                             <h3 className="text-sm font-semibold flex items-center gap-2 mb-3 text-muted-foreground uppercase tracking-wider"><FileText className="h-4 w-4" /> Description</h3>
                             <div className="bg-muted/10 p-5 rounded-lg border border-border/50 min-h-[120px] text-sm text-foreground/90 whitespace-pre-wrap leading-relaxed">
                               {project?.description || <span className="text-muted-foreground italic">No description provided. Add one to help your team understand the project goals.</span>}
                             </div>
                           </div>
-                        )}
                       </CardContent>
                     </Card>
 
@@ -852,10 +799,11 @@ export default function ProjectWorkspacePage() {
         onOpenChange={setIsTaskDetailOpen}
         taskDetail={selectedTaskDetail}
         projectMembers={projectMembers}
-        onDeleteTask={handleDeleteTask}
-        onUpdateTask={onUpdateTask}
-        onCreateSubtask={onCreateSubtask}
+        onDeleteTask={isArchived ? () => { } : handleDeleteTask}
+        onUpdateTask={isArchived ? async () => { } : onUpdateTask}
+        onCreateSubtask={isArchived ? async () => { } : onCreateSubtask}
         onOpenTaskDetail={openTaskDetail}
+        isManager={isManager}
       />
     </div>
   );

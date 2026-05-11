@@ -15,6 +15,7 @@ import ProfilePage from "@/pages/ProfilePage";
 import MySkillsPage from "@/pages/MySkillsPage";
 import ProjectsPage from "@/pages/ProjectsPage";
 import ProjectWorkspacePage from "@/pages/ProjectWorkspacePage";
+import ProjectSettingsPage from "@/pages/ProjectSettingsPage";
 import TaskDetailPage from "@/pages/TaskDetailPage";
 import AdminUsersPage from "@/pages/AdminUsersPage";
 import AdminGlobalSkillsPage from "@/pages/AdminGlobalSkillsPage";
@@ -78,6 +79,10 @@ export const router = createBrowserRouter([
         element: <ProjectWorkspacePage />,
       },
       {
+        path: "/projects/:projectId/settings",
+        element: <ProjectSettingsPage />,
+      },
+      {
         path: "/projects/:projectId/tasks/:taskId",
         element: <TaskDetailPage />,
       },
@@ -91,12 +96,12 @@ export const router = createBrowserRouter([
       },
       // Thêm các route khác của TaskPilot vào đây sau:
       // { path: "/tasks", element: <TasksPage /> },
-      
+
       {
         path: "/copilot",
         element: <AiChatPage />,
       },
-      
+
       // Admin
       {
         path: "/admin/users",

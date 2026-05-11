@@ -9,6 +9,17 @@ export interface UserProfileDto {
   currentWorkload: number;
 }
 
+export interface LabelDto {
+  id: number;
+  name: string;
+  color: string;
+}
+
+export interface SkillDto {
+  id: number;
+  name: string;
+}
+
 export interface TaskDto {
   id: number;
   projectId: number;
@@ -19,9 +30,10 @@ export interface TaskDto {
   status: TaskStatus;
   priority: TaskPriority;
   position: number;
-  tags?: string[];
+  labels?: LabelDto[];
+  tags?: string[]; // Deprecated, use labels
   difficultyLevel: number;
-  requiredSkills?: string[];
+  requiredSkills?: string[]; // Deprecated, fetched fully via TaskDetailDto
   assigneeId?: number;
   reporterId?: number;
   startDate?: string;
@@ -35,6 +47,7 @@ export interface TaskDetailDto {
   assignee: UserProfileDto | null;
   reporter: UserProfileDto | null;
   subtasks: TaskDto[];
+  requiredSkills: SkillDto[];
 }
 
 export interface CreateTaskRequest {
@@ -45,9 +58,11 @@ export interface CreateTaskRequest {
   description?: string;
   priority?: TaskPriority;
   position?: number;
-  tags?: string[];
+  labelIds?: number[];
+  tags?: string[]; // Deprecated
   difficultyLevel?: number;
-  requiredSkills?: string[];
+  requiredSkillIds?: number[];
+  requiredSkills?: string[]; // Deprecated
   assigneeId?: number;
   startDate?: string;
   dueDate?: string;
@@ -59,9 +74,11 @@ export interface UpdateTaskRequest {
   status?: TaskStatus;
   priority?: TaskPriority;
   position?: number;
-  tags?: string[];
+  labelIds?: number[];
+  tags?: string[]; // Deprecated
   difficultyLevel?: number;
-  requiredSkills?: string[];
+  requiredSkillIds?: number[];
+  requiredSkills?: string[]; // Deprecated
   assigneeId?: number;
   startDate?: string;
   dueDate?: string;

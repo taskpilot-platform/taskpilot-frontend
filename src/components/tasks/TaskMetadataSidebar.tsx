@@ -1,18 +1,24 @@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import type { TaskPriority, TaskStatus } from "@/types/task";
+import type { TaskPriority, TaskStatus, LabelDto, SkillDto } from "@/types/task";
 import type { ProjectMember } from "@/types/project";
+import { LabelSelector } from "./LabelSelector";
+import { SkillSelector } from "./SkillSelector";
 
 interface Props {
+  projectId: number;
   assigneeId?: number;
   status: TaskStatus;
   priority: TaskPriority;
   startDate?: string;
   dueDate?: string;
   projectMembers: ProjectMember[];
-  onUpdate: (payload: { assigneeId?: number; status?: TaskStatus; priority?: TaskPriority; startDate?: string; dueDate?: string }) => Promise<void>;
+  labels: LabelDto[];
+  requiredSkills: SkillDto[];
+  isManager: boolean;
+  onUpdate: (payload: { assigneeId?: number; status?: TaskStatus; priority?: TaskPriority; startDate?: string; dueDate?: string; labelIds?: number[]; requiredSkillIds?: number[] }) => Promise<void>;
 }
 
-export function TaskMetadataSidebar({ assigneeId, status, priority, startDate, dueDate, projectMembers, onUpdate }: Props) {
+export function TaskMetadataSidebar({ projectId, assigneeId, status, priority, startDate, dueDate, projectMembers, labels, requiredSkills, isManager, onUpdate }: Props) {
   
   const handleAssigneeChange = async (val: string) => {
     const newAssignee = val === "unassigned" ? undefined : Number(val);
@@ -135,17 +141,21 @@ export function TaskMetadataSidebar({ assigneeId, status, priority, startDate, d
       </div>
 
       <div className="pt-4 border-t border-border/40 space-y-4">
-         <div className="flex items-center justify-between">
-            <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Sprint</label>
-            <div className="text-xs px-2 py-1 rounded bg-muted/30 dark:bg-white/5 dark:border-white/10 dark:hover:bg-white/10 border border-transparent text-muted-foreground hover:text-foreground cursor-pointer transition-colors">
-               None
-            </div>
-         </div>
-         <div className="flex items-center justify-between">
+         <div className="flex flex-col gap-2">
             <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Labels</label>
-            <div className="text-xs px-2 py-1 rounded bg-muted/30 dark:bg-white/5 dark:border-white/10 dark:hover:bg-white/10 border border-transparent text-muted-foreground hover:text-foreground cursor-pointer transition-colors">
-               None
-            </div>
+            <LabelSelector 
+              projectId={projectId} 
+              selectedLabels={labels} 
+              isManager={isManager}
+              onChange={(newLabels) => onUpdate({ labelIds: newLabels.map(l => l.id) })} 
+            />
+         </div>
+         <div className="flex flex-col gap-2">
+            <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Required Skills</label>
+            <SkillSelector 
+              selectedSkills={requiredSkills} 
+              onChange={(newSkills) => onUpdate({ requiredSkillIds: newSkills.map(s => s.id) })} 
+            />
          </div>
       </div>
 

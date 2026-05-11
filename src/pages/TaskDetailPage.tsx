@@ -4,6 +4,7 @@ import { toast } from "react-toastify";
 import { getApiErrorMessage } from "@/lib/http";
 import { taskService } from "@/services/task.service";
 import { projectService } from "@/services/project.service";
+import { profileService } from "@/services/profile.service";
 import type { TaskDetailDto, TaskPriority, TaskStatus } from "@/types/task";
 import type { ProjectMember } from "@/types/project";
 
@@ -21,6 +22,7 @@ export default function TaskDetailPage() {
   const navigate = useNavigate();
   const [taskDetail, setTaskDetail] = useState<TaskDetailDto | null>(null);
   const [projectMembers, setProjectMembers] = useState<ProjectMember[]>([]);
+  const [myUserId, setMyUserId] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   const currentProjectId = Number(projectId);
@@ -43,12 +45,14 @@ export default function TaskDetailPage() {
     const loadData = async () => {
       setIsLoading(true);
       try {
-        const [taskRes, membersRes] = await Promise.all([
+        const [taskRes, membersRes, profileRes] = await Promise.all([
           taskService.getTaskById(currentTaskId),
-          projectService.getProjectMembers(currentProjectId)
+          projectService.getProjectMembers(currentProjectId),
+          profileService.getMe()
         ]);
         setTaskDetail(taskRes.data);
         setProjectMembers(membersRes.data);
+        setMyUserId(profileRes.data?.id);
       } catch (error) {
         toast.error(getApiErrorMessage(error));
       } finally {
@@ -59,7 +63,7 @@ export default function TaskDetailPage() {
     void loadData();
   }, [currentProjectId, currentTaskId, navigate]);
 
-  const onUpdateTask = async (payload: { title?: string; description?: string; assigneeId?: number; status?: TaskStatus; priority?: TaskPriority; startDate?: string; dueDate?: string }) => {
+  const onUpdateTask = async (payload: { title?: string; description?: string; assigneeId?: number; status?: TaskStatus; priority?: TaskPriority; startDate?: string; dueDate?: string; labelIds?: number[]; requiredSkillIds?: number[] }) => {
     if (!taskDetail) return;
     try {
       await taskService.updateTask(taskDetail.task.id, payload);
@@ -126,6 +130,9 @@ export default function TaskDetailPage() {
   }
 
   const { task, reporter, subtasks } = taskDetail;
+  
+  const myMemberInfo = projectMembers.find(m => m.userId === myUserId);
+  const isManager = myMemberInfo?.role === "MANAGER";
 
   return (
     <div className="flex-1 bg-card overflow-y-auto">
@@ -168,12 +175,16 @@ export default function TaskDetailPage() {
           {/* Sidebar Area (30%) */}
           <div className="space-y-6">
             <TaskMetadataSidebar 
+              projectId={task.projectId}
               assigneeId={task.assigneeId}
               status={task.status}
               priority={task.priority}
               startDate={task.startDate}
               dueDate={task.dueDate}
               projectMembers={projectMembers}
+              labels={task.labels || []}
+              requiredSkills={taskDetail.requiredSkills || []}
+              isManager={isManager}
               onUpdate={onUpdateTask}
             />
           </div>

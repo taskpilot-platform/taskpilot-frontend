@@ -18,6 +18,13 @@ export const skillService = {
     return response.data;
   },
 
+  async searchSkills(keyword: string): Promise<ApiResponse<SkillDirectoryItem[]>> {
+    const response = await http.get<ApiResponse<SkillDirectoryItem[]>>("/v1/skills/search", {
+      params: { keyword }
+    });
+    return response.data;
+  },
+
   async addMySkill(payload: AddSkillRequest): Promise<ApiResponse<null>> {
     const response = await http.post<ApiResponse<null>>("/v1/users/me/skills", payload);
     return response.data;

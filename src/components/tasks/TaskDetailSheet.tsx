@@ -14,9 +14,10 @@ interface Props {
   taskDetail: TaskDetailDto | null;
   projectMembers: ProjectMember[];
   onDeleteTask: () => void;
-  onUpdateTask: (payload: { title?: string; description?: string; assigneeId?: number; status?: TaskStatus; priority?: TaskPriority; startDate?: string; dueDate?: string }) => Promise<void>;
+  onUpdateTask: (payload: { title?: string; description?: string; assigneeId?: number; status?: TaskStatus; priority?: TaskPriority; startDate?: string; dueDate?: string; labelIds?: number[]; requiredSkillIds?: number[] }) => Promise<void>;
   onCreateSubtask: (title: string) => Promise<void>;
   onOpenTaskDetail: (taskId: number) => void;
+  isManager: boolean;
 }
 
 export function TaskDetailSheet({
@@ -27,7 +28,8 @@ export function TaskDetailSheet({
   onDeleteTask,
   onUpdateTask,
   onCreateSubtask,
-  onOpenTaskDetail
+  onOpenTaskDetail,
+  isManager
 }: Props) {
   if (!taskDetail) {
     return (
@@ -82,12 +84,16 @@ export function TaskDetailSheet({
           {/* Sidebar Area (30%) */}
           <div className="space-y-6">
             <TaskMetadataSidebar 
+              projectId={task.projectId}
               assigneeId={task.assigneeId}
               status={task.status}
               priority={task.priority}
               startDate={task.startDate}
               dueDate={task.dueDate}
               projectMembers={projectMembers}
+              labels={task.labels || []}
+              requiredSkills={taskDetail.requiredSkills || []}
+              isManager={isManager}
               onUpdate={onUpdateTask}
             />
           </div>
