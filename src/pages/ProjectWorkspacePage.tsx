@@ -110,7 +110,7 @@ export default function ProjectWorkspacePage() {
     defaultValues: { title: "", description: "", priority: "MEDIUM", assigneeId: "unassigned" },
   });
 
-  // Removed projectForm since it's no longer needed
+  // Removed projectForm since it's no longer needed (Settings page is canonical)
 
   const loadData = async (pid: number) => {
     setIsLoadingTasks(true);
@@ -251,8 +251,6 @@ export default function ProjectWorkspacePage() {
       throw error;
     }
   };
-
-  // Removed onSubmitProjectEdit since it's no longer used in this component
 
   // --- NATIVE HTML5 DRAG & DROP ---
   const handleDragStart = (e: React.DragEvent, taskId: number) => {

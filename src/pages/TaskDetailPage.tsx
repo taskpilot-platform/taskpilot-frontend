@@ -63,7 +63,7 @@ export default function TaskDetailPage() {
     void loadData();
   }, [currentProjectId, currentTaskId, navigate]);
 
-  const onUpdateTask = async (payload: { title?: string; description?: string; assigneeId?: number; status?: TaskStatus; priority?: TaskPriority; startDate?: string; dueDate?: string }) => {
+  const onUpdateTask = async (payload: { title?: string; description?: string; assigneeId?: number; status?: TaskStatus; priority?: TaskPriority; startDate?: string; dueDate?: string; labelIds?: number[]; requiredSkillIds?: number[] }) => {
     if (!taskDetail) return;
     try {
       await taskService.updateTask(taskDetail.task.id, payload);
