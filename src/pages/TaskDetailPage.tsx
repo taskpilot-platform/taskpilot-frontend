@@ -168,12 +168,15 @@ export default function TaskDetailPage() {
           {/* Sidebar Area (30%) */}
           <div className="space-y-6">
             <TaskMetadataSidebar 
+              projectId={task.projectId}
               assigneeId={task.assigneeId}
               status={task.status}
               priority={task.priority}
               startDate={task.startDate}
               dueDate={task.dueDate}
               projectMembers={projectMembers}
+              labels={task.labels || []}
+              requiredSkills={taskDetail.requiredSkills || []}
               onUpdate={onUpdateTask}
             />
           </div>

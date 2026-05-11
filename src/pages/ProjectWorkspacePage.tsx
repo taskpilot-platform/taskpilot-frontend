@@ -18,7 +18,9 @@ import {
   CheckCircle2,
   CircleDashed,
   UserPlus,
-  FileText
+  FileText,
+  Settings,
+  Archive
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { toast } from "react-toastify";
@@ -110,6 +112,7 @@ export default function ProjectWorkspacePage() {
 
   const myMemberInfo = useMemo(() => projectMembers.find(m => m.userId === myUserId), [projectMembers, myUserId]);
   const isManager = myMemberInfo?.role === "MANAGER";
+  const isArchived = project?.status === "ARCHIVED";
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -281,16 +284,22 @@ export default function ProjectWorkspacePage() {
 
   // --- NATIVE HTML5 DRAG & DROP ---
   const handleDragStart = (e: React.DragEvent, taskId: number) => {
+    if (isArchived) {
+      e.preventDefault();
+      return;
+    }
     e.dataTransfer.setData("taskId", taskId.toString());
     e.dataTransfer.effectAllowed = "move";
   };
 
   const handleDragOver = (e: React.DragEvent) => {
+    if (isArchived) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = "move";
   };
 
   const handleDrop = async (e: React.DragEvent, status: TaskStatus) => {
+    if (isArchived) return;
     e.preventDefault();
     const taskIdStr = e.dataTransfer.getData("taskId");
     if (!taskIdStr) return;
@@ -393,13 +402,27 @@ export default function ProjectWorkspacePage() {
       {/* HEADER */}
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between shrink-0">
         <div className="space-y-1">
-          <h1 className="text-3xl font-bold tracking-tight">{project?.name || t("tasks.title", "Workspace")}</h1>
+          <div className="flex items-center gap-3">
+            <h1 className="text-3xl font-bold tracking-tight">{project?.name || t("tasks.title", "Workspace")}</h1>
+            {isArchived && (
+              <Badge variant="destructive" className="bg-red-500/10 text-red-500 border-red-500/20 hover:bg-red-500/20">
+                <Archive className="w-3 h-3 mr-1" /> Archived
+              </Badge>
+            )}
+          </div>
           <p className="text-muted-foreground line-clamp-1">{project?.description || t("tasks.desc", "Manage tasks and subtasks.")}</p>
         </div>
         <div className="flex items-center gap-2">
+          {isManager && (
+            <Button variant="outline" className="gap-2 shadow-sm" onClick={() => navigate(`/projects/${currentProjectId}/settings`)}>
+              <Settings className="h-4 w-4" />
+              Settings
+            </Button>
+          )}
+          
           <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
             <DialogTrigger asChild>
-              <Button className="gap-2 shadow-sm">
+              <Button className="gap-2 shadow-sm" disabled={isArchived}>
                 <PlusCircle className="h-4 w-4" />
                 Create Task
               </Button>
@@ -518,7 +541,7 @@ export default function ProjectWorkspacePage() {
                           <h3 className="text-sm font-semibold tracking-wide">{t(`tasks.col_${column.status.toLowerCase()}`, column.status.replace("_", " "))}</h3>
                           <Badge variant="secondary" className="text-xs bg-background/60">{column.tasks.length}</Badge>
                         </div>
-                        <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground" onClick={() => setIsCreateModalOpen(true)}>
+                        <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground" disabled={isArchived} onClick={() => setIsCreateModalOpen(true)}>
                           <PlusCircle className="h-4 w-4" />
                         </Button>
                       </div>
@@ -532,8 +555,8 @@ export default function ProjectWorkspacePage() {
                         {column.tasks.map((task) => (
                           <div
                             key={task.id}
-                            className="space-y-3 rounded-lg border border-border/60 bg-card p-3.5 shadow-sm cursor-grab active:cursor-grabbing hover:border-primary/40 hover:shadow-md transition-all group"
-                            draggable
+                            className={`space-y-3 rounded-lg border border-border/60 bg-card p-3.5 shadow-sm transition-all group ${!isArchived ? "cursor-grab active:cursor-grabbing hover:border-primary/40 hover:shadow-md" : ""}`}
+                            draggable={!isArchived}
                             onDragStart={(e) => handleDragStart(e, task.id)}
                             onClick={() => openTaskDetail(task.id)}
                           >
@@ -613,7 +636,7 @@ export default function ProjectWorkspacePage() {
                               )}
                             </div>
                           </div>
-                          {isManager && !isEditingProject && (
+                          {isManager && !isEditingProject && !isArchived && (
                             <Button variant="outline" size="sm" onClick={() => {
                               projectForm.reset({
                                 name: project?.name,
@@ -869,9 +892,9 @@ export default function ProjectWorkspacePage() {
         onOpenChange={setIsTaskDetailOpen}
         taskDetail={selectedTaskDetail}
         projectMembers={projectMembers}
-        onDeleteTask={handleDeleteTask}
-        onUpdateTask={onUpdateTask}
-        onCreateSubtask={onCreateSubtask}
+        onDeleteTask={isArchived ? () => {} : handleDeleteTask}
+        onUpdateTask={isArchived ? async () => {} : onUpdateTask}
+        onCreateSubtask={isArchived ? async () => {} : onCreateSubtask}
         onOpenTaskDetail={openTaskDetail}
       />
     </div>

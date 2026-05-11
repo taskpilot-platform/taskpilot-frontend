@@ -53,4 +53,29 @@ export const projectService = {
     const response = await http.get<ApiResponse<ProjectMember[]>>(`/v1/projects/${projectId}/members`);
     return response.data;
   },
+
+  async updateMemberRole(projectId: number, userId: number, role: string): Promise<ApiResponse<null>> {
+    const response = await http.put<ApiResponse<null>>(`/v1/projects/${projectId}/members/${userId}/role`, { role });
+    return response.data;
+  },
+
+  async removeMember(projectId: number, userId: number): Promise<ApiResponse<null>> {
+    const response = await http.delete<ApiResponse<null>>(`/v1/projects/${projectId}/members/${userId}`);
+    return response.data;
+  },
+
+  async archiveProject(projectId: number): Promise<ApiResponse<null>> {
+    const response = await http.post<ApiResponse<null>>(`/v1/projects/${projectId}/archive`);
+    return response.data;
+  },
+
+  async restoreProject(projectId: number): Promise<ApiResponse<null>> {
+    const response = await http.post<ApiResponse<null>>(`/v1/projects/${projectId}/restore`);
+    return response.data;
+  },
+
+  async deleteProject(projectId: number): Promise<ApiResponse<null>> {
+    const response = await http.delete<ApiResponse<null>>(`/v1/projects/${projectId}`);
+    return response.data;
+  },
 };
