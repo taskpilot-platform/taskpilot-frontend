@@ -14,10 +14,11 @@ interface Props {
   projectMembers: ProjectMember[];
   labels: LabelDto[];
   requiredSkills: SkillDto[];
+  isManager: boolean;
   onUpdate: (payload: { assigneeId?: number; status?: TaskStatus; priority?: TaskPriority; startDate?: string; dueDate?: string; labelIds?: number[]; requiredSkillIds?: number[] }) => Promise<void>;
 }
 
-export function TaskMetadataSidebar({ projectId, assigneeId, status, priority, startDate, dueDate, projectMembers, labels, requiredSkills, onUpdate }: Props) {
+export function TaskMetadataSidebar({ projectId, assigneeId, status, priority, startDate, dueDate, projectMembers, labels, requiredSkills, isManager, onUpdate }: Props) {
   
   const handleAssigneeChange = async (val: string) => {
     const newAssignee = val === "unassigned" ? undefined : Number(val);
@@ -145,6 +146,7 @@ export function TaskMetadataSidebar({ projectId, assigneeId, status, priority, s
             <LabelSelector 
               projectId={projectId} 
               selectedLabels={labels} 
+              isManager={isManager}
               onChange={(newLabels) => onUpdate({ labelIds: newLabels.map(l => l.id) })} 
             />
          </div>

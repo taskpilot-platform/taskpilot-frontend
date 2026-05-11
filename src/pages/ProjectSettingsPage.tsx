@@ -36,7 +36,7 @@ import type { LabelDto } from "@/types/task";
 const projectFormSchema = z.object({
   name: z.string().min(1, "Name is required"),
   description: z.string().optional(),
-  status: z.enum(["PLANNING", "ACTIVE", "ARCHIVED", "COMPLETED"]),
+  status: z.enum(["PLANNING", "ACTIVE", "COMPLETED"]),
   heuristicMode: z.enum(["BALANCED", "URGENT", "TRAINING"]).optional(),
   startDate: z.string().optional(),
   endDate: z.string().optional(),
@@ -80,7 +80,7 @@ export default function ProjectSettingsPage() {
       form.reset({
         name: projRes.data.name,
         description: projRes.data.description || "",
-        status: projRes.data.status,
+        status: projRes.data.status as "PLANNING" | "ACTIVE" | "COMPLETED",
         heuristicMode: projRes.data.heuristicMode || "BALANCED",
         startDate: projRes.data.startDate ? projRes.data.startDate.split("T")[0] : "",
         endDate: projRes.data.endDate ? projRes.data.endDate.split("T")[0] : "",
@@ -282,6 +282,16 @@ export default function ProjectSettingsPage() {
                         </SelectContent>
                       </Select>
                     </FormItem>
+                  )} />
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <FormField control={form.control} name="startDate" render={({ field }) => (
+                    <FormItem><FormLabel>Start Date</FormLabel>
+                      <FormControl><Input type="date" {...field} disabled={isArchived} /></FormControl></FormItem>
+                  )} />
+                  <FormField control={form.control} name="endDate" render={({ field }) => (
+                    <FormItem><FormLabel>End Date</FormLabel>
+                      <FormControl><Input type="date" {...field} disabled={isArchived} /></FormControl></FormItem>
                   )} />
                 </div>
                 {!isArchived && (

@@ -96,12 +96,12 @@ export const router = createBrowserRouter([
       },
       // Thêm các route khác của TaskPilot vào đây sau:
       // { path: "/tasks", element: <TasksPage /> },
-      
+
       {
         path: "/copilot",
         element: <AiChatPage />,
       },
-      
+
       // Admin
       {
         path: "/admin/users",

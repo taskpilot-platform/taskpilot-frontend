@@ -11,9 +11,10 @@ interface LabelSelectorProps {
   projectId: number;
   selectedLabels: LabelDto[];
   onChange: (labels: LabelDto[]) => void;
+  isManager: boolean;
 }
 
-export function LabelSelector({ projectId, selectedLabels, onChange }: LabelSelectorProps) {
+export function LabelSelector({ projectId, selectedLabels, onChange, isManager }: LabelSelectorProps) {
   const [open, setOpen] = useState(false);
   const [projectLabels, setProjectLabels] = useState<LabelDto[]>([]);
   const [loading, setLoading] = useState(false);
@@ -133,7 +134,7 @@ export function LabelSelector({ projectId, selectedLabels, onChange }: LabelSele
                 );
               })}
 
-              {!loading && search.trim() !== "" && !exactMatch && (
+              {!loading && search.trim() !== "" && !exactMatch && isManager && (
                 <div className="mt-2 pt-2 border-t">
                   <div className="flex items-center gap-2 mb-2">
                     <input
@@ -154,6 +155,11 @@ export function LabelSelector({ projectId, selectedLabels, onChange }: LabelSele
                     Create "{search}"
                   </Button>
                 </div>
+              )}
+              {!loading && search.trim() !== "" && !exactMatch && !isManager && (
+                 <div className="mt-2 pt-2 border-t text-xs text-muted-foreground text-center italic">
+                   No label found matching "{search}". Only managers can create new labels.
+                 </div>
               )}
             </div>
           </PopoverContent>
