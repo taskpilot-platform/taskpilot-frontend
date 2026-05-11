@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -97,7 +97,7 @@ export function LabelSelector({ projectId, selectedLabels, onChange }: LabelSele
             </button>
           </span>
         ))}
-        
+
         <Popover open={open} onOpenChange={setOpen}>
           <PopoverTrigger asChild>
             <Button variant="outline" size="sm" className="h-7 text-xs border-dashed rounded-full">
@@ -114,7 +114,7 @@ export function LabelSelector({ projectId, selectedLabels, onChange }: LabelSele
             />
             <div className="max-h-[200px] overflow-y-auto flex flex-col gap-1">
               {loading && <div className="flex justify-center p-2"><Loader2 className="w-4 h-4 animate-spin text-muted-foreground" /></div>}
-              
+
               {!loading && filteredLabels.map((label) => {
                 const isSelected = selectedLabels.some((l) => l.id === label.id);
                 return (
@@ -144,9 +144,9 @@ export function LabelSelector({ projectId, selectedLabels, onChange }: LabelSele
                     />
                     <span className="text-xs text-muted-foreground">Choose color</span>
                   </div>
-                  <Button 
-                    size="sm" 
-                    className="w-full text-xs" 
+                  <Button
+                    size="sm"
+                    className="w-full text-xs"
                     onClick={handleCreateLabel}
                     disabled={isCreating}
                   >

@@ -4,11 +4,11 @@ import { toast } from "react-toastify";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { 
-  ArrowLeft, 
-  Settings, 
-  Users, 
-  Tags, 
+import {
+  ArrowLeft,
+  Settings,
+  Users,
+  Tags,
   AlertTriangle,
   Save,
   Loader2,
@@ -22,9 +22,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Form, FormControl, FormField, FormItem, FormLabel } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
+
 
 import { getApiErrorMessage } from "@/lib/http";
 import { projectService } from "@/services/project.service";
@@ -388,7 +388,7 @@ export default function ProjectSettingsPage() {
                 {isArchived ? "Restore Project" : "Archive Project"}
               </Button>
             </div>
-            
+
             <div className="flex items-center justify-between p-4 border border-red-500/30 rounded-lg bg-red-500/10">
               <div>
                 <h4 className="font-semibold text-sm text-red-600 dark:text-red-400">Delete Project</h4>
