@@ -14,6 +14,8 @@ import DashboardPage from "@/pages/DashboardPage";
 import ProfilePage from "@/pages/ProfilePage";
 import MySkillsPage from "@/pages/MySkillsPage";
 import ProjectsPage from "@/pages/ProjectsPage";
+import ProjectWorkspacePage from "@/pages/ProjectWorkspacePage";
+import TaskDetailPage from "@/pages/TaskDetailPage";
 import AdminUsersPage from "@/pages/AdminUsersPage";
 import AdminGlobalSkillsPage from "@/pages/AdminGlobalSkillsPage";
 import AdminSettingsPage from "@/pages/AdminSettingsPage";
@@ -66,6 +68,18 @@ export const router = createBrowserRouter([
       {
         path: "/projects",
         element: <ProjectsPage />,
+      },
+      {
+        path: "/projects/:projectId",
+        element: <ProjectWorkspacePage />,
+      },
+      {
+        path: "/projects/:projectId/:tabId",
+        element: <ProjectWorkspacePage />,
+      },
+      {
+        path: "/projects/:projectId/tasks/:taskId",
+        element: <TaskDetailPage />,
       },
       {
         path: "/my-skills",
