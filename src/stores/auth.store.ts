@@ -4,6 +4,7 @@ import { authStorage } from "@/lib/storage";
 import type { LoginRequest, RegisterRequest } from "@/types/auth";
 import { oneSignalLogin, oneSignalLogout } from "@/lib/onesignal";
 import { profileService } from "@/services/profile.service";
+import { isTokenValid } from "@/lib/utils";
 
 interface AuthState {
   accessToken: string | null;
@@ -24,17 +25,28 @@ function applyTokens(accessToken: string, refreshToken: string): void {
 export const useAuthStore = create<AuthState>((set, get) => ({
   accessToken: authStorage.getAccessToken(),
   refreshToken: authStorage.getRefreshToken(),
-  isAuthenticated: Boolean(authStorage.getAccessToken()),
+  isAuthenticated: isTokenValid(authStorage.getAccessToken()),
   isLoading: false,
 
   hydrate: () => {
     const accessToken = authStorage.getAccessToken();
     const refreshToken = authStorage.getRefreshToken();
+    const valid = isTokenValid(accessToken);
+
+    if (accessToken && !valid) {
+      authStorage.clear();
+      set({
+        accessToken: null,
+        refreshToken: null,
+        isAuthenticated: false,
+      });
+      return;
+    }
 
     set({
       accessToken,
       refreshToken,
-      isAuthenticated: Boolean(accessToken),
+      isAuthenticated: valid,
     });
   },
 

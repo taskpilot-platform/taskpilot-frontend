@@ -16,6 +16,7 @@ import type { UserProfile, UserSkill } from "@/types/user";
 import { profileService } from "@/services/profile.service";
 import { skillService } from "@/services/skill.service";
 import { getApiErrorMessage } from "@/lib/http";
+import { Loader2 } from "lucide-react";
 
 export default function DashboardPage() {
   const { t } = useTranslation();
@@ -57,7 +58,14 @@ export default function DashboardPage() {
   };
 
   return (
-    <div className="min-h-screen space-y-6 p-6 md:p-8">
+    <div className="min-h-screen space-y-6 p-6 md:p-8 relative">
+      {isLoading && (
+        <div className="fixed inset-0 z-[100] bg-card/10 backdrop-blur-xl flex flex-col items-center justify-center text-muted-foreground transition-all duration-300">
+          <Loader2 className="mb-4 h-12 w-12 animate-spin text-primary" />
+          <p className="text-lg font-medium animate-pulse">{t("dashboard.loading")}</p>
+        </div>
+      )}
+
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div className="space-y-1">
           <h1 className="text-3xl font-bold tracking-tight">{t("dashboard.title")}</h1>

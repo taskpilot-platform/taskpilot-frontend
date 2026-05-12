@@ -22,6 +22,21 @@ http.interceptors.request.use((config) => {
   return config;
 });
 
+http.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (axios.isAxiosError(error) && error.response?.status === 401) {
+      // Prevent redirect loop if the auth endpoint itself returns 401
+      const isAuthRequest = error.config?.url?.includes("/v1/auth/");
+      if (!isAuthRequest) {
+        authStorage.clear();
+        window.location.href = "/login";
+      }
+    }
+    return Promise.reject(error);
+  }
+);
+
 export function getApiErrorMessage(error: unknown): string {
   const fallbackMessage = "Có lỗi xảy ra. Vui lòng thử lại.";
 
