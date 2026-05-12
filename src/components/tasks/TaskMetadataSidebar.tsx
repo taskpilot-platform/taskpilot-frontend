@@ -63,13 +63,13 @@ export function TaskMetadataSidebar({ projectId, assigneeId, status, priority, s
     }
   };
 
-  const triggerClass = "w-36 h-8 text-xs border-transparent hover:border-input bg-muted/30 dark:bg-white/5 dark:border-white/10 dark:hover:bg-white/10 shadow-sm transition-colors focus:ring-1 text-right justify-end";
-  const inputClass = "w-36 h-8 text-xs rounded-md border-transparent hover:border-input bg-muted/30 dark:bg-white/5 dark:border-white/10 dark:hover:bg-white/10 px-2 py-1 shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring text-right";
+  const triggerClass = "flex-1 max-w-[140px] h-8 text-xs border-transparent hover:border-input bg-muted/30 dark:bg-white/5 dark:border-white/10 dark:hover:bg-white/10 shadow-sm transition-colors focus:ring-1 text-right justify-between";
+  const inputClass = "flex-1 max-w-[140px] h-8 text-xs rounded-md border-transparent hover:border-input bg-muted/30 dark:bg-white/5 dark:border-white/10 dark:hover:bg-white/10 px-2 py-1 shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring text-right";
 
   return (
     <div className="space-y-4 bg-muted/5 p-5 rounded-xl border border-border/40">
       
-      <div className="flex items-center justify-between group">
+      <div className="flex items-center justify-between group gap-4">
         <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Assignee</label>
         <Select onValueChange={handleAssigneeChange} value={assigneeId ? assigneeId.toString() : "unassigned"}>
           <SelectTrigger className={triggerClass}>
@@ -90,7 +90,7 @@ export function TaskMetadataSidebar({ projectId, assigneeId, status, priority, s
         </Select>
       </div>
 
-      <div className="flex items-center justify-between group">
+      <div className="flex items-center justify-between group gap-4">
         <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Status</label>
         <Select onValueChange={handleStatusChange} value={status}>
           <SelectTrigger className={triggerClass}>
@@ -105,7 +105,7 @@ export function TaskMetadataSidebar({ projectId, assigneeId, status, priority, s
         </Select>
       </div>
 
-      <div className="flex items-center justify-between group">
+      <div className="flex items-center justify-between group gap-4">
         <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Priority</label>
         <Select onValueChange={handlePriorityChange} value={priority}>
           <SelectTrigger className={triggerClass}>
@@ -120,7 +120,7 @@ export function TaskMetadataSidebar({ projectId, assigneeId, status, priority, s
         </Select>
       </div>
 
-      <div className="flex items-center justify-between group">
+      <div className="flex items-center justify-between group gap-4">
         <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Start Date</label>
         <input 
             type="date" 
@@ -130,7 +130,7 @@ export function TaskMetadataSidebar({ projectId, assigneeId, status, priority, s
         />
       </div>
       
-      <div className="flex items-center justify-between group">
+      <div className="flex items-center justify-between group gap-4">
         <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Due Date</label>
         <input 
             type="date" 

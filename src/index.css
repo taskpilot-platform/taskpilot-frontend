@@ -166,12 +166,25 @@ html.dark.theme-orange { --primary: 24.6 85% 63.1% !important; --primary-foregro
     border-bottom: 1px solid rgba(255, 255, 255, 0.3) !important;
   }
 
-  html.glass input,
-  html.glass select,
-  html.glass textarea {
+  html.glass input:not(.bg-transparent),
+  html.glass select:not(.bg-transparent),
+  html.glass textarea:not(.bg-transparent) {
     background-color: rgba(255, 255, 255, 0.2) !important;
     border: 1px solid rgba(255, 255, 255, 0.4) !important;
     color: #000000 !important;
+  }
+
+  html.glass input.bg-transparent,
+  html.glass select.bg-transparent,
+  html.glass textarea.bg-transparent {
+    background-color: transparent !important;
+    color: #000000 !important;
+  }
+
+  html.glass input.border-none,
+  html.glass select.border-none,
+  html.glass textarea.border-none {
+    border: none !important;
   }
 
 @layer base {

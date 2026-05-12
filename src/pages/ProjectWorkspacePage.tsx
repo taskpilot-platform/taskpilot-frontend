@@ -383,7 +383,7 @@ export default function ProjectWorkspacePage() {
   };
 
   return (
-    <div className="min-h-screen space-y-6 p-6 md:p-8 flex flex-col h-screen overflow-hidden">
+    <div className="min-h-screen space-y-6 p-6 md:p-8 flex flex-col">
       {/* HEADER */}
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between shrink-0">
         <div className="space-y-1">
@@ -548,7 +548,7 @@ export default function ProjectWorkspacePage() {
       </Card>
 
       {/* VIEW MODES */}
-      <div className="flex-1 overflow-hidden min-h-0 bg-background/50 rounded-lg border shadow-sm relative">
+      <div className="flex-1 bg-transparent relative">
         {isLoadingTasks && !project ? (
           <div className="absolute inset-0 z-10 bg-card backdrop-blur-xl flex flex-col items-center justify-center text-muted-foreground transition-all duration-300">
             <Loader2 className="mb-4 h-10 w-10 animate-spin text-primary" />
@@ -557,8 +557,8 @@ export default function ProjectWorkspacePage() {
         ) : (
           <>
             {activeTab === "board" && (
-              <div className="h-full overflow-x-auto p-4 bg-muted/5">
-                <div className="flex min-w-[1000px] gap-5 h-full">
+              <div className="overflow-x-auto pb-4 bg-transparent">
+                <div className="flex min-w-[1000px] gap-5 h-[900px]">
                   {groupedKanban.map((column) => (
                     <div
                       key={column.status}
@@ -628,7 +628,7 @@ export default function ProjectWorkspacePage() {
             )}
 
             {activeTab === "overview" && (
-              <div className="p-6 h-full overflow-auto space-y-6 bg-muted/5">
+              <div className="pt-2 space-y-6 bg-transparent">
                 <div className="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-6">
 
                   {/* Left Column (Main Info) */}
@@ -801,7 +801,7 @@ export default function ProjectWorkspacePage() {
             )}
 
             {activeTab === "backlog" && (
-              <div className="p-6 h-full overflow-auto bg-muted/5">
+              <div className="pt-2 bg-transparent">
                 <Card className="max-w-5xl mx-auto shadow-sm border-muted/60">
                   <CardHeader className="pb-4 border-b border-border/40 bg-muted/10 flex flex-row items-center justify-between flex-wrap gap-4">
                     <div>
