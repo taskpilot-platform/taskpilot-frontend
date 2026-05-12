@@ -10,6 +10,7 @@ import { LayoutDashboard, ShieldCheck, UserRound, LogOut, FolderKanban, Globe, U
 import { useTranslation } from "react-i18next";
 import { profileService } from "@/services/profile.service";
 import { notificationService } from "@/services/notification.service";
+import { projectStorage } from "@/lib/storage";
 
 export default function MainLayout() {
   const NOTIFICATION_BLINK_MS = 3000;
@@ -156,7 +157,7 @@ export default function MainLayout() {
             {!isCollapsed && <span>{t("layout.dashboard")}</span>}
           </NavLink>
           <NavLink
-            to="/projects"
+            to={projectStorage.getLastProjectId() ? `/projects/${projectStorage.getLastProjectId()}` : "/projects"}
             className={({ isActive }) =>
               `flex items-center gap-2 rounded-md ${isCollapsed ? 'justify-center px-0' : 'px-3'} py-2 transition-colors ${isActive ? "bg-accent font-medium" : "hover:bg-accent"
               }`

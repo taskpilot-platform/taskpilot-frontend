@@ -19,7 +19,9 @@ import {
   UserPlus,
   FileText,
   Settings,
-  Archive
+  Archive,
+  ArrowLeftRight,
+  ArrowLeft
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { toast } from "react-toastify";
@@ -37,13 +39,22 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 import { getApiErrorMessage } from "@/lib/http";
 import { projectService } from "@/services/project.service";
 import { taskService } from "@/services/task.service";
 import { profileService } from "@/services/profile.service";
+import { projectStorage } from "@/lib/storage";
 import { TaskDetailSheet } from "@/components/tasks/TaskDetailSheet";
-import type { Project, ProjectMember, ProjectSummary } from "@/types/project";
+import type { MyProject, Project, ProjectMember, ProjectSummary } from "@/types/project";
 import type { TaskDetailDto, TaskDto, TaskPriority, TaskStatus } from "@/types/task";
 
 const VALID_TABS = ["overview", "board", "backlog"] as const;
@@ -83,6 +94,7 @@ export default function ProjectWorkspacePage() {
 
   const [searchInput, setSearchInput] = useState("");
   const [project, setProject] = useState<Project | null>(null);
+  const [myProjects, setMyProjects] = useState<MyProject[]>([]);
   const [projectMembers, setProjectMembers] = useState<ProjectMember[]>([]);
   const [tasks, setTasks] = useState<TaskDto[]>([]);
   const [projectSummary, setProjectSummary] = useState<ProjectSummary | null>(null);
@@ -115,18 +127,20 @@ export default function ProjectWorkspacePage() {
   const loadData = async (pid: number) => {
     setIsLoadingTasks(true);
     try {
-      const [projRes, membersRes, tasksRes, summaryRes, profileRes] = await Promise.all([
+      const [projRes, membersRes, tasksRes, summaryRes, profileRes, myProjectsRes] = await Promise.all([
         projectService.getProjectDetail(pid),
         projectService.getProjectMembers(pid),
         taskService.getTasksByProject(pid),
         projectService.getProjectSummary(pid),
-        profileService.getMe()
+        profileService.getMe(),
+        projectService.getMyProjects(0, 100)
       ]);
       setProject(projRes.data);
       setProjectMembers(membersRes.data);
       setTasks(tasksRes.data);
       setProjectSummary(summaryRes.data);
       setMyUserId(profileRes.data.id);
+      setMyProjects(myProjectsRes.data.content);
     } catch (error) {
       toast.error(getApiErrorMessage(error));
     } finally {
@@ -137,6 +151,7 @@ export default function ProjectWorkspacePage() {
   useEffect(() => {
     if (currentProjectId) {
       void loadData(currentProjectId);
+      projectStorage.setLastProjectId(currentProjectId);
     }
   }, [currentProjectId]);
 
@@ -372,10 +387,47 @@ export default function ProjectWorkspacePage() {
       {/* HEADER */}
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between shrink-0">
         <div className="space-y-1">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             <h1 className="text-3xl font-bold tracking-tight">{project?.name || t("tasks.title", "Workspace")}</h1>
+
+            {/* Project Switcher */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full hover:bg-muted transition-colors">
+                  <ChevronDown className="h-5 w-5 text-muted-foreground" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-64 max-h-[400px] overflow-y-auto">
+                <DropdownMenuLabel className="flex items-center gap-2">
+                  <ArrowLeftRight className="h-4 w-4" />
+                  Switch Project
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {myProjects.length > 0 ? (
+                  myProjects.map((p) => (
+                    <DropdownMenuItem
+                      key={p.id}
+                      onClick={() => navigate(`/projects/${p.id}/${activeTab}`)}
+                      className={`flex items-center gap-2 py-2.5 ${p.id === currentProjectId ? "bg-primary/10 font-semibold text-primary" : ""}`}
+                    >
+                      <div className={`w-2 h-2 rounded-full ${p.status === 'ACTIVE' ? 'bg-emerald-500' : 'bg-muted-foreground/30'}`} />
+                      <span className="truncate flex-1">{p.name}</span>
+                      {p.id === currentProjectId && <CheckCircle2 className="h-4 w-4 shrink-0" />}
+                    </DropdownMenuItem>
+                  ))
+                ) : (
+                  <div className="px-2 py-4 text-center text-xs text-muted-foreground italic">No other projects found</div>
+                )}
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => navigate("/projects")} className="py-2.5 text-primary focus:text-primary focus:bg-primary/5 font-medium">
+                  <FolderKanban className="mr-2 h-4 w-4" />
+                  See All Projects
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
             {isArchived && (
-              <Badge variant="destructive" className="bg-red-500/10 text-red-500 border-red-500/20 hover:bg-red-500/20">
+              <Badge variant="destructive" className="ml-2 bg-red-500/10 text-red-500 border-red-500/20 hover:bg-red-500/20">
                 <Archive className="w-3 h-3 mr-1" /> Archived
               </Badge>
             )}
@@ -383,6 +435,13 @@ export default function ProjectWorkspacePage() {
           <p className="text-muted-foreground line-clamp-1">{project?.description || t("tasks.desc", "Manage tasks and subtasks.")}</p>
         </div>
         <div className="flex items-center gap-2">
+          {/* All Projects Navigation */}
+          <Button variant="outline" className="gap-2 shadow-sm border-primary/20 hover:bg-primary/5 text-primary group transition-all" onClick={() => navigate("/projects")}>
+            <ArrowLeft className="h-4 w-4 group-hover:-translate-x-0.5 transition-transform" />
+            <span className="hidden sm:inline">All Projects</span>
+            <span className="sm:hidden">All</span>
+          </Button>
+
           {isManager && (
             <Button variant="outline" className="gap-2 shadow-sm" onClick={() => navigate(`/projects/${currentProjectId}/settings`)}>
               <Settings className="h-4 w-4" />
@@ -491,8 +550,9 @@ export default function ProjectWorkspacePage() {
       {/* VIEW MODES */}
       <div className="flex-1 overflow-hidden min-h-0 bg-background/50 rounded-lg border shadow-sm relative">
         {isLoadingTasks && !project ? (
-          <div className="absolute inset-0 z-10 bg-background/50 backdrop-blur-sm flex items-center justify-center text-muted-foreground">
-            <Loader2 className="mr-2 h-6 w-6 animate-spin" /> Loading workspace...
+          <div className="absolute inset-0 z-10 bg-card backdrop-blur-xl flex flex-col items-center justify-center text-muted-foreground transition-all duration-300">
+            <Loader2 className="mb-4 h-10 w-10 animate-spin text-primary" />
+            <p className="text-lg font-medium animate-pulse">Loading workspace...</p>
           </div>
         ) : (
           <>
@@ -502,7 +562,7 @@ export default function ProjectWorkspacePage() {
                   {groupedKanban.map((column) => (
                     <div
                       key={column.status}
-                      className="flex-1 flex flex-col rounded-xl border bg-muted/20 p-3.5 min-w-[300px] shadow-sm"
+                      className="flex-1 flex flex-col rounded-xl border bg-card p-3.5 min-w-[300px] shadow-sm border-white/10"
                       onDragOver={handleDragOver}
                       onDrop={(e) => handleDrop(e, column.status)}
                     >
@@ -525,7 +585,7 @@ export default function ProjectWorkspacePage() {
                         {column.tasks.map((task) => (
                           <div
                             key={task.id}
-                            className={`space-y-3 rounded-lg border border-border/60 bg-card p-3.5 shadow-sm transition-all group ${!isArchived ? "cursor-grab active:cursor-grabbing hover:border-primary/40 hover:shadow-md" : ""}`}
+                            className={`project-task-card space-y-3 rounded-lg border border-border/60 bg-card p-3.5 shadow-sm transition-all group ${!isArchived ? "cursor-grab active:cursor-grabbing hover:border-primary/40 hover:shadow-md" : ""}`}
                             draggable={!isArchived}
                             onDragStart={(e) => handleDragStart(e, task.id)}
                             onClick={() => openTaskDetail(task.id)}

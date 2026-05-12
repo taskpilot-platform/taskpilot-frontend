@@ -49,15 +49,25 @@
     --ring: 240 4.9% 83.9%;
   }
 
-  /* COLOR THEMES */
-  .theme-blue { --primary: 221.2 83.2% 53.3%; --primary-foreground: 210 40% 98%; }
-  .dark.theme-blue { --primary: 217.2 91.2% 59.8%; --primary-foreground: 222.2 47.4% 11.2%; }
-  .theme-rose { --primary: 346.8 77.2% 49.8%; --primary-foreground: 355.7 100% 97.3%; }
-  .theme-green { --primary: 142.1 76.2% 36.3%; --primary-foreground: 355.7 100% 97.3%; }
-  .theme-violet { --primary: 262.1 83.3% 57.8%; --primary-foreground: 210 40% 98%; }
-  .theme-orange { --primary: 24.6 95% 53.1%; --primary-foreground: 60 9.1% 97.8%; }
+}
 
-  /* ============================================ */
+/* COLOR THEMES - Moved outside @layer for higher precedence */
+html.theme-blue { --primary: 221.2 83.2% 53.3% !important; --primary-foreground: 210 40% 98% !important; }
+html.dark.theme-blue { --primary: 217.2 91.2% 59.8% !important; --primary-foreground: 222.2 47.4% 11.2% !important; }
+
+html.theme-rose { --primary: 346.8 77.2% 49.8% !important; --primary-foreground: 355.7 100% 97.3% !important; }
+html.dark.theme-rose { --primary: 346.8 87.2% 64.8% !important; --primary-foreground: 355.7 100% 97.3% !important; }
+
+html.theme-green { --primary: 142.1 76.2% 36.3% !important; --primary-foreground: 355.7 100% 97.3% !important; }
+html.dark.theme-green { --primary: 142.1 70.2% 45.3% !important; --primary-foreground: 355.7 100% 97.3% !important; }
+
+html.theme-violet { --primary: 262.1 83.3% 57.8% !important; --primary-foreground: 210 40% 98% !important; }
+html.dark.theme-violet { --primary: 262.1 73.3% 67.8% !important; --primary-foreground: 210 40% 98% !important; }
+
+html.theme-orange { --primary: 24.6 95% 53.1% !important; --primary-foreground: 60 9.1% 97.8% !important; }
+html.dark.theme-orange { --primary: 24.6 85% 63.1% !important; --primary-foreground: 60 9.1% 97.8% !important; }
+
+/* ============================================ */
   /* PREMIUM MINIMALIST GLASS THEME               */
   /* ============================================ */
   html.glass body {
@@ -77,13 +87,42 @@
   /* Glass Components: Ultra Transparent & Sharp */
   html.glass .bg-card, 
   html.glass .bg-popover,
-  html.glass .bg-secondary,
-  html.glass .bg-muted {
-    background-color: rgba(255, 255, 255, 0.22) !important;
-    backdrop-filter: blur(var(--glass-blur)) saturate(160%) !important;
-    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(160%) !important;
-    border: 1px solid rgba(255, 255, 255, 0.4) !important;
-    box-shadow: 0 4px 24px -1px rgba(0, 0, 0, 0.05) !important;
+  html.glass [data-radix-popper-content-wrapper] > div {
+    background-color: rgba(255, 255, 255, 0.05) !important;
+    backdrop-filter: blur(30px) saturate(140%) !important;
+    -webkit-backdrop-filter: blur(30px) saturate(140%) !important;
+    border: 1px solid rgba(255, 255, 255, 0.15) !important;
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.04) !important;
+  }
+
+  html.glass .bg-muted,
+  html.glass .bg-secondary {
+    background-color: rgba(255, 255, 255, 0.08) !important;
+    backdrop-filter: blur(16px) !important;
+    -webkit-backdrop-filter: blur(16px) !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  }
+
+  /* Force Primary Buttons to show theme color even in glass mode */
+  html.glass .bg-primary {
+    background-color: hsl(var(--primary)) !important;
+    color: hsl(var(--primary-foreground)) !important;
+    opacity: 1 !important;
+  }
+
+  /* Task Card Specific Glass Style */
+  html.glass .project-task-card {
+    background-color: rgba(255, 255, 255, 0.12) !important;
+    backdrop-filter: blur(12px) saturate(130%) !important;
+    border: 1px solid rgba(255, 255, 255, 0.25) !important;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  
+  html.glass .project-task-card:hover {
+    background-color: rgba(255, 255, 255, 0.2) !important;
+    border-color: rgba(255, 255, 255, 0.4) !important;
+    transform: translateY(-3px);
+    box-shadow: 0 10px 20px -5px rgba(0, 0, 0, 0.1) !important;
   }
 
   /* Force Crisp Black Text everywhere in Glass mode EXCEPT on primary/destructive backgrounds */
@@ -92,18 +131,22 @@
   }
   
   html.glass h1, html.glass h2, html.glass h3, html.glass h4, html.glass h5, html.glass h6, 
-  html.glass p, html.glass label, html.glass strong {
+  html.glass label, html.glass strong {
     color: #000000 !important;
+  }
+  
+  /* Remove !important from p to allow text-primary to work */
+  html.glass p {
+    color: #1e293b;
   }
 
   /* Subtitle/Muted text adjustments */
   html.glass .text-muted-foreground {
-    color: #334155 !important;
+    color: #475569 !important;
     font-weight: 500;
   }
   
   /* Đảm bảo Badge/Button giữ đúng màu chữ trắng */
-  html.glass .bg-primary,
   html.glass .bg-destructive,
   html.glass .bg-slate-900 {
     color: #ffffff !important;
@@ -111,9 +154,9 @@
 
   /* 5. Special Elements (Sidebar) */
   html.glass aside {
-    background-color: rgba(255, 255, 255, 0.25) !important;
-    backdrop-filter: blur(35px) !important;
-    border-right: 1px solid rgba(255, 255, 255, 0.3) !important;
+    background-color: rgba(255, 255, 255, 0.1) !important;
+    backdrop-filter: blur(40px) saturate(150%) !important;
+    border-right: 1px solid rgba(255, 255, 255, 0.2) !important;
   }
 
   html.glass nav.sticky,
@@ -130,7 +173,6 @@
     border: 1px solid rgba(255, 255, 255, 0.4) !important;
     color: #000000 !important;
   }
-}
 
 @layer base {
   * { @apply border-border; }
