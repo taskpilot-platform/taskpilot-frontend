@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Send, Bot, User, Trash2, Plus, Loader2, Info, ChevronRight, CheckCircle2, Search, BrainCircuit, Zap } from "lucide-react";
+import { Send, Bot, User, Trash2, Plus, Loader2, Info, ChevronRight, ChevronLeft, CheckCircle2, Search, BrainCircuit, Zap } from "lucide-react";
 import { fetchEventSource } from "@microsoft/fetch-event-source";
 import { toast } from "react-toastify";
 import { useTranslation } from "react-i18next";
@@ -31,6 +31,7 @@ export default function AiChatPage() {
   const [streamModel, setStreamModel] = useState<string>("");
   const [toolEvents, setToolEvents] = useState<Array<{ name: string; arguments?: string; result?: string }>>([]);
   const [expandedThinking, setExpandedThinking] = useState<string | null>(null);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const activeStreamControllerRef = useRef<AbortController | null>(null);
@@ -159,9 +160,6 @@ export default function AiChatPage() {
       const data = await aiService.getSessions(0, 50);
       if (!isMountedRef.current) return;
       setSessions(data.content);
-      if (data.content.length > 0 && !activeSession) {
-        setActiveSession(data.content[0]);
-      }
     } catch (error) {
       toast.error(t("copilot.error_load_sessions"));
     }
@@ -535,23 +533,30 @@ export default function AiChatPage() {
   };
 
   return (
-    <div className="flex h-[calc(100vh-80px)] overflow-hidden bg-background border border-border rounded-lg shadow-sm">
+    <div className="flex h-screen overflow-hidden bg-transparent">
       {/* Sidebar: Session List */}
-      <div className="w-64 border-r border-border flex flex-col bg-muted/30">
-        <div className="p-4 border-b border-border flex justify-between items-center bg-background/50">
-          <h2 className="font-semibold text-foreground flex items-center gap-2">
-            <Bot className="w-5 h-5 text-primary" /> {t("copilot.title")}
-          </h2>
-          <Button variant="ghost" size="icon" onClick={handleNewSession} className="h-8 w-8 hover:bg-primary/10">
-            <Plus className="w-4 h-4" />
-          </Button>
+      <div className={`border-r border-border/40 flex flex-col bg-background/10 backdrop-blur-[40px] backdrop-saturate-150 transition-all duration-300 ${isSidebarCollapsed ? "w-16 items-center" : "w-64"}`}>
+        <div className={`p-4 border-b border-border/40 flex items-center bg-transparent w-full ${isSidebarCollapsed ? "flex-col gap-4 px-0 justify-center" : "justify-between"}`}>
+          {!isSidebarCollapsed && (
+            <h2 className="font-semibold text-foreground flex items-center gap-2 whitespace-nowrap">
+              <Bot className="w-5 h-5 text-primary shrink-0" /> {t("copilot.title")}
+            </h2>
+          )}
+          <div className={`flex items-center ${isSidebarCollapsed ? "flex-col gap-2" : "gap-1"}`}>
+            <Button variant="ghost" size="icon" onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)} className="h-8 w-8 hover:bg-primary/10 shrink-0" title="Toggle Sidebar">
+              {isSidebarCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
+            </Button>
+            <Button variant="ghost" size="icon" onClick={() => setActiveSession(null)} className="h-8 w-8 hover:bg-primary/10 shrink-0" title="New Chat">
+              <Plus className="w-4 h-4" />
+            </Button>
+          </div>
         </div>
-        <div className="flex-1 overflow-y-auto p-2 flex flex-col gap-1">
-          {sessions.map(s => (
+        <div className="flex-1 overflow-y-auto flex flex-col w-full divide-y divide-border/20">
+          {!isSidebarCollapsed && sessions.map(s => (
             <div
               key={s.id}
               onClick={() => setActiveSession(s)}
-              className={`p-3 rounded-md cursor-pointer flex justify-between items-center group transition-colors ${activeSession?.id === s.id ? "bg-primary/10 text-primary font-medium" : "hover:bg-muted text-muted-foreground"
+              className={`p-3 px-4 cursor-pointer flex justify-between items-center group transition-colors ${activeSession?.id === s.id ? "bg-primary/10 text-primary font-medium" : "hover:bg-muted/30 text-muted-foreground"
                 }`}
             >
               <div className="flex-1 truncate text-sm">
@@ -567,7 +572,7 @@ export default function AiChatPage() {
               </Button>
             </div>
           ))}
-          {sessions.length === 0 && (
+          {!isSidebarCollapsed && sessions.length === 0 && (
             <div className="text-center text-muted-foreground text-sm mt-4">
               {t("copilot.no_sessions")}
             </div>
@@ -576,9 +581,9 @@ export default function AiChatPage() {
       </div>
 
       {/* Main Chat Area */}
-      <div className="flex-1 flex flex-col pt-4">
+      <div className="flex-1 flex flex-col bg-transparent relative">
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
+        <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4 relative z-10">
           {isStreaming && activeSession?.id === streamingSessionId && (
             <div className="rounded-lg border border-border bg-background/70 px-3 py-2">
               <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
@@ -595,13 +600,13 @@ export default function AiChatPage() {
           )}
 
           {messages.length === 0 && !currentStreamMsg && (
-            <div className="flex flex-col items-center justify-center h-full text-center space-y-4">
-              <div className="h-16 w-16 bg-primary/10 text-primary rounded-full flex items-center justify-center">
-                <Bot className="w-8 h-8" />
-              </div>
-              <div>
-                <h3 className="text-xl font-semibold text-foreground">{t("copilot.welcome_title")}</h3>
-                <p className="text-muted-foreground mt-2 max-w-md">
+            <div className="flex flex-col items-center justify-center h-full text-center space-y-4 p-4">
+              <div className="bg-background/20 backdrop-blur-[40px] backdrop-saturate-150 p-8 rounded-3xl border border-border/30 shadow-xl flex flex-col items-center max-w-lg">
+                <div className="h-16 w-16 bg-primary/20 text-primary rounded-full flex items-center justify-center mb-4">
+                  <Bot className="w-8 h-8" />
+                </div>
+                <h3 className="text-2xl font-bold text-foreground drop-shadow-sm">{t("copilot.welcome_title")}</h3>
+                <p className="text-foreground/90 font-medium mt-3 leading-relaxed drop-shadow-sm">
                   {t("copilot.welcome_desc")}
                 </p>
               </div>
@@ -653,7 +658,7 @@ export default function AiChatPage() {
         </div>
 
         {/* Input Area */}
-        <div className="p-4 border-t border-border bg-background/50">
+        <div className="p-4 border-t border-border/40 bg-background/10 backdrop-blur-[40px] backdrop-saturate-150 relative z-10">
           <form
             onSubmit={(e) => { e.preventDefault(); sendMessage(); }}
             className="relative flex max-w-4xl mx-auto"
@@ -668,7 +673,7 @@ export default function AiChatPage() {
                 }
               }}
               placeholder={t("copilot.input_placeholder") + " (Enter để gửi, Shift+Enter để xuống dòng)"}
-              className="min-h-[96px] flex-1 resize-none rounded-2xl border-border pr-14 text-base bg-background"
+              className="min-h-[96px] flex-1 resize-none rounded-2xl border-border/40 pr-14 text-base bg-background/50 backdrop-blur-md focus:bg-background/80 transition-colors"
             />
             <Button
               type="submit"
@@ -679,7 +684,7 @@ export default function AiChatPage() {
               <Send className="w-4 h-4 ml-1" />
             </Button>
           </form>
-          <div className="text-center text-xs text-muted-foreground mt-2">
+          <div className="text-center text-xs font-medium text-foreground/80 mt-2 drop-shadow-sm">
             {t("copilot.disclaimer")}
           </div>
         </div>
