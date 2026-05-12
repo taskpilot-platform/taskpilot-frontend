@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Send, Bot, User, Trash2, Plus, Loader2, Info, ChevronRight, ChevronLeft, CheckCircle2, Search, BrainCircuit, Zap } from "lucide-react";
+import { Send, Bot, User, Trash2, Plus, Loader2, ChevronRight, ChevronLeft, CheckCircle2, Search, BrainCircuit, Zap } from "lucide-react";
 import { fetchEventSource } from "@microsoft/fetch-event-source";
 import { toast } from "react-toastify";
 import { useTranslation } from "react-i18next";
@@ -178,16 +178,6 @@ export default function AiChatPage() {
     }
   }
 
-  async function handleNewSession() {
-    try {
-      const newSession = await aiService.createSession();
-      setSessions([newSession, ...sessions]);
-      setActiveSession(newSession);
-      setMessages([]);
-    } catch (error) {
-      toast.error(t("copilot.error_create_session"));
-    }
-  }
 
   async function handleDeleteSession(e: React.MouseEvent, sessionId: number) {
     e.stopPropagation();
@@ -376,7 +366,7 @@ export default function AiChatPage() {
   }
 
   // Helper to parse thinking content into steps
-  const parseThinkingToSteps = (thinking: string, tools: typeof toolEvents) => {
+  const parseThinkingToSteps = (thinking: string) => {
     // Split by "Step X:" or significant newlines
     const rawSteps = thinking.split(/(?=Step \d+:)/g).filter(s => s.trim().length > 0);
     const steps: Array<{ type: 'thought' | 'tool', content: string, title?: string, toolData?: any }> = [];
@@ -412,29 +402,29 @@ export default function AiChatPage() {
     if (thinkStart !== -1) {
       const beforeThink = content.substring(0, thinkStart);
       const isThinkingComplete = thinkEnd > thinkStart;
-      
+
       // Use expanded thinking if available and thinking is complete
-      const displayThinking = (isThinkingComplete && expanded) 
-        ? expanded 
-        : (isThinkingComplete 
-            ? content.substring(thinkStart + 7, thinkEnd) 
-            : content.substring(thinkStart + 7));
-            
+      const displayThinking = (isThinkingComplete && expanded)
+        ? expanded
+        : (isThinkingComplete
+          ? content.substring(thinkStart + 7, thinkEnd)
+          : content.substring(thinkStart + 7));
+
       const afterThink = isThinkingComplete ? content.substring(thinkEnd + 8) : "";
 
-      const steps = parseThinkingToSteps(displayThinking, tools);
+      const steps = parseThinkingToSteps(displayThinking);
 
       return (
         <div className="flex flex-col gap-4">
           {beforeThink && <div className="prose prose-sm dark:prose-invert max-w-full"><ReactMarkdown remarkPlugins={[remarkGfm]}>{beforeThink}</ReactMarkdown></div>}
-          
+
           <div className="space-y-3 bg-muted/30 p-4 rounded-xl border border-border/50">
             <div className="flex items-center gap-2 text-sm font-semibold text-primary mb-2">
               <BrainCircuit className="w-4 h-4" />
               <span>{t("copilot.thinking_accordion_label")}</span>
               {!isThinkingComplete && <Loader2 className="w-3 h-3 animate-spin ml-1" />}
             </div>
-            
+
             <div className="space-y-4 relative before:absolute before:left-[11px] before:top-2 before:bottom-2 before:w-[2px] before:bg-border/60">
               {steps.map((step, idx) => (
                 <div key={idx} className="relative pl-8 group">
