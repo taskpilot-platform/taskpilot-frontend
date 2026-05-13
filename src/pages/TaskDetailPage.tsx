@@ -23,6 +23,7 @@ export default function TaskDetailPage() {
   const [taskDetail, setTaskDetail] = useState<TaskDetailDto | null>(null);
   const [projectMembers, setProjectMembers] = useState<ProjectMember[]>([]);
   const [myUserId, setMyUserId] = useState<number | null>(null);
+  const [isReadOnly, setIsReadOnly] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
   const currentProjectId = Number(projectId);
@@ -45,14 +46,16 @@ export default function TaskDetailPage() {
     const loadData = async () => {
       setIsLoading(true);
       try {
-        const [taskRes, membersRes, profileRes] = await Promise.all([
+        const [taskRes, membersRes, profileRes, projectRes] = await Promise.all([
           taskService.getTaskById(currentTaskId),
           projectService.getProjectMembers(currentProjectId),
-          profileService.getMe()
+          profileService.getMe(),
+          projectService.getProjectDetail(currentProjectId)
         ]);
         setTaskDetail(taskRes.data);
         setProjectMembers(membersRes.data);
         setMyUserId(profileRes.data?.id);
+        setIsReadOnly(projectRes.data.status === "ARCHIVED");
       } catch (error) {
         toast.error(getApiErrorMessage(error));
       } finally {
@@ -169,7 +172,12 @@ export default function TaskDetailPage() {
               onCreateSubtask={onCreateSubtask} 
             />
 
-            <ActivityTimeline />
+            <ActivityTimeline
+              taskId={task.id}
+              currentUserId={myUserId}
+              isManager={isManager}
+              isReadOnly={isReadOnly}
+            />
           </div>
 
           {/* Sidebar Area (30%) */}

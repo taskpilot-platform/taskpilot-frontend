@@ -9,6 +9,11 @@ export interface UserProfileDto {
   currentWorkload: number;
 }
 
+export interface UserProfileLiteDto {
+  id: number;
+  fullName: string;
+}
+
 export interface LabelDto {
   id: number;
   name: string;
@@ -87,4 +92,29 @@ export interface UpdateTaskRequest {
 export interface KanbanMoveRequest {
   status: TaskStatus;
   position: number;
+}
+
+export interface TaskCommentDto {
+  id: number;
+  taskId: number;
+  author: UserProfileLiteDto;
+  content: string;
+  mentions: UserProfileLiteDto[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateTaskCommentRequest {
+  content: string;
+  mentionedUserIds: number[];
+}
+
+export interface UpdateTaskCommentRequest {
+  content: string;
+  mentionedUserIds: number[];
+}
+
+export interface TaskCommentDeletedEvent {
+  taskId: number;
+  commentId: number;
 }

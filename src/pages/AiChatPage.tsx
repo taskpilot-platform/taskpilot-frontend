@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Send, Bot, User, Trash2, Plus, Loader2, Info, ChevronRight, ChevronLeft, CheckCircle2, Search, BrainCircuit, Zap } from "lucide-react";
+import { Send, Bot, User, Trash2, Plus, Loader2, ChevronRight, ChevronLeft, CheckCircle2, Search, BrainCircuit, Zap } from "lucide-react";
 import { fetchEventSource } from "@microsoft/fetch-event-source";
 import { toast } from "react-toastify";
 import { useTranslation } from "react-i18next";
@@ -160,7 +160,7 @@ export default function AiChatPage() {
       const data = await aiService.getSessions(0, 50);
       if (!isMountedRef.current) return;
       setSessions(data.content);
-    } catch (error) {
+    } catch {
       toast.error(t("copilot.error_load_sessions"));
     }
   }
@@ -173,19 +173,8 @@ export default function AiChatPage() {
       // Avoid overriding UI with a different session when user switches tabs quickly.
       if (activeSessionIdRef.current !== sessionId) return;
       setMessages(data.content.reverse()); // Assume BE returns DESC, we show ASC
-    } catch (error) {
+    } catch {
       toast.error(t("copilot.error_load_messages"));
-    }
-  }
-
-  async function handleNewSession() {
-    try {
-      const newSession = await aiService.createSession();
-      setSessions([newSession, ...sessions]);
-      setActiveSession(newSession);
-      setMessages([]);
-    } catch (error) {
-      toast.error(t("copilot.error_create_session"));
     }
   }
 
@@ -199,7 +188,7 @@ export default function AiChatPage() {
         setActiveSession(newSessions[0] || null);
       }
       toast.success(t("copilot.success_delete_session"));
-    } catch (error) {
+    } catch {
       toast.error(t("copilot.error_delete_session"));
     }
   }
@@ -217,7 +206,7 @@ export default function AiChatPage() {
         targetSession = await aiService.createSession();
         setSessions([targetSession, ...sessions]);
         setActiveSession(targetSession);
-      } catch (error) {
+      } catch {
         toast.error(t("copilot.error_create_session_short"));
         return;
       }
@@ -376,10 +365,10 @@ export default function AiChatPage() {
   }
 
   // Helper to parse thinking content into steps
-  const parseThinkingToSteps = (thinking: string, tools: typeof toolEvents) => {
+  const parseThinkingToSteps = (thinking: string) => {
     // Split by "Step X:" or significant newlines
     const rawSteps = thinking.split(/(?=Step \d+:)/g).filter(s => s.trim().length > 0);
-    const steps: Array<{ type: 'thought' | 'tool', content: string, title?: string, toolData?: any }> = [];
+    const steps: Array<{ type: 'thought' | 'tool', content: string, title?: string, toolData?: unknown }> = [];
 
     // Simple heuristic: interleaving tools based on their sequence
     // In a real scenario, we might want the backend to emit "thinking_step" events
@@ -422,7 +411,7 @@ export default function AiChatPage() {
             
       const afterThink = isThinkingComplete ? content.substring(thinkEnd + 8) : "";
 
-      const steps = parseThinkingToSteps(displayThinking, tools);
+      const steps = parseThinkingToSteps(displayThinking);
 
       return (
         <div className="flex flex-col gap-4">

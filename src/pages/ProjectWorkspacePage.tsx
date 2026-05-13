@@ -59,6 +59,7 @@ import type { TaskDetailDto, TaskDto, TaskPriority, TaskStatus } from "@/types/t
 
 const VALID_TABS = ["overview", "board", "backlog"] as const;
 type ViewMode = (typeof VALID_TABS)[number];
+type BacklogSortMode = "position" | "createdAt" | "priority";
 const VALID_TAB_SET = new Set<string>(VALID_TABS);
 const isViewMode = (value: string | undefined): value is ViewMode =>
   value ? VALID_TAB_SET.has(value) : false;
@@ -70,6 +71,13 @@ const priorityBadgeClass: Record<TaskPriority, string> = {
   HIGH: "border-orange-500/40 text-orange-600 dark:text-orange-300",
   MEDIUM: "border-amber-500/40 text-amber-600 dark:text-amber-300",
   LOW: "border-emerald-500/40 text-emerald-600 dark:text-emerald-300",
+};
+
+const priorityScore: Record<TaskPriority, number> = {
+  URGENT: 4,
+  HIGH: 3,
+  MEDIUM: 2,
+  LOW: 1,
 };
 
 const formSchema = z.object({
@@ -109,7 +117,7 @@ export default function ProjectWorkspacePage() {
   // Backlog state
   const [showSubtasks, setShowSubtasks] = useState(false);
   const [expandedTasks, setExpandedTasks] = useState<Set<number>>(new Set());
-  const [sortBy, setSortBy] = useState<"position" | "createdAt" | "priority">("position");
+  const [sortBy, setSortBy] = useState<BacklogSortMode>("position");
 
   // Overview edit state removed since Settings is canonical
 
@@ -809,7 +817,7 @@ export default function ProjectWorkspacePage() {
                       <CardDescription className="mt-1">Plan your sprints and view all tasks.</CardDescription>
                     </div>
                     <div className="flex items-center gap-3">
-                      <Select value={sortBy} onValueChange={(v: any) => setSortBy(v)}>
+                      <Select value={sortBy} onValueChange={(value) => setSortBy(value as BacklogSortMode)}>
                         <SelectTrigger className="w-[140px] h-9 bg-background border shadow-sm">
                           <SelectValue placeholder="Sort by" />
                         </SelectTrigger>
@@ -835,8 +843,7 @@ export default function ProjectWorkspacePage() {
                       ) : (
                         tasks.filter(t => t.parentId == null).sort((a, b) => {
                           if (sortBy === "priority") {
-                            const pScore: any = { URGENT: 4, HIGH: 3, MEDIUM: 2, LOW: 1 };
-                            return (pScore[b.priority] || 0) - (pScore[a.priority] || 0);
+                            return priorityScore[b.priority] - priorityScore[a.priority];
                           }
                           if (sortBy === "createdAt") {
                             return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
@@ -864,6 +871,8 @@ export default function ProjectWorkspacePage() {
         onCreateSubtask={isArchived ? async () => { } : onCreateSubtask}
         onOpenTaskDetail={openTaskDetail}
         isManager={isManager}
+        currentUserId={myUserId}
+        isReadOnly={isArchived}
       />
     </div>
   );

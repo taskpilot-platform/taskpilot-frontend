@@ -18,6 +18,8 @@ interface Props {
   onCreateSubtask: (title: string) => Promise<void>;
   onOpenTaskDetail: (taskId: number) => void;
   isManager: boolean;
+  currentUserId: number | null;
+  isReadOnly: boolean;
 }
 
 export function TaskDetailSheet({
@@ -29,7 +31,9 @@ export function TaskDetailSheet({
   onUpdateTask,
   onCreateSubtask,
   onOpenTaskDetail,
-  isManager
+  isManager,
+  currentUserId,
+  isReadOnly
 }: Props) {
   if (!taskDetail) {
     return (
@@ -77,7 +81,12 @@ export function TaskDetailSheet({
               onCreateSubtask={onCreateSubtask} 
             />
 
-            <ActivityTimeline />
+            <ActivityTimeline
+              taskId={task.id}
+              currentUserId={currentUserId}
+              isManager={isManager}
+              isReadOnly={isReadOnly}
+            />
 
           </div>
 
