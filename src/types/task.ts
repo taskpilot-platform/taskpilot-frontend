@@ -97,15 +97,19 @@ export interface KanbanMoveRequest {
 export interface TaskCommentDto {
   id: number;
   taskId: number;
+  parentCommentId: number | null;
   author: UserProfileLiteDto;
-  content: string;
+  content: string | null;
   mentions: UserProfileLiteDto[];
+  deleted: boolean;
+  deletedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
 
 export interface CreateTaskCommentRequest {
   content: string;
+  parentCommentId?: number | null;
   mentionedUserIds: number[];
 }
 
@@ -117,4 +121,6 @@ export interface UpdateTaskCommentRequest {
 export interface TaskCommentDeletedEvent {
   taskId: number;
   commentId: number;
+  parentCommentId: number | null;
+  deleted: boolean;
 }

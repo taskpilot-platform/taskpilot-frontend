@@ -75,8 +75,8 @@ export const taskService = {
     return response.data;
   },
 
-  async deleteTaskComment(taskId: number, commentId: number): Promise<ApiResponse<null>> {
-    const response = await http.delete<ApiResponse<null>>(`/v1/tasks/${taskId}/comments/${commentId}`);
+  async deleteTaskComment(taskId: number, commentId: number): Promise<ApiResponse<TaskCommentDto>> {
+    const response = await http.delete<ApiResponse<TaskCommentDto>>(`/v1/tasks/${taskId}/comments/${commentId}`);
     return response.data;
   },
 

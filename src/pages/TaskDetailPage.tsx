@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "react-toastify";
 import { getApiErrorMessage } from "@/lib/http";
 import { taskService } from "@/services/task.service";
@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button";
 export default function TaskDetailPage() {
   const { projectId, taskId } = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [taskDetail, setTaskDetail] = useState<TaskDetailDto | null>(null);
   const [projectMembers, setProjectMembers] = useState<ProjectMember[]>([]);
   const [myUserId, setMyUserId] = useState<number | null>(null);
@@ -28,6 +29,8 @@ export default function TaskDetailPage() {
 
   const currentProjectId = Number(projectId);
   const currentTaskId = Number(taskId);
+  const focusedCommentIdParam = searchParams.get("commentId");
+  const focusedCommentId = focusedCommentIdParam ? Number(focusedCommentIdParam) : null;
 
   useEffect(() => {
     const hasValidParams =
@@ -177,6 +180,11 @@ export default function TaskDetailPage() {
               currentUserId={myUserId}
               isManager={isManager}
               isReadOnly={isReadOnly}
+              focusedCommentId={
+                focusedCommentId && Number.isInteger(focusedCommentId) && focusedCommentId > 0
+                  ? focusedCommentId
+                  : null
+              }
             />
           </div>
 

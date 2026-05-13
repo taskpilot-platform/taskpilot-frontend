@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Bell, CheckCheck, Loader2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { toast } from "react-toastify";
@@ -11,6 +12,7 @@ import { notificationService } from "@/services/notification.service";
 import type { NotificationItem } from "@/types/notification";
 
 const POLL_INTERVAL_MS = 5000;
+const URL_SCHEME_PATTERN = /^[a-zA-Z][a-zA-Z\d+\-.]*:/;
 
 function sortByNewest(items: NotificationItem[]): NotificationItem[] {
   return [...items].sort(
@@ -32,8 +34,18 @@ function mergeById(prev: NotificationItem[], incoming: NotificationItem[]): Noti
   return sortByNewest(Array.from(map.values()));
 }
 
+function isInternalAppPath(linkAction: string | null): linkAction is string {
+  return Boolean(
+    linkAction &&
+      linkAction.startsWith("/") &&
+      !linkAction.startsWith("//") &&
+      !URL_SCHEME_PATTERN.test(linkAction),
+  );
+}
+
 export default function NotificationsPage() {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isMutating, setIsMutating] = useState(false);
@@ -95,13 +107,40 @@ export default function NotificationsPage() {
     };
   }, []);
 
+  const markNotificationRead = async (notificationId: number) => {
+    await notificationService.markAsRead(notificationId);
+    setNotifications((prev) =>
+      prev.map((item) => (item.id === notificationId ? { ...item, isRead: true } : item)),
+    );
+  };
+
   const handleMarkAsRead = async (notificationId: number) => {
     setIsMutating(true);
     try {
-      await notificationService.markAsRead(notificationId);
-      setNotifications((prev) =>
-        prev.map((item) => (item.id === notificationId ? { ...item, isRead: true } : item)),
-      );
+      await markNotificationRead(notificationId);
+    } catch (error) {
+      toast.error(getApiErrorMessage(error));
+    } finally {
+      setIsMutating(false);
+    }
+  };
+
+  const handleOpenNotification = async (item: NotificationItem) => {
+    if (!item.linkAction) {
+      return;
+    }
+
+    if (!isInternalAppPath(item.linkAction)) {
+      toast.error("Unsupported notification link");
+      return;
+    }
+
+    setIsMutating(true);
+    try {
+      if (!item.isRead) {
+        await markNotificationRead(item.id);
+      }
+      navigate(item.linkAction);
     } catch (error) {
       toast.error(getApiErrorMessage(error));
     } finally {
@@ -163,9 +202,21 @@ export default function NotificationsPage() {
               {notifications.map((item) => (
                 <div
                   key={item.id}
+                  role={item.linkAction ? "button" : undefined}
+                  tabIndex={item.linkAction ? 0 : undefined}
+                  onClick={() => void handleOpenNotification(item)}
+                  onKeyDown={(event) => {
+                    if (!item.linkAction) {
+                      return;
+                    }
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      void handleOpenNotification(item);
+                    }
+                  }}
                   className={`rounded-lg border p-4 transition-colors ${
                     item.isRead ? "bg-card" : "bg-accent/30"
-                  }`}
+                  } ${item.linkAction ? "cursor-pointer hover:border-primary/50 hover:bg-accent/20" : ""}`}
                 >
                   <div className="mb-2 flex items-start justify-between gap-2">
                     <div className="flex items-center gap-2">
@@ -178,7 +229,10 @@ export default function NotificationsPage() {
                         type="button"
                         size="sm"
                         variant="outline"
-                        onClick={() => void handleMarkAsRead(item.id)}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          void handleMarkAsRead(item.id);
+                        }}
                         disabled={isMutating}
                       >
                         {t("notifications.mark_read")}
