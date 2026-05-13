@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "react-toastify";
 import { getApiErrorMessage } from "@/lib/http";
 import { taskService } from "@/services/task.service";
@@ -20,13 +20,17 @@ import { Button } from "@/components/ui/button";
 export default function TaskDetailPage() {
   const { projectId, taskId } = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [taskDetail, setTaskDetail] = useState<TaskDetailDto | null>(null);
   const [projectMembers, setProjectMembers] = useState<ProjectMember[]>([]);
   const [myUserId, setMyUserId] = useState<number | null>(null);
+  const [isReadOnly, setIsReadOnly] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
   const currentProjectId = Number(projectId);
   const currentTaskId = Number(taskId);
+  const focusedCommentIdParam = searchParams.get("commentId");
+  const focusedCommentId = focusedCommentIdParam ? Number(focusedCommentIdParam) : null;
 
   useEffect(() => {
     const hasValidParams =
@@ -45,14 +49,16 @@ export default function TaskDetailPage() {
     const loadData = async () => {
       setIsLoading(true);
       try {
-        const [taskRes, membersRes, profileRes] = await Promise.all([
+        const [taskRes, membersRes, profileRes, projectRes] = await Promise.all([
           taskService.getTaskById(currentTaskId),
           projectService.getProjectMembers(currentProjectId),
-          profileService.getMe()
+          profileService.getMe(),
+          projectService.getProjectDetail(currentProjectId)
         ]);
         setTaskDetail(taskRes.data);
         setProjectMembers(membersRes.data);
         setMyUserId(profileRes.data?.id);
+        setIsReadOnly(projectRes.data.status === "ARCHIVED");
       } catch (error) {
         toast.error(getApiErrorMessage(error));
       } finally {
@@ -169,7 +175,17 @@ export default function TaskDetailPage() {
               onCreateSubtask={onCreateSubtask} 
             />
 
-            <ActivityTimeline />
+            <ActivityTimeline
+              taskId={task.id}
+              currentUserId={myUserId}
+              isManager={isManager}
+              isReadOnly={isReadOnly}
+              focusedCommentId={
+                focusedCommentId && Number.isInteger(focusedCommentId) && focusedCommentId > 0
+                  ? focusedCommentId
+                  : null
+              }
+            />
           </div>
 
           {/* Sidebar Area (30%) */}

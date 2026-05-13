@@ -1,4 +1,4 @@
-export type NotificationType = "SYSTEM" | "ASSIGNED" | "DEADLINE_NEAR";
+export type NotificationType = "SYSTEM" | "ASSIGNED" | "DEADLINE_NEAR" | "COMMENT" | "MENTION" | "REPLY";
 
 export interface NotificationItem {
   id: number;

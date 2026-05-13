@@ -6,15 +6,15 @@ import { Badge } from "@/components/ui/badge";
 import { getApiErrorMessage } from "@/lib/http";
 import { useAuthStore } from "@/stores/auth.store";
 import { toast } from "react-toastify";
-import { LayoutDashboard, ShieldCheck, UserRound, LogOut, FolderKanban, Globe, Users, Code, Settings, Menu, ChevronLeft, Bot, Bell } from "lucide-react";
+import { LayoutDashboard, ShieldCheck, UserRound, LogOut, FolderKanban, Globe, Users, Code, Settings, Menu, ChevronLeft, Bot, Bell, MessageSquare } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { profileService } from "@/services/profile.service";
 import { notificationService } from "@/services/notification.service";
 import { projectStorage } from "@/lib/storage";
 
-export default function MainLayout() {
-  const NOTIFICATION_BLINK_MS = 3000;
+const NOTIFICATION_BLINK_MS = 3000;
 
+export default function MainLayout() {
   const logout = useAuthStore((state) => state.logout);
   const isLoading = useAuthStore((state) => state.isLoading);
   const navigate = useNavigate();
@@ -85,12 +85,15 @@ export default function MainLayout() {
       window.clearInterval(intervalId);
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
-  }, [location.pathname, NOTIFICATION_BLINK_MS]);
+  }, [location.pathname]);
 
   useEffect(() => {
-    if (location.pathname.startsWith("/notifications")) {
-      setIsNotificationBlinking(false);
+    if (!location.pathname.startsWith("/notifications")) {
+      return;
     }
+
+    const timeoutId = window.setTimeout(() => setIsNotificationBlinking(false), 0);
+    return () => window.clearTimeout(timeoutId);
   }, [location.pathname]);
 
   const toggleLanguage = () => {
@@ -194,6 +197,17 @@ export default function MainLayout() {
             {isCollapsed && unreadCount > 0 && (
               <span className={`h-2 w-2 rounded-full bg-amber-500 ${isNotificationBlinking ? "animate-ping" : ""}`} />
             )}
+          </NavLink>
+          <NavLink
+            to="/comments"
+            className={({ isActive }) =>
+              `flex items-center gap-2 rounded-md ${isCollapsed ? 'justify-center px-0' : 'px-3'} py-2 transition-colors ${isActive ? "bg-accent font-medium" : "hover:bg-accent"
+              }`
+            }
+            title="Comments"
+          >
+            <MessageSquare className="h-4 w-4 shrink-0" />
+            {!isCollapsed && <span>Comments</span>}
           </NavLink>
           <NavLink
             to="/copilot"

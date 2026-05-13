@@ -160,7 +160,7 @@ export default function AiChatPage() {
       const data = await aiService.getSessions(0, 50);
       if (!isMountedRef.current) return;
       setSessions(data.content);
-    } catch (error) {
+    } catch {
       toast.error(t("copilot.error_load_sessions"));
     }
   }
@@ -173,7 +173,7 @@ export default function AiChatPage() {
       // Avoid overriding UI with a different session when user switches tabs quickly.
       if (activeSessionIdRef.current !== sessionId) return;
       setMessages(data.content.reverse()); // Assume BE returns DESC, we show ASC
-    } catch (error) {
+    } catch {
       toast.error(t("copilot.error_load_messages"));
     }
   }
@@ -189,7 +189,7 @@ export default function AiChatPage() {
         setActiveSession(newSessions[0] || null);
       }
       toast.success(t("copilot.success_delete_session"));
-    } catch (error) {
+    } catch {
       toast.error(t("copilot.error_delete_session"));
     }
   }
@@ -207,7 +207,7 @@ export default function AiChatPage() {
         targetSession = await aiService.createSession();
         setSessions([targetSession, ...sessions]);
         setActiveSession(targetSession);
-      } catch (error) {
+      } catch {
         toast.error(t("copilot.error_create_session_short"));
         return;
       }
@@ -369,7 +369,7 @@ export default function AiChatPage() {
   const parseThinkingToSteps = (thinking: string) => {
     // Split by "Step X:" or significant newlines
     const rawSteps = thinking.split(/(?=Step \d+:)/g).filter(s => s.trim().length > 0);
-    const steps: Array<{ type: 'thought' | 'tool', content: string, title?: string, toolData?: any }> = [];
+    const steps: Array<{ type: 'thought' | 'tool', content: string, title?: string, toolData?: unknown }> = [];
 
     // Simple heuristic: interleaving tools based on their sequence
     // In a real scenario, we might want the backend to emit "thinking_step" events
