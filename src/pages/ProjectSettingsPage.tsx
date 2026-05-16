@@ -38,6 +38,7 @@ const projectFormSchema = z.object({
   description: z.string().optional(),
   status: z.enum(["PLANNING", "ACTIVE", "COMPLETED"]),
   heuristicMode: z.enum(["BALANCED", "URGENT", "TRAINING"]).optional(),
+  workflowMode: z.enum(["KANBAN", "SCRUM"]),
   startDate: z.string().optional(),
   endDate: z.string().optional(),
 });
@@ -60,7 +61,7 @@ export default function ProjectSettingsPage() {
 
   const form = useForm<z.infer<typeof projectFormSchema>>({
     resolver: zodResolver(projectFormSchema),
-    defaultValues: { name: "", description: "", status: "ACTIVE" },
+    defaultValues: { name: "", description: "", status: "ACTIVE", workflowMode: "KANBAN" },
   });
 
   const loadData = async () => {
@@ -82,6 +83,7 @@ export default function ProjectSettingsPage() {
         description: projRes.data.description || "",
         status: projRes.data.status as "PLANNING" | "ACTIVE" | "COMPLETED",
         heuristicMode: projRes.data.heuristicMode || "BALANCED",
+        workflowMode: projRes.data.workflowMode || "KANBAN",
         startDate: projRes.data.startDate ? projRes.data.startDate.split("T")[0] : "",
         endDate: projRes.data.endDate ? projRes.data.endDate.split("T")[0] : "",
       });
@@ -111,7 +113,8 @@ export default function ProjectSettingsPage() {
         name: values.name,
         description: values.description,
         status: values.status,
-        heuristicMode: values.heuristicMode as any,
+        heuristicMode: values.heuristicMode,
+        workflowMode: values.workflowMode,
         startDate: values.startDate || undefined,
         endDate: values.endDate || undefined,
       });
@@ -284,6 +287,17 @@ export default function ProjectSettingsPage() {
                     </FormItem>
                   )} />
                 </div>
+                <FormField control={form.control} name="workflowMode" render={({ field }) => (
+                  <FormItem><FormLabel>Workflow Mode</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value} disabled={isArchived}>
+                      <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                      <SelectContent>
+                        <SelectItem value="KANBAN">Kanban - Board shows all project tasks</SelectItem>
+                        <SelectItem value="SCRUM">Scrum - Board shows only active sprint tasks</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </FormItem>
+                )} />
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <FormField control={form.control} name="startDate" render={({ field }) => (
                     <FormItem><FormLabel>Start Date</FormLabel>
