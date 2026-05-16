@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { fetchEventSource } from "@microsoft/fetch-event-source";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import logo from "@/assets/logo.svg";
 import { Button } from "@/components/ui/button";
@@ -10,13 +11,16 @@ import { LayoutDashboard, ShieldCheck, UserRound, LogOut, FolderKanban, Globe, U
 import { useTranslation } from "react-i18next";
 import { profileService } from "@/services/profile.service";
 import { notificationService } from "@/services/notification.service";
-import { projectStorage } from "@/lib/storage";
+import { authStorage, projectStorage } from "@/lib/storage";
 
 const NOTIFICATION_BLINK_MS = 3000;
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL?.trim() || "";
+let notificationStreamController: AbortController | null = null;
 
 export default function MainLayout() {
   const logout = useAuthStore((state) => state.logout);
   const isLoading = useAuthStore((state) => state.isLoading);
+  const accessToken = useAuthStore((state) => state.accessToken);
   const navigate = useNavigate();
   const location = useLocation();
   const { t, i18n } = useTranslation();
@@ -95,6 +99,74 @@ export default function MainLayout() {
     const timeoutId = window.setTimeout(() => setIsNotificationBlinking(false), 0);
     return () => window.clearTimeout(timeoutId);
   }, [location.pathname]);
+
+  useEffect(() => {
+    const token = accessToken ?? authStorage.getAccessToken();
+    if (!token) {
+      return;
+    }
+
+    const controller = new AbortController();
+    notificationStreamController?.abort();
+    notificationStreamController = controller;
+
+    void fetchEventSource(`${API_BASE_URL}/v1/notifications/my/stream`, {
+      signal: controller.signal,
+      openWhenHidden: true,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "text/event-stream",
+      },
+      async onopen(response) {
+        if (response.status === 401) {
+          authStorage.clear();
+          window.location.href = "/login";
+          throw new Error("Unauthorized");
+        }
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+
+        const contentType = response.headers.get("content-type") || "";
+        if (!contentType.includes("text/event-stream")) {
+          throw new Error("Invalid notification SSE response");
+        }
+      },
+      onmessage(event) {
+        if (event.event !== "notification.unread-count") {
+          return;
+        }
+
+        try {
+          const nextCount = Number(JSON.parse(event.data));
+          if (!Number.isNaN(nextCount)) {
+            setUnreadCount(nextCount);
+          }
+        } catch {
+          const nextCount = Number(event.data);
+          if (!Number.isNaN(nextCount)) {
+            setUnreadCount(nextCount);
+          }
+        }
+      },
+      onerror(error) {
+        throw error;
+      },
+    }).catch((error) => {
+      const isAbortError = error instanceof DOMException && error.name === "AbortError";
+      if (!controller.signal.aborted && !isAbortError) {
+        console.error("Notification stream disconnected", error);
+      }
+    });
+
+    return () => {
+      if (notificationStreamController === controller) {
+        notificationStreamController = null;
+        controller.abort();
+      }
+    };
+  }, [accessToken]);
 
   const toggleLanguage = () => {
     const newLang = i18n.language === "vi" ? "en" : "vi";

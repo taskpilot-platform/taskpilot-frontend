@@ -120,6 +120,7 @@ export default function ProjectWorkspacePage() {
   const [sprints, setSprints] = useState<SprintDto[]>([]);
   const [projectSummary, setProjectSummary] = useState<ProjectSummary | null>(null);
   const [myUserId, setMyUserId] = useState<number | null>(null);
+  const [loadedProjectId, setLoadedProjectId] = useState<number | null>(null);
   const [isLoadingTasks, setIsLoadingTasks] = useState(false);
 
   // Modals
@@ -151,35 +152,66 @@ export default function ProjectWorkspacePage() {
 
   // Removed projectForm since it's no longer needed (Settings page is canonical)
 
+  const mergeTasks = (nextTasks: TaskDto[]) => {
+    setTasks(prev => Array.from(new Map([...prev, ...nextTasks].map(task => [task.id, task])).values()));
+  };
+
+  const loadBaseData = async (pid: number) => {
+    const [projRes, membersRes, sprintRes, summaryRes, profileRes, myProjectsRes] = await Promise.all([
+      projectService.getProjectDetail(pid),
+      projectService.getProjectMembers(pid),
+      sprintService.listSprints(pid),
+      projectService.getProjectSummary(pid),
+      profileService.getMe(),
+      projectService.getMyProjects(0, 100)
+    ]);
+
+    setProject(projRes.data);
+    setProjectMembers(membersRes.data);
+    setSprints(sprintRes.data);
+    setProjectSummary(summaryRes.data);
+    setMyUserId(profileRes.data.id);
+    setMyProjects(myProjectsRes.data.content);
+  };
+
+  const loadTabData = async (pid: number, tab: ViewMode, force = false) => {
+    if (tab === "board" || tab === "overview") {
+      if (!force && boardData) return;
+      const boardRes = await sprintService.getBoard(pid);
+      setBoardData(boardRes.data);
+      mergeTasks(boardRes.data.tasks);
+      return;
+    }
+
+    if (tab === "backlog") {
+      if (!force && backlogData) return;
+      const backlogRes = await sprintService.getBacklog(pid);
+      setBacklogData(backlogRes.data);
+      mergeTasks([
+        ...backlogRes.data.unscheduledTasks,
+        ...backlogRes.data.sprints.flatMap(section => section.tasks),
+      ]);
+      return;
+    }
+
+    if (tab === "timeline") {
+      if (!force && timelineData) return;
+      const timelineRes = await sprintService.getTimeline(pid);
+      setTimelineData(timelineRes.data);
+    }
+  };
+
   const loadData = async (pid: number) => {
     setIsLoadingTasks(true);
     try {
-      const [projRes, membersRes, boardRes, backlogRes, timelineRes, sprintRes, summaryRes, profileRes, myProjectsRes] = await Promise.all([
-        projectService.getProjectDetail(pid),
-        projectService.getProjectMembers(pid),
-        sprintService.getBoard(pid),
-        sprintService.getBacklog(pid),
-        sprintService.getTimeline(pid),
-        sprintService.listSprints(pid),
-        projectService.getProjectSummary(pid),
-        profileService.getMe(),
-        projectService.getMyProjects(0, 100)
-      ]);
-      setProject(projRes.data);
-      setProjectMembers(membersRes.data);
-      setBoardData(boardRes.data);
-      setBacklogData(backlogRes.data);
-      setTimelineData(timelineRes.data);
-      setSprints(sprintRes.data);
-      const combinedTasks = [
-        ...boardRes.data.tasks,
-        ...backlogRes.data.unscheduledTasks,
-        ...backlogRes.data.sprints.flatMap(section => section.tasks),
-      ];
-      setTasks(Array.from(new Map(combinedTasks.map(task => [task.id, task])).values()));
-      setProjectSummary(summaryRes.data);
-      setMyUserId(profileRes.data.id);
-      setMyProjects(myProjectsRes.data.content);
+      setTasks([]);
+      setBoardData(null);
+      setBacklogData(null);
+      setTimelineData(null);
+      setLoadedProjectId(null);
+      await loadBaseData(pid);
+      await loadTabData(pid, activeTab, true);
+      setLoadedProjectId(pid);
     } catch (error) {
       toast.error(getApiErrorMessage(error));
     } finally {
@@ -195,16 +227,27 @@ export default function ProjectWorkspacePage() {
   }, [currentProjectId]);
 
   useEffect(() => {
+    if (!currentProjectId || loadedProjectId !== currentProjectId) {
+      return;
+    }
+
+    setIsLoadingTasks(true);
+    loadTabData(currentProjectId, activeTab)
+      .catch(error => toast.error(getApiErrorMessage(error)))
+      .finally(() => setIsLoadingTasks(false));
+  }, [activeTab, currentProjectId, loadedProjectId]);
+
+  useEffect(() => {
     if (tabId && !isViewMode(tabId) && currentProjectId) {
       navigate(`/projects/${currentProjectId}/board`, { replace: true });
     }
   }, [tabId, currentProjectId, navigate]);
 
   useEffect(() => {
-    if (currentTaskId && !isTaskDetailOpen && tasks.length > 0) {
+    if (currentTaskId && !isTaskDetailOpen) {
       openTaskDetail(currentTaskId);
     }
-  }, [currentTaskId, tasks]);
+  }, [currentTaskId, isTaskDetailOpen]);
 
   const groupedKanban = useMemo(() => {
     const visibleTasks = boardData?.tasks ?? tasks;

@@ -50,7 +50,6 @@ export default function AiChatPage() {
     isMountedRef.current = true;
     loadSessions();
     return () => {
-      // Keep in-flight stream alive like Gemini web behavior.
       isMountedRef.current = false;
       stopPolling();
     };

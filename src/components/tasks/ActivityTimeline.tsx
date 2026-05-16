@@ -38,6 +38,7 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL?.trim() || "";
 const MENTION_DEBOUNCE_MS = 250;
 const HIGHLIGHT_DURATION_MS = 2400;
 const MAX_INDENT_DEPTH = 4;
+const commentStreamControllers = new Map<number, AbortController>();
 
 interface ActivityTimelineProps {
   taskId: number;
@@ -711,6 +712,8 @@ export function ActivityTimeline({
     }
 
     const controller = new AbortController();
+    commentStreamControllers.get(taskId)?.abort();
+    commentStreamControllers.set(taskId, controller);
 
     void fetchEventSource(`${API_BASE_URL}/v1/tasks/${taskId}/comments/stream`, {
       signal: controller.signal,
@@ -768,7 +771,10 @@ export function ActivityTimeline({
     });
 
     return () => {
-      controller.abort();
+      if (commentStreamControllers.get(taskId) === controller) {
+        commentStreamControllers.delete(taskId);
+        controller.abort();
+      }
     };
   }, [taskId]);
 
