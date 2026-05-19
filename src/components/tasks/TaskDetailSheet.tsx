@@ -86,6 +86,7 @@ export function TaskDetailSheet({
               currentUserId={currentUserId}
               isManager={isManager}
               isReadOnly={isReadOnly}
+              isActive={isOpen}
             />
 
           </div>

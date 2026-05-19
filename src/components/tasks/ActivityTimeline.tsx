@@ -45,6 +45,7 @@ interface ActivityTimelineProps {
   currentUserId: number | null;
   isManager: boolean;
   isReadOnly: boolean;
+  isActive?: boolean;
   focusedCommentId?: number | null;
 }
 
@@ -637,6 +638,7 @@ export function ActivityTimeline({
   currentUserId,
   isManager,
   isReadOnly,
+  isActive = true,
   focusedCommentId,
 }: ActivityTimelineProps) {
   const commentRefs = useRef(new Map<number, HTMLDivElement>());
@@ -674,8 +676,11 @@ export function ActivityTimeline({
   }, [taskId]);
 
   useEffect(() => {
+    if (!isActive) {
+      return;
+    }
     void loadComments();
-  }, [loadComments]);
+  }, [isActive, loadComments]);
 
   useEffect(() => {
     if (!focusedCommentId || comments.length === 0) {
@@ -706,6 +711,15 @@ export function ActivityTimeline({
   }, [comments, focusedCommentId]);
 
   useEffect(() => {
+    if (!isActive) {
+      const existingController = commentStreamControllers.get(taskId);
+      if (existingController) {
+        commentStreamControllers.delete(taskId);
+        existingController.abort();
+      }
+      return;
+    }
+
     const accessToken = authStorage.getAccessToken();
     if (!accessToken) {
       return;
@@ -776,7 +790,7 @@ export function ActivityTimeline({
         controller.abort();
       }
     };
-  }, [taskId]);
+  }, [isActive, taskId]);
 
   const handleCreateComment = async (
     content: string,

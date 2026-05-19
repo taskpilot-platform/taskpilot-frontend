@@ -15,7 +15,110 @@ import { authStorage, projectStorage } from "@/lib/storage";
 
 const NOTIFICATION_BLINK_MS = 3000;
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL?.trim() || "";
+type NotificationUnreadListener = (count: number) => void;
+
 let notificationStreamController: AbortController | null = null;
+let notificationStreamToken: string | null = null;
+let notificationStreamConsumers = 0;
+const notificationUnreadListeners = new Set<NotificationUnreadListener>();
+
+const stopNotificationStream = () => {
+  if (notificationStreamController && !notificationStreamController.signal.aborted) {
+    notificationStreamController.abort();
+  }
+  notificationStreamController = null;
+  notificationStreamToken = null;
+};
+
+const parseNotificationUnreadCount = (raw: string): number | null => {
+  try {
+    const parsed = Number(JSON.parse(raw));
+    return Number.isNaN(parsed) ? null : parsed;
+  } catch {
+    const parsed = Number(raw);
+    return Number.isNaN(parsed) ? null : parsed;
+  }
+};
+
+const notifyUnreadListeners = (count: number) => {
+  notificationUnreadListeners.forEach((listener) => {
+    listener(count);
+  });
+};
+
+const startNotificationStream = (token: string) => {
+  const hasActiveStream =
+    notificationStreamController !== null &&
+    !notificationStreamController.signal.aborted &&
+    notificationStreamToken === token;
+
+  if (hasActiveStream) {
+    return;
+  }
+
+  stopNotificationStream();
+
+  const controller = new AbortController();
+  notificationStreamController = controller;
+  notificationStreamToken = token;
+
+  void fetchEventSource(`${API_BASE_URL}/v1/notifications/my/stream`, {
+    signal: controller.signal,
+    openWhenHidden: true,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: "text/event-stream",
+    },
+    async onopen(response) {
+      if (response.status === 401) {
+        stopNotificationStream();
+        authStorage.clear();
+        window.location.href = "/login";
+        throw new Error("Unauthorized");
+      }
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const contentType = response.headers.get("content-type") || "";
+      if (!contentType.includes("text/event-stream")) {
+        throw new Error("Invalid notification SSE response");
+      }
+    },
+    onmessage(event) {
+      if (event.event !== "notification.unread-count") {
+        return;
+      }
+
+      const nextCount = parseNotificationUnreadCount(event.data);
+      if (nextCount !== null) {
+        notifyUnreadListeners(nextCount);
+      }
+    },
+    onerror(error) {
+      throw error;
+    },
+  }).catch((error) => {
+    const isAbortError = error instanceof DOMException && error.name === "AbortError";
+    if (!controller.signal.aborted && !isAbortError) {
+      console.error("Notification stream disconnected", error);
+    }
+  });
+};
+
+const attachNotificationUnreadListener = (listener: NotificationUnreadListener) => {
+  notificationUnreadListeners.add(listener);
+  notificationStreamConsumers += 1;
+
+  return () => {
+    notificationUnreadListeners.delete(listener);
+    notificationStreamConsumers = Math.max(0, notificationStreamConsumers - 1);
+    if (notificationStreamConsumers === 0) {
+      stopNotificationStream();
+    }
+  };
+};
 
 export default function MainLayout() {
   const logout = useAuthStore((state) => state.logout);
@@ -103,68 +206,17 @@ export default function MainLayout() {
   useEffect(() => {
     const token = accessToken ?? authStorage.getAccessToken();
     if (!token) {
+      stopNotificationStream();
       return;
     }
 
-    const controller = new AbortController();
-    notificationStreamController?.abort();
-    notificationStreamController = controller;
-
-    void fetchEventSource(`${API_BASE_URL}/v1/notifications/my/stream`, {
-      signal: controller.signal,
-      openWhenHidden: true,
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: "text/event-stream",
-      },
-      async onopen(response) {
-        if (response.status === 401) {
-          authStorage.clear();
-          window.location.href = "/login";
-          throw new Error("Unauthorized");
-        }
-
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`);
-        }
-
-        const contentType = response.headers.get("content-type") || "";
-        if (!contentType.includes("text/event-stream")) {
-          throw new Error("Invalid notification SSE response");
-        }
-      },
-      onmessage(event) {
-        if (event.event !== "notification.unread-count") {
-          return;
-        }
-
-        try {
-          const nextCount = Number(JSON.parse(event.data));
-          if (!Number.isNaN(nextCount)) {
-            setUnreadCount(nextCount);
-          }
-        } catch {
-          const nextCount = Number(event.data);
-          if (!Number.isNaN(nextCount)) {
-            setUnreadCount(nextCount);
-          }
-        }
-      },
-      onerror(error) {
-        throw error;
-      },
-    }).catch((error) => {
-      const isAbortError = error instanceof DOMException && error.name === "AbortError";
-      if (!controller.signal.aborted && !isAbortError) {
-        console.error("Notification stream disconnected", error);
-      }
+    const detachUnreadListener = attachNotificationUnreadListener((nextCount) => {
+      setUnreadCount(nextCount);
     });
+    startNotificationStream(token);
 
     return () => {
-      if (notificationStreamController === controller) {
-        notificationStreamController = null;
-        controller.abort();
-      }
+      detachUnreadListener();
     };
   }, [accessToken]);
 
