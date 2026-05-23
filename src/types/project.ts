@@ -5,6 +5,8 @@ export type HeuristicMode =
   | "URGENT"
   | "TRAINING";
 
+export type WorkflowMode = "KANBAN" | "SCRUM";
+
 export type MemberRole = "MANAGER" | "MEMBER";
 
 export interface ProjectSummary {
@@ -35,6 +37,7 @@ export interface Project {
   description: string | null;
   status: ProjectStatus;
   heuristicMode: HeuristicMode;
+  workflowMode: WorkflowMode;
   startDate: string | null;
   endDate: string | null;
   createdAt: string;
@@ -60,6 +63,7 @@ export interface UpdateProjectRequest {
   description?: string;
   status?: ProjectStatus;
   heuristicMode?: HeuristicMode;
+  workflowMode?: WorkflowMode;
   startDate?: string;
   endDate?: string;
 }

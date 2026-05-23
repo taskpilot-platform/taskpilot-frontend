@@ -50,6 +50,11 @@ export const taskService = {
     return response.data;
   },
 
+  async updateTaskSprint(taskId: number, sprintId: number | null): Promise<ApiResponse<TaskDto>> {
+    const response = await http.patch<ApiResponse<TaskDto>>(`/v1/tasks/${taskId}/sprint`, { sprintId });
+    return response.data;
+  },
+
   async getTaskComments(taskId: number): Promise<ApiResponse<TaskCommentDto[]>> {
     const response = await http.get<ApiResponse<TaskCommentDto[]>>(`/v1/tasks/${taskId}/comments`);
     return response.data;

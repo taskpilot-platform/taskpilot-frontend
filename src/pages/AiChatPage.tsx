@@ -12,8 +12,12 @@ import type { ChatStreamPhase } from "@/types/chat-stream";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { getApiErrorMessage } from "@/lib/http";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080/api";
+const MAX_PROMPT_CHARS = 1500;
+const STREAM_STATUS_NULL_RETRY_LIMIT = 5;
+const STREAM_STATUS_ERROR_RETRY_LIMIT = 8;
 
 export default function AiChatPage() {
   const { t } = useTranslation();
@@ -39,22 +43,25 @@ export default function AiChatPage() {
   const activeSessionIdRef = useRef<number | null>(null);
   const pollTimerRef = useRef<number | null>(null);
 
-  const abortActiveStream = () => {
-    if (activeStreamControllerRef.current) {
-      activeStreamControllerRef.current.abort();
-      activeStreamControllerRef.current = null;
-    }
-  };
-
   useEffect(() => {
     isMountedRef.current = true;
     loadSessions();
     return () => {
-      // Keep in-flight stream alive like Gemini web behavior.
       isMountedRef.current = false;
       stopPolling();
     };
   }, []);
+
+  useEffect(() => {
+    if (accessToken) {
+      return;
+    }
+
+    if (activeStreamControllerRef.current) {
+      activeStreamControllerRef.current.abort();
+      activeStreamControllerRef.current = null;
+    }
+  }, [accessToken]);
 
   useEffect(() => {
     activeSessionIdRef.current = activeSession?.id ?? null;
@@ -88,6 +95,17 @@ export default function AiChatPage() {
     }
   };
 
+  const resetStreamingUi = () => {
+    setIsStreaming(false);
+    setIsThinking(false);
+    setCurrentStreamMsg("");
+    setStreamingSessionId(null);
+    setStreamPhase(null);
+    setStreamModel("");
+    setToolEvents([]);
+    setExpandedThinking(null);
+  };
+
   const restorePendingRequest = (sessionId: number) => {
     const pendingId = getPendingRequest(sessionId);
     if (!pendingId) {
@@ -102,14 +120,28 @@ export default function AiChatPage() {
 
   const startStatusPolling = (sessionId: number, clientMessageId: string) => {
     stopPolling();
+    let nullStatusCount = 0;
+    let errorCount = 0;
 
     const tick = async () => {
       try {
         const status = await aiService.getStreamStatus(sessionId, clientMessageId);
-        if (!status || !isMountedRef.current) {
+        if (!isMountedRef.current) {
           return;
         }
 
+        if (!status) {
+          nullStatusCount += 1;
+          if (nullStatusCount >= STREAM_STATUS_NULL_RETRY_LIMIT) {
+            clearPendingRequest(sessionId);
+            stopPolling();
+            resetStreamingUi();
+          }
+          return;
+        }
+
+        nullStatusCount = 0;
+        errorCount = 0;
         setStreamPhase(status.phase);
         setStreamModel(status.modelUsed ?? "");
 
@@ -120,10 +152,7 @@ export default function AiChatPage() {
         if (status.phase === "FINALIZED") {
           clearPendingRequest(sessionId);
           stopPolling();
-          setIsStreaming(false);
-          setIsThinking(false);
-          setCurrentStreamMsg("");
-          setStreamingSessionId(null);
+          resetStreamingUi();
           if (activeSessionIdRef.current === sessionId) {
             await loadMessages(sessionId);
             await loadSessions();
@@ -134,14 +163,18 @@ export default function AiChatPage() {
         if (status.phase === "FAILED") {
           clearPendingRequest(sessionId);
           stopPolling();
-          setIsStreaming(false);
-          setIsThinking(false);
-          setCurrentStreamMsg("");
-          setStreamingSessionId(null);
+          resetStreamingUi();
           toast.error(status.errorMessage || t("copilot.error_ai_connection"));
         }
       } catch {
-        // Ignore polling jitter and retry on next interval tick.
+        errorCount += 1;
+        if (errorCount >= STREAM_STATUS_ERROR_RETRY_LIMIT) {
+          clearPendingRequest(sessionId);
+          stopPolling();
+          if (isMountedRef.current) {
+            resetStreamingUi();
+          }
+        }
       }
     };
 
@@ -196,9 +229,23 @@ export default function AiChatPage() {
 
   async function sendMessage() {
     if (!inputVal.trim()) return;
+    if (inputVal.length > MAX_PROMPT_CHARS) {
+      toast.error(
+        t("copilot.max_prompt_chars_error", {
+          defaultValue: `Prompt cannot exceed ${MAX_PROMPT_CHARS} characters.`,
+          max: MAX_PROMPT_CHARS,
+        }),
+      );
+      return;
+    }
 
     if (isStreaming) {
-      abortActiveStream();
+      toast.info(
+        t("copilot.wait_current_response", {
+          defaultValue: "Please wait for the current response to finish before sending a new message.",
+        }),
+      );
+      return;
     }
 
     let targetSession = activeSession;
@@ -281,6 +328,9 @@ export default function AiChatPage() {
               setCurrentStreamMsg(responseBuffer);
             }
           } else if (ev.event === "phase") {
+            if (!isMountedRef.current) {
+              return;
+            }
             const phase = ev.data as ChatStreamPhase;
             setStreamPhase(phase);
             if (phase === "THINKING" || phase === "ROUTING" || phase === "QUEUED") {
@@ -295,7 +345,7 @@ export default function AiChatPage() {
             try {
               const parsed = JSON.parse(ev.data) as { name?: string; arguments?: string; result?: string };
               const toolName = parsed.name?.trim();
-              if (toolName) {
+              if (toolName && isMountedRef.current) {
                 const toolEvent: { name: string; arguments?: string; result?: string } = {
                   name: toolName,
                   arguments: parsed.arguments,
@@ -309,14 +359,16 @@ export default function AiChatPage() {
           } else if (ev.event === "thought_expanded") {
             try {
               const parsed = JSON.parse(ev.data) as { expanded?: string };
-              if (parsed.expanded) {
+              if (parsed.expanded && isMountedRef.current) {
                 setExpandedThinking(parsed.expanded);
               }
             } catch {
               // Ignore malformed expanded thinking.
             }
           } else if (ev.event === "error") {
-            toast.error(ev.data);
+            if (isMountedRef.current) {
+              toast.error(ev.data);
+            }
             throw new Error(ev.data || "SSE server error");
           }
         },
@@ -345,9 +397,14 @@ export default function AiChatPage() {
       loadSessions();
 
     } catch (err) {
+      clearPendingRequest(targetSession.id);
+      stopPolling();
+      if (isMountedRef.current) {
+        resetStreamingUi();
+      }
       const isAbort = err instanceof DOMException && err.name === "AbortError";
-      if (!isAbort) {
-        toast.error(t("copilot.error_ai_connection"));
+      if (!isAbort && isMountedRef.current) {
+        toast.error(getApiErrorMessage(err) || t("copilot.error_ai_connection"));
       }
     } finally {
       if (activeStreamControllerRef.current === controller) {
@@ -355,11 +412,7 @@ export default function AiChatPage() {
       }
       if (isMountedRef.current) {
         if (streamCompleted) {
-          setIsStreaming(false);
-          setIsThinking(false);
-          setCurrentStreamMsg("");
-          setStreamingSessionId(null);
-          setToolEvents([]);
+          resetStreamingUi();
         }
       }
     }
@@ -394,36 +447,102 @@ export default function AiChatPage() {
     return steps;
   };
 
-  // Helper to render AI message with <think> tag support
-  const renderAiMessage = (content: string, tools: typeof toolEvents = [], expanded?: string | null) => {
-    const thinkStart = content.indexOf("<think>");
-    const thinkEnd = content.indexOf("</think>");
+  const extractThinkPayload = (content: string) => {
+    const openTag = "<think>";
+    const closeTag = "</think>";
 
-    if (thinkStart !== -1) {
-      const beforeThink = content.substring(0, thinkStart);
-      const isThinkingComplete = thinkEnd > thinkStart;
+    const beforeFirstThinkParts: string[] = [];
+    const afterFirstThinkParts: string[] = [];
+    const thinkBlocks: string[] = [];
+
+    let cursor = 0;
+    let hasThinkTag = false;
+    let hasUnclosedThink = false;
+
+    while (cursor < content.length) {
+      const start = content.indexOf(openTag, cursor);
+
+      if (start === -1) {
+        if (hasThinkTag) {
+          afterFirstThinkParts.push(content.slice(cursor));
+        } else {
+          beforeFirstThinkParts.push(content.slice(cursor));
+        }
+        break;
+      }
+
+      if (!hasThinkTag) {
+        beforeFirstThinkParts.push(content.slice(cursor, start));
+        hasThinkTag = true;
+      } else {
+        afterFirstThinkParts.push(content.slice(cursor, start));
+      }
+
+      const end = content.indexOf(closeTag, start + openTag.length);
+      if (end === -1) {
+        hasUnclosedThink = true;
+        thinkBlocks.push(content.slice(start + openTag.length));
+        break;
+      }
+
+      thinkBlocks.push(content.slice(start + openTag.length, end));
+      cursor = end + closeTag.length;
+    }
+
+    const sanitizeAnswerText = (text: string) =>
+      text.replace(/<\/?think>/gi, "").trim();
+
+    const beforeThink = sanitizeAnswerText(beforeFirstThinkParts.join(""));
+    const afterThink = sanitizeAnswerText(afterFirstThinkParts.join(""));
+    const thinkingText = thinkBlocks
+      .map((block) => block.trim())
+      .filter((block) => block.length > 0)
+      .join("\n\n");
+
+    return {
+      hasThinkTag,
+      hasUnclosedThink,
+      beforeThink,
+      afterThink,
+      thinkingText,
+    };
+  };
+
+  // Helper to render AI message with <think> tag support
+  const renderAiMessage = (
+    content: string,
+    tools: typeof toolEvents = [],
+    expanded?: string | null,
+    collapseWhenComplete = false,
+  ) => {
+    const parsed = extractThinkPayload(content);
+
+    if (parsed.hasThinkTag) {
+      const isThinkingComplete = !parsed.hasUnclosedThink;
 
       // Use expanded thinking if available and thinking is complete
       const displayThinking = (isThinkingComplete && expanded)
         ? expanded
-        : (isThinkingComplete
-          ? content.substring(thinkStart + 7, thinkEnd)
-          : content.substring(thinkStart + 7));
-
-      const afterThink = isThinkingComplete ? content.substring(thinkEnd + 8) : "";
+        : parsed.thinkingText;
 
       const steps = parseThinkingToSteps(displayThinking);
+      const shouldCollapse = collapseWhenComplete && isThinkingComplete;
 
       return (
         <div className="flex flex-col gap-4">
-          {beforeThink && <div className="prose prose-sm dark:prose-invert max-w-full"><ReactMarkdown remarkPlugins={[remarkGfm]}>{beforeThink}</ReactMarkdown></div>}
+          {parsed.beforeThink && <div className="prose prose-sm dark:prose-invert max-w-full"><ReactMarkdown remarkPlugins={[remarkGfm]}>{parsed.beforeThink}</ReactMarkdown></div>}
 
-          <div className="space-y-3 bg-muted/30 p-4 rounded-xl border border-border/50">
-            <div className="flex items-center gap-2 text-sm font-semibold text-primary mb-2">
-              <BrainCircuit className="w-4 h-4" />
-              <span>{t("copilot.thinking_accordion_label")}</span>
-              {!isThinkingComplete && <Loader2 className="w-3 h-3 animate-spin ml-1" />}
-            </div>
+          <details
+            className="space-y-3 bg-muted/30 p-4 rounded-xl border border-border/50"
+            open={!shouldCollapse}
+          >
+            <summary className="list-none cursor-pointer">
+              <div className="flex items-center gap-2 text-sm font-semibold text-primary mb-2">
+                <BrainCircuit className="w-4 h-4" />
+                <span>{t("copilot.thinking_accordion_label")}</span>
+                {!isThinkingComplete && <Loader2 className="w-3 h-3 animate-spin ml-1" />}
+              </div>
+            </summary>
 
             <div className="space-y-4 relative before:absolute before:left-[11px] before:top-2 before:bottom-2 before:w-[2px] before:bg-border/60">
               {steps.map((step, idx) => (
@@ -466,11 +585,11 @@ export default function AiChatPage() {
                 </div>
               ))}
             </div>
-          </div>
+          </details>
 
-          {afterThink && (
+          {parsed.afterThink && (
             <div className="prose prose-sm dark:prose-invert max-w-full pt-2 border-t border-border/30 mt-2">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>{afterThink}</ReactMarkdown>
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{parsed.afterThink}</ReactMarkdown>
             </div>
           )}
         </div>
@@ -618,7 +737,7 @@ export default function AiChatPage() {
                 {msg.sender === "USER" ? (
                   <div className="whitespace-pre-wrap">{msg.content}</div>
                 ) : (
-                  renderAiMessage(msg.content)
+                  renderAiMessage(msg.content, [], null, true)
                 )}
               </div>
 
@@ -674,6 +793,9 @@ export default function AiChatPage() {
               <Send className="w-4 h-4 ml-1" />
             </Button>
           </form>
+          <div className="mt-2 text-right text-xs text-muted-foreground">
+            {inputVal.length}/{MAX_PROMPT_CHARS}
+          </div>
           <div className="text-center text-xs font-medium text-foreground/80 mt-2 drop-shadow-sm">
             {t("copilot.disclaimer")}
           </div>

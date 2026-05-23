@@ -21,7 +21,12 @@ import {
   Settings,
   Archive,
   ArrowLeftRight,
-  ArrowLeft
+  ArrowLeft,
+  CalendarDays,
+  MoreHorizontal,
+  Play,
+  SquareCheckBig,
+  Trash2
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { toast } from "react-toastify";
@@ -51,13 +56,16 @@ import {
 import { getApiErrorMessage } from "@/lib/http";
 import { projectService } from "@/services/project.service";
 import { taskService } from "@/services/task.service";
+import { sprintService } from "@/services/sprint.service";
 import { profileService } from "@/services/profile.service";
 import { projectStorage } from "@/lib/storage";
 import { TaskDetailSheet } from "@/components/tasks/TaskDetailSheet";
 import type { MyProject, Project, ProjectMember, ProjectSummary } from "@/types/project";
 import type { TaskDetailDto, TaskDto, TaskPriority, TaskStatus } from "@/types/task";
+import type { BacklogResponse, BoardResponse, SprintDto } from "@/types/sprint";
+import type { TimelineResponse, TimelineTaskDto } from "@/types/timeline";
 
-const VALID_TABS = ["overview", "board", "backlog"] as const;
+const VALID_TABS = ["overview", "board", "backlog", "timeline"] as const;
 type ViewMode = (typeof VALID_TABS)[number];
 type BacklogSortMode = "position" | "createdAt" | "priority";
 const VALID_TAB_SET = new Set<string>(VALID_TABS);
@@ -85,6 +93,7 @@ const formSchema = z.object({
   description: z.string().optional(),
   priority: z.enum(["LOW", "MEDIUM", "HIGH", "URGENT"]),
   assigneeId: z.string().optional(),
+  sprintId: z.string().optional(),
   startDate: z.string().optional(),
   dueDate: z.string().optional(),
 });
@@ -105,12 +114,19 @@ export default function ProjectWorkspacePage() {
   const [myProjects, setMyProjects] = useState<MyProject[]>([]);
   const [projectMembers, setProjectMembers] = useState<ProjectMember[]>([]);
   const [tasks, setTasks] = useState<TaskDto[]>([]);
+  const [boardData, setBoardData] = useState<BoardResponse | null>(null);
+  const [backlogData, setBacklogData] = useState<BacklogResponse | null>(null);
+  const [timelineData, setTimelineData] = useState<TimelineResponse | null>(null);
+  const [sprints, setSprints] = useState<SprintDto[]>([]);
   const [projectSummary, setProjectSummary] = useState<ProjectSummary | null>(null);
   const [myUserId, setMyUserId] = useState<number | null>(null);
+  const [loadedProjectId, setLoadedProjectId] = useState<number | null>(null);
   const [isLoadingTasks, setIsLoadingTasks] = useState(false);
 
   // Modals
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [createTaskSprintId, setCreateTaskSprintId] = useState<number | null>(null);
+  const [isSprintDialogOpen, setIsSprintDialogOpen] = useState(false);
   const [isTaskDetailOpen, setIsTaskDetailOpen] = useState(false);
   const [selectedTaskDetail, setSelectedTaskDetail] = useState<TaskDetailDto | null>(null);
 
@@ -127,28 +143,75 @@ export default function ProjectWorkspacePage() {
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
-    defaultValues: { title: "", description: "", priority: "MEDIUM", assigneeId: "unassigned" },
+    defaultValues: { title: "", description: "", priority: "MEDIUM", assigneeId: "unassigned", sprintId: "none" },
+  });
+
+  const sprintForm = useForm({
+    defaultValues: { name: "", goal: "", startDate: "", endDate: "" },
   });
 
   // Removed projectForm since it's no longer needed (Settings page is canonical)
 
+  const mergeTasks = (nextTasks: TaskDto[]) => {
+    setTasks(prev => Array.from(new Map([...prev, ...nextTasks].map(task => [task.id, task])).values()));
+  };
+
+  const loadBaseData = async (pid: number) => {
+    const [projRes, membersRes, sprintRes, summaryRes, profileRes, myProjectsRes] = await Promise.all([
+      projectService.getProjectDetail(pid),
+      projectService.getProjectMembers(pid),
+      sprintService.listSprints(pid),
+      projectService.getProjectSummary(pid),
+      profileService.getMe(),
+      projectService.getMyProjects(0, 100)
+    ]);
+
+    setProject(projRes.data);
+    setProjectMembers(membersRes.data);
+    setSprints(sprintRes.data);
+    setProjectSummary(summaryRes.data);
+    setMyUserId(profileRes.data.id);
+    setMyProjects(myProjectsRes.data.content);
+  };
+
+  const loadTabData = async (pid: number, tab: ViewMode, force = false) => {
+    if (tab === "board" || tab === "overview") {
+      if (!force && boardData) return;
+      const boardRes = await sprintService.getBoard(pid);
+      setBoardData(boardRes.data);
+      mergeTasks(boardRes.data.tasks);
+      return;
+    }
+
+    if (tab === "backlog") {
+      if (!force && backlogData) return;
+      const backlogRes = await sprintService.getBacklog(pid);
+      setBacklogData(backlogRes.data);
+      mergeTasks([
+        ...backlogRes.data.unscheduledTasks,
+        ...backlogRes.data.sprints.flatMap(section => section.tasks),
+      ]);
+      return;
+    }
+
+    if (tab === "timeline") {
+      if (!force && timelineData) return;
+      const timelineRes = await sprintService.getTimeline(pid);
+      setTimelineData(timelineRes.data);
+    }
+  };
+
   const loadData = async (pid: number) => {
     setIsLoadingTasks(true);
     try {
-      const [projRes, membersRes, tasksRes, summaryRes, profileRes, myProjectsRes] = await Promise.all([
-        projectService.getProjectDetail(pid),
-        projectService.getProjectMembers(pid),
-        taskService.getTasksByProject(pid),
-        projectService.getProjectSummary(pid),
-        profileService.getMe(),
-        projectService.getMyProjects(0, 100)
-      ]);
-      setProject(projRes.data);
-      setProjectMembers(membersRes.data);
-      setTasks(tasksRes.data);
-      setProjectSummary(summaryRes.data);
-      setMyUserId(profileRes.data.id);
-      setMyProjects(myProjectsRes.data.content);
+      setTasks([]);
+      setBoardData(null);
+      setBacklogData(null);
+      setTimelineData(null);
+      setLoadedProjectId(null);
+      await loadBaseData(pid);
+      await loadTabData(pid, activeTab, true);
+      setLoadedProjectId(pid);
     } catch (error) {
       toast.error(getApiErrorMessage(error));
     } finally {
@@ -164,40 +227,54 @@ export default function ProjectWorkspacePage() {
   }, [currentProjectId]);
 
   useEffect(() => {
+    if (!currentProjectId || loadedProjectId !== currentProjectId) {
+      return;
+    }
+
+    setIsLoadingTasks(true);
+    loadTabData(currentProjectId, activeTab)
+      .catch(error => toast.error(getApiErrorMessage(error)))
+      .finally(() => setIsLoadingTasks(false));
+  }, [activeTab, currentProjectId, loadedProjectId]);
+
+  useEffect(() => {
     if (tabId && !isViewMode(tabId) && currentProjectId) {
       navigate(`/projects/${currentProjectId}/board`, { replace: true });
     }
   }, [tabId, currentProjectId, navigate]);
 
   useEffect(() => {
-    if (currentTaskId && !isTaskDetailOpen && tasks.length > 0) {
+    if (currentTaskId && !isTaskDetailOpen) {
       openTaskDetail(currentTaskId);
     }
-  }, [currentTaskId, tasks]);
+  }, [currentTaskId, isTaskDetailOpen]);
 
-  const filteredTasks = useMemo(() => {
-    return tasks.filter((task) => {
-      const query = searchInput.trim().toLowerCase();
-      if (query.length === 0) return true;
-      return (
-        task.id.toString().includes(query) ||
-        task.title.toLowerCase().includes(query)
-      );
-    });
-  }, [searchInput, tasks]);
-
-  // For board: include all tasks
   const groupedKanban = useMemo(() => {
+    const visibleTasks = boardData?.tasks ?? tasks;
+    const filteredVisibleTasks = visibleTasks.filter((task) => {
+      const query = searchInput.trim().toLowerCase();
+      return query.length === 0 || task.id.toString().includes(query) || task.title.toLowerCase().includes(query);
+    });
     return statusOrder.map((status) => ({
       status,
-      tasks: filteredTasks.filter((task) => task.status === status).sort((a, b) => a.position - b.position),
+      tasks: filteredVisibleTasks.filter((task) => task.status === status).sort((a, b) => a.position - b.position),
     }));
-  }, [filteredTasks]);
+  }, [boardData, searchInput, tasks]);
+
+  const openCreateTask = (sprintId: number | null) => {
+    setCreateTaskSprintId(sprintId);
+    form.setValue("sprintId", sprintId ? String(sprintId) : "none");
+    setIsCreateModalOpen(true);
+  };
 
   const onSubmitCreate = async (values: z.infer<typeof formSchema>) => {
     try {
+      const selectedSprintId = values.sprintId && values.sprintId !== "none"
+        ? Number(values.sprintId)
+        : createTaskSprintId;
       await taskService.createTask({
         projectId: currentProjectId,
+        sprintId: selectedSprintId ?? undefined,
         title: values.title,
         description: values.description,
         priority: values.priority,
@@ -209,6 +286,39 @@ export default function ProjectWorkspacePage() {
       toast.success("Task created successfully");
       setIsCreateModalOpen(false);
       form.reset();
+      setCreateTaskSprintId(null);
+      void loadData(currentProjectId);
+    } catch (error) {
+      toast.error(getApiErrorMessage(error));
+    }
+  };
+
+  const onSubmitSprint = async (values: { name: string; goal: string; startDate: string; endDate: string }) => {
+    try {
+      await sprintService.createSprint(currentProjectId, {
+        name: values.name,
+        goal: values.goal || undefined,
+        startDate: values.startDate || undefined,
+        endDate: values.endDate || undefined,
+      });
+      toast.success("Sprint created");
+      setIsSprintDialogOpen(false);
+      sprintForm.reset();
+      void loadData(currentProjectId);
+    } catch (error) {
+      toast.error(getApiErrorMessage(error));
+    }
+  };
+
+  const handleSprintAction = async (action: "start" | "complete" | "delete", sprint: SprintDto) => {
+    try {
+      if (action === "start") await sprintService.startSprint(currentProjectId, sprint.id);
+      if (action === "complete") await sprintService.completeSprint(currentProjectId, sprint.id);
+      if (action === "delete") {
+        if (!window.confirm("Delete this planning sprint? Tasks will return to Backlog / Unscheduled.")) return;
+        await sprintService.deleteSprint(currentProjectId, sprint.id);
+      }
+      toast.success("Sprint updated");
       void loadData(currentProjectId);
     } catch (error) {
       toast.error(getApiErrorMessage(error));
@@ -342,6 +452,75 @@ export default function ProjectWorkspacePage() {
     return grouped;
   }, [tasks]);
 
+  const timelineBounds = useMemo(() => {
+    const dates: number[] = [];
+    const addDate = (value?: string | null) => {
+      if (value) dates.push(new Date(value).getTime());
+    };
+    addDate(timelineData?.project.startDate);
+    addDate(timelineData?.project.endDate);
+    timelineData?.sprints.forEach(sprint => {
+      addDate(sprint.startDate);
+      addDate(sprint.endDate);
+      sprint.tasks.forEach(task => {
+        addDate(task.startDate);
+        addDate(task.dueDate);
+      });
+    });
+    timelineData?.unscheduledTasks.forEach(task => {
+      addDate(task.startDate);
+      addDate(task.dueDate);
+    });
+    const now = Date.now();
+    const min = dates.length ? Math.min(...dates) : now;
+    const max = dates.length ? Math.max(...dates) : now + 1000 * 60 * 60 * 24 * 14;
+    return { min, max: Math.max(max, min + 1000 * 60 * 60 * 24) };
+  }, [timelineData]);
+
+  const getTimelinePosition = (start?: string | null, end?: string | null) => {
+    if (!start || !end) return null;
+    const startTime = new Date(start).getTime();
+    const endTime = new Date(end).getTime();
+    const span = timelineBounds.max - timelineBounds.min;
+    const left = Math.max(0, ((startTime - timelineBounds.min) / span) * 100);
+    const width = Math.max(2, ((endTime - startTime) / span) * 100);
+    return { left: `${left}%`, width: `${Math.min(width, 100 - left)}%` };
+  };
+
+  const buildTimelineLanes = (items: TimelineTaskDto[]) => {
+    const dated = items.filter(task => task.startDate && task.dueDate)
+      .sort((a, b) => new Date(a.startDate!).getTime() - new Date(b.startDate!).getTime());
+    const lanes: TimelineTaskDto[][] = [];
+    dated.forEach(task => {
+      const start = new Date(task.startDate!).getTime();
+      const lane = lanes.find(existing => {
+        const last = existing[existing.length - 1];
+        return last.dueDate && new Date(last.dueDate).getTime() < start;
+      });
+      if (lane) lane.push(task);
+      else lanes.push([task]);
+    });
+    return { lanes, noDates: items.filter(task => !task.startDate || !task.dueDate) };
+  };
+
+  const renderTaskTimelineBar = (task: TimelineTaskDto) => {
+    const position = getTimelinePosition(task.startDate, task.dueDate);
+    if (!position) return null;
+    const overdue = task.dueDate && task.status !== "DONE" && new Date(task.dueDate).getTime() < Date.now();
+    return (
+      <button
+        key={task.id}
+        type="button"
+        className={`absolute top-1 h-8 rounded-md border px-2 text-left text-xs shadow-sm overflow-hidden whitespace-nowrap ${overdue ? "border-red-500 bg-red-500/10 text-red-700 dark:text-red-300" : "border-primary/30 bg-primary/10 text-primary"}`}
+        style={position}
+        onClick={() => openTaskDetail(task.id)}
+        title={`${task.title} (${task.status})`}
+      >
+        TP-{task.id} {task.title}
+      </button>
+    );
+  };
+
   const renderBacklogTask = (task: TaskDto, level = 0) => {
     const subtasks = tasksByParentId.get(task.id) ?? [];
     const hasSubtasks = subtasks.length > 0;
@@ -459,7 +638,11 @@ export default function ProjectWorkspacePage() {
 
           <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
             <DialogTrigger asChild>
-              <Button className="gap-2 shadow-sm" disabled={isArchived}>
+              <Button
+                className="gap-2 shadow-sm"
+                disabled={isArchived || (activeTab === "board" && boardData?.workflowMode === "SCRUM" && !boardData.activeSprint)}
+                onClick={() => openCreateTask(activeTab === "board" && boardData?.workflowMode === "SCRUM" ? boardData.activeSprint?.id ?? null : null)}
+              >
                 <PlusCircle className="h-4 w-4" />
                 Create Task
               </Button>
@@ -502,6 +685,19 @@ export default function ProjectWorkspacePage() {
                         </Select><FormMessage />
                       </FormItem>
                     )} />
+                    <FormField control={form.control} name="sprintId" render={({ field }) => (
+                      <FormItem><FormLabel>Sprint</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value || "none"}>
+                          <FormControl><SelectTrigger><SelectValue placeholder="Backlog / Unscheduled" /></SelectTrigger></FormControl>
+                          <SelectContent>
+                            <SelectItem value="none">Backlog / Unscheduled</SelectItem>
+                            {sprints.filter(sprint => sprint.status !== "COMPLETED").map((sprint) => (
+                              <SelectItem key={sprint.id} value={String(sprint.id)}>{sprint.name} - {sprint.status}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </FormItem>
+                    )} />
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <FormField control={form.control} name="startDate" render={({ field }) => (
@@ -528,6 +724,45 @@ export default function ProjectWorkspacePage() {
             </DialogContent>
           </Dialog>
 
+          <Dialog open={isSprintDialogOpen} onOpenChange={setIsSprintDialogOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline" className="gap-2 shadow-sm" disabled={isArchived}>
+                <CalendarDays className="h-4 w-4" />
+                Create Sprint
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Create Sprint</DialogTitle>
+                <DialogDescription>Add a planning sprint to the backlog.</DialogDescription>
+              </DialogHeader>
+              <form onSubmit={sprintForm.handleSubmit(onSubmitSprint)} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="sprint-name">Sprint name</Label>
+                  <Input id="sprint-name" {...sprintForm.register("name", { required: true })} placeholder="Sprint 1" />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="sprint-goal">Goal</Label>
+                  <Textarea id="sprint-goal" {...sprintForm.register("goal")} placeholder="Build the next focused increment" />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-2">
+                    <Label htmlFor="sprint-start">Start date</Label>
+                    <Input id="sprint-start" type="date" {...sprintForm.register("startDate")} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="sprint-end">End date</Label>
+                    <Input id="sprint-end" type="date" {...sprintForm.register("endDate")} />
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button type="button" variant="outline" onClick={() => setIsSprintDialogOpen(false)}>Cancel</Button>
+                  <Button type="submit">Create Sprint</Button>
+                </DialogFooter>
+              </form>
+            </DialogContent>
+          </Dialog>
+
           <Button type="button" variant="outline" className="gap-2 shadow-sm" onClick={() => void loadData(currentProjectId)}>
             <RefreshCw className={`h-4 w-4 ${isLoadingTasks ? 'animate-spin' : ''}`} />
           </Button>
@@ -546,6 +781,9 @@ export default function ProjectWorkspacePage() {
             </Button>
             <Button type="button" variant={activeTab === "backlog" ? "secondary" : "ghost"} className={`gap-2 ${activeTab === "backlog" ? "bg-muted" : "hover:bg-muted/50"}`} onClick={() => navigate(`/projects/${currentProjectId}/backlog`)}>
               <ListChecks className="h-4 w-4" /> Backlog
+            </Button>
+            <Button type="button" variant={activeTab === "timeline" ? "secondary" : "ghost"} className={`gap-2 ${activeTab === "timeline" ? "bg-muted" : "hover:bg-muted/50"}`} onClick={() => navigate(`/projects/${currentProjectId}/timeline`)}>
+              <CalendarDays className="h-4 w-4" /> Timeline
             </Button>
           </div>
           <div className="relative md:w-72">
@@ -566,6 +804,15 @@ export default function ProjectWorkspacePage() {
           <>
             {activeTab === "board" && (
               <div className="overflow-x-auto pb-4 bg-transparent">
+                {boardData?.workflowMode === "SCRUM" && !boardData.activeSprint ? (
+                  <Card className="max-w-xl mx-auto mt-20 border-dashed">
+                    <CardContent className="p-10 text-center text-muted-foreground">
+                      <CircleDashed className="h-10 w-10 mx-auto mb-3 opacity-50" />
+                      <p className="font-medium text-foreground">No active sprint.</p>
+                      <p className="text-sm mt-1">Start a sprint from Backlog to view work on the board.</p>
+                    </CardContent>
+                  </Card>
+                ) : (
                 <div className="flex min-w-[1000px] gap-5 h-[900px]">
                   {groupedKanban.map((column) => (
                     <div
@@ -632,6 +879,7 @@ export default function ProjectWorkspacePage() {
                     </div>
                   ))}
                 </div>
+                )}
               </div>
             )}
 
@@ -794,7 +1042,7 @@ export default function ProjectWorkspacePage() {
                       <CardContent className="p-5">
                         <h3 className="text-sm font-semibold mb-3 text-primary">Quick Actions</h3>
                         <div className="space-y-2">
-                          <Button className="w-full justify-start bg-background hover:bg-muted text-foreground border shadow-sm" variant="outline" onClick={() => setIsCreateModalOpen(true)}>
+                          <Button className="w-full justify-start bg-background hover:bg-muted text-foreground border shadow-sm" variant="outline" disabled={isArchived} onClick={() => openCreateTask(null)}>
                             <PlusCircle className="mr-2 h-4 w-4 text-primary" /> Create Task
                           </Button>
                           <Button className="w-full justify-start bg-background hover:bg-muted text-foreground border shadow-sm" variant="outline" onClick={() => navigate(`/projects/${currentProjectId}/board`)}>
@@ -805,6 +1053,101 @@ export default function ProjectWorkspacePage() {
                     </Card>
                   </div>
                 </div>
+              </div>
+            )}
+
+            {activeTab === "timeline" && (
+              <div className="pt-2 bg-transparent">
+                <Card className="max-w-6xl mx-auto shadow-sm border-muted/60">
+                  <CardHeader className="border-b border-border/40 bg-muted/10">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <CardTitle className="flex items-center gap-2 text-xl">
+                          <CalendarDays className="h-5 w-5 text-primary" /> Timeline
+                        </CardTitle>
+                        <CardDescription className="mt-1">
+                          Read-only schedule view using your browser timezone.
+                        </CardDescription>
+                      </div>
+                      <div className="text-sm text-muted-foreground">
+                        {timelineData?.project.startDate || "No start"} &rarr; {timelineData?.project.endDate || "No end"}
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="p-4 space-y-5">
+                    <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                      <span className="inline-flex items-center gap-1"><span className="h-2 w-5 rounded bg-primary/30" /> Scheduled</span>
+                      <span className="inline-flex items-center gap-1"><span className="h-2 w-5 rounded bg-red-500/30" /> Overdue</span>
+                      <span>No dependencies or editing in this view.</span>
+                    </div>
+                    {timelineData?.sprints.map(sprint => {
+                      const sprintPosition = getTimelinePosition(sprint.startDate, sprint.endDate);
+                      const { lanes, noDates } = buildTimelineLanes(sprint.tasks);
+                      return (
+                        <section key={sprint.id} className="rounded-lg border bg-background/70 p-4">
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="flex items-center gap-2">
+                              <h3 className="font-semibold">{sprint.name}</h3>
+                              <Badge variant={sprint.status === "ACTIVE" ? "default" : "secondary"}>{sprint.status}</Badge>
+                            </div>
+                            <span className="text-xs text-muted-foreground">{sprint.startDate || "No start"} &rarr; {sprint.endDate || "No end"}</span>
+                          </div>
+                          <div className="relative mt-3 h-10 rounded-md bg-muted/30">
+                            {sprintPosition && (
+                              <div className="absolute top-2 h-6 rounded bg-foreground/10 border border-border" style={sprintPosition} />
+                            )}
+                          </div>
+                          <div className="mt-2 space-y-2">
+                            {lanes.map((lane, index) => (
+                              <div key={index} className="relative h-10 rounded-md bg-muted/20">
+                                {lane.map(renderTaskTimelineBar)}
+                              </div>
+                            ))}
+                          </div>
+                          {noDates.length > 0 && (
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              <span className="text-xs text-muted-foreground">No dates:</span>
+                              {noDates.map(task => (
+                                <Button key={task.id} size="sm" variant="outline" className="h-7 text-xs" onClick={() => openTaskDetail(task.id)}>
+                                  TP-{task.id} {task.title}
+                                </Button>
+                              ))}
+                            </div>
+                          )}
+                        </section>
+                      );
+                    })}
+                    {timelineData && (() => {
+                      const { lanes, noDates } = buildTimelineLanes(timelineData.unscheduledTasks);
+                      return (
+                        <section className="rounded-lg border bg-background/70 p-4">
+                          <div className="flex items-center justify-between">
+                            <h3 className="font-semibold">Unscheduled / Backlog</h3>
+                            <Badge variant="outline">{timelineData.unscheduledTasks.length} tasks</Badge>
+                          </div>
+                          <div className="mt-3 space-y-2">
+                            {lanes.map((lane, index) => (
+                              <div key={index} className="relative h-10 rounded-md bg-muted/20">
+                                {lane.map(renderTaskTimelineBar)}
+                              </div>
+                            ))}
+                            {lanes.length === 0 && <p className="text-sm text-muted-foreground">No scheduled backlog tasks.</p>}
+                          </div>
+                          {noDates.length > 0 && (
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              <span className="text-xs text-muted-foreground">No dates:</span>
+                              {noDates.map(task => (
+                                <Button key={task.id} size="sm" variant="outline" className="h-7 text-xs" onClick={() => openTaskDetail(task.id)}>
+                                  TP-{task.id} {task.title}
+                                </Button>
+                              ))}
+                            </div>
+                          )}
+                        </section>
+                      );
+                    })()}
+                  </CardContent>
+                </Card>
               </div>
             )}
 
@@ -834,22 +1177,93 @@ export default function ProjectWorkspacePage() {
                     </div>
                   </CardHeader>
                   <CardContent className="p-4">
-                    <div className="space-y-1">
-                      {tasks.filter(t => t.parentId == null).length === 0 ? (
+                    <div className="space-y-4">
+                      {!backlogData || (backlogData.unscheduledTasks.length === 0 && backlogData.sprints.length === 0) ? (
                         <div className="text-center p-8 text-muted-foreground border-2 border-dashed rounded-lg bg-muted/10">
                           <ListChecks className="mx-auto h-8 w-8 mb-3 opacity-20" />
                           <p>Backlog is empty. Create tasks to start planning.</p>
                         </div>
                       ) : (
-                        tasks.filter(t => t.parentId == null).sort((a, b) => {
-                          if (sortBy === "priority") {
-                            return priorityScore[b.priority] - priorityScore[a.priority];
-                          }
-                          if (sortBy === "createdAt") {
-                            return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-                          }
-                          return a.position - b.position;
-                        }).map(task => renderBacklogTask(task, 0))
+                        <>
+                          <section className="rounded-lg border bg-background/60">
+                            <div className="flex items-center justify-between border-b px-4 py-3">
+                              <div>
+                                <h3 className="font-semibold">Backlog / Unscheduled</h3>
+                                <p className="text-xs text-muted-foreground">{backlogData.unscheduledTasks.length} tasks</p>
+                              </div>
+                              <Button size="sm" variant="outline" disabled={isArchived} onClick={() => openCreateTask(null)}>
+                                <PlusCircle className="mr-2 h-4 w-4" /> Create Task
+                              </Button>
+                            </div>
+                            <div className="p-3">
+                              {backlogData.unscheduledTasks.filter(t => t.parentId == null).length === 0 ? (
+                                <p className="p-4 text-sm text-muted-foreground">No unscheduled tasks.</p>
+                              ) : (
+                                backlogData.unscheduledTasks.filter(t => t.parentId == null).sort((a, b) => {
+                                  if (sortBy === "priority") return priorityScore[b.priority] - priorityScore[a.priority];
+                                  if (sortBy === "createdAt") return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+                                  return a.position - b.position;
+                                }).map(task => renderBacklogTask(task, 0))
+                              )}
+                            </div>
+                          </section>
+
+                          {backlogData.sprints.map(section => (
+                            <section key={section.sprint.id} className="rounded-lg border bg-background/60">
+                              <div className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3">
+                                <div className="space-y-1">
+                                  <div className="flex items-center gap-2">
+                                    <h3 className="font-semibold">{section.sprint.name}</h3>
+                                    <Badge variant={section.sprint.status === "ACTIVE" ? "default" : "secondary"}>{section.sprint.status}</Badge>
+                                    <Badge variant="outline">{section.tasks.length} tasks</Badge>
+                                  </div>
+                                  <p className="text-xs text-muted-foreground">
+                                    {section.sprint.startDate || "No start"} &rarr; {section.sprint.endDate || "No end"}
+                                    {section.sprint.goal ? ` · ${section.sprint.goal}` : ""}
+                                  </p>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  {section.sprint.status !== "COMPLETED" && (
+                                    <Button size="sm" variant="outline" disabled={isArchived} onClick={() => openCreateTask(section.sprint.id)}>
+                                      <PlusCircle className="mr-2 h-4 w-4" /> Create Task
+                                    </Button>
+                                  )}
+                                  <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                      <Button size="icon" variant="ghost" disabled={isArchived || section.sprint.status === "COMPLETED"}>
+                                        <MoreHorizontal className="h-4 w-4" />
+                                      </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end">
+                                      {section.sprint.status === "PLANNING" && (
+                                        <>
+                                          <DropdownMenuItem onClick={() => handleSprintAction("start", section.sprint)}>
+                                            <Play className="mr-2 h-4 w-4" /> Start Sprint
+                                          </DropdownMenuItem>
+                                          <DropdownMenuItem className="text-red-600" onClick={() => handleSprintAction("delete", section.sprint)}>
+                                            <Trash2 className="mr-2 h-4 w-4" /> Delete Sprint
+                                          </DropdownMenuItem>
+                                        </>
+                                      )}
+                                      {section.sprint.status === "ACTIVE" && (
+                                        <DropdownMenuItem onClick={() => handleSprintAction("complete", section.sprint)}>
+                                          <SquareCheckBig className="mr-2 h-4 w-4" /> Complete Sprint
+                                        </DropdownMenuItem>
+                                      )}
+                                    </DropdownMenuContent>
+                                  </DropdownMenu>
+                                </div>
+                              </div>
+                              <div className="p-3">
+                                {section.tasks.filter(t => t.parentId == null).length === 0 ? (
+                                  <p className="p-4 text-sm text-muted-foreground">No tasks in this sprint.</p>
+                                ) : (
+                                  section.tasks.filter(t => t.parentId == null).sort((a, b) => a.position - b.position).map(task => renderBacklogTask(task, 0))
+                                )}
+                              </div>
+                            </section>
+                          ))}
+                        </>
                       )}
                     </div>
                   </CardContent>
