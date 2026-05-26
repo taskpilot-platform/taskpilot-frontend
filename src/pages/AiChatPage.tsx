@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Send, Bot, User, Trash2, Plus, Loader2, ChevronRight, ChevronLeft, CheckCircle2, Search, BrainCircuit, Zap } from "lucide-react";
+import { Send, Bot, User, Trash2, Plus, Loader2, ChevronRight, ChevronLeft, CheckCircle2, Search, BrainCircuit, Database, PencilLine } from "lucide-react";
 import { fetchEventSource } from "@microsoft/fetch-event-source";
 import { toast } from "react-toastify";
 import { useTranslation } from "react-i18next";
@@ -14,6 +14,85 @@ import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080/api";
+
+type ToolAccess = "read" | "write";
+
+type ToolEvent = {
+  name: string;
+  arguments?: string;
+  result?: string;
+};
+
+const WRITE_TOOL_NAMES = new Set(["assignTaskToMember", "updateTaskStatus", "createTask"]);
+
+function getToolAccess(name: string): ToolAccess {
+  return WRITE_TOOL_NAMES.has(name) ? "write" : "read";
+}
+
+function formatToolPayload(value?: string) {
+  if (!value) return null;
+  try {
+    return JSON.stringify(JSON.parse(value), null, 2);
+  } catch {
+    return value;
+  }
+}
+
+function summarizeToolResult(value?: string) {
+  if (!value) return null;
+  try {
+    const parsed = JSON.parse(value);
+    if (Array.isArray(parsed)) {
+      return `${parsed.length} item${parsed.length === 1 ? "" : "s"}`;
+    }
+    if (parsed && typeof parsed === "object") {
+      const record = parsed as Record<string, unknown>;
+      if (typeof record.title === "string" && typeof record.status === "string") {
+        return `${record.title} - ${record.status}`;
+      }
+      if (typeof record.status === "string") {
+        return record.status;
+      }
+      if (typeof record.name === "string") {
+        return record.name;
+      }
+    }
+  } catch {
+    // Plain text result.
+  }
+  return value.length > 160 ? `${value.slice(0, 160)}...` : value;
+}
+
+function ToolEventCard({ tool, compact = false }: { tool: ToolEvent; compact?: boolean }) {
+  const access = getToolAccess(tool.name);
+  const Icon = access === "write" ? PencilLine : Database;
+  const formattedArgs = formatToolPayload(tool.arguments);
+  const formattedResult = formatToolPayload(tool.result);
+  const resultSummary = summarizeToolResult(tool.result);
+
+  return (
+    <div className={`rounded-lg border ${access === "write" ? "border-amber-300/60 bg-amber-50/70 text-amber-950 dark:bg-amber-950/20 dark:text-amber-100" : "border-blue-300/50 bg-blue-50/70 text-blue-950 dark:bg-blue-950/20 dark:text-blue-100"} ${compact ? "p-2" : "p-3"}`}>
+      <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide">
+        <Icon className="h-3.5 w-3.5" />
+        <span>{access === "write" ? "Real data action" : "Data lookup"}</span>
+        <span className="ml-auto rounded border border-current/20 px-1.5 py-0.5 normal-case tracking-normal">{tool.name}</span>
+      </div>
+      {formattedArgs && (
+        <pre className="mt-2 max-h-28 overflow-auto whitespace-pre-wrap rounded bg-background/60 p-2 text-[11px] leading-relaxed text-foreground/75">
+          {formattedArgs}
+        </pre>
+      )}
+      {resultSummary && !compact && (
+        <div className="mt-2 text-xs font-medium text-foreground/80">{resultSummary}</div>
+      )}
+      {formattedResult && !compact && formattedResult !== resultSummary && (
+        <pre className="mt-2 max-h-36 overflow-auto whitespace-pre-wrap rounded bg-background/60 p-2 text-[11px] leading-relaxed text-foreground/70">
+          {formattedResult}
+        </pre>
+      )}
+    </div>
+  );
+}
 
 export default function AiChatPage() {
   const { t } = useTranslation();
@@ -29,7 +108,7 @@ export default function AiChatPage() {
   const [streamingSessionId, setStreamingSessionId] = useState<number | null>(null);
   const [streamPhase, setStreamPhase] = useState<ChatStreamPhase | null>(null);
   const [streamModel, setStreamModel] = useState<string>("");
-  const [toolEvents, setToolEvents] = useState<Array<{ name: string; arguments?: string; result?: string }>>([]);
+  const [toolEvents, setToolEvents] = useState<ToolEvent[]>([]);
   const [expandedThinking, setExpandedThinking] = useState<string | null>(null);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
@@ -296,7 +375,7 @@ export default function AiChatPage() {
               const parsed = JSON.parse(ev.data) as { name?: string; arguments?: string; result?: string };
               const toolName = parsed.name?.trim();
               if (toolName) {
-                const toolEvent: { name: string; arguments?: string; result?: string } = {
+                const toolEvent: ToolEvent = {
                   name: toolName,
                   arguments: parsed.arguments,
                   result: parsed.result,
@@ -395,7 +474,7 @@ export default function AiChatPage() {
   };
 
   // Helper to render AI message with <think> tag support
-  const renderAiMessage = (content: string, tools: typeof toolEvents = [], expanded?: string | null) => {
+  const renderAiMessage = (content: string, tools: ToolEvent[] = [], expanded?: string | null) => {
     const thinkStart = content.indexOf("<think>");
     const thinkEnd = content.indexOf("</think>");
 
@@ -448,21 +527,7 @@ export default function AiChatPage() {
                   <div className="absolute left-0 top-1.5 w-6 h-6 rounded-full bg-background border border-border flex items-center justify-center z-10">
                     <Search className="w-3.5 h-3.5 text-blue-500" />
                   </div>
-                  <div className="flex flex-col bg-background/50 p-2 rounded-lg border border-border/40">
-                    <span className="text-xs font-bold text-blue-600 uppercase tracking-wider flex items-center gap-1">
-                      <Zap className="w-3 h-3" /> Action: {tool.name}
-                    </span>
-                    {tool.arguments && (
-                      <code className="text-[10px] bg-muted px-1.5 py-0.5 rounded mt-1 text-muted-foreground truncate max-w-full">
-                        {tool.arguments}
-                      </code>
-                    )}
-                    {tool.result && (
-                      <div className="mt-2 text-xs text-muted-foreground border-l-2 border-blue-200 pl-2 py-1 italic line-clamp-2">
-                        {tool.result}
-                      </div>
-                    )}
-                  </div>
+                  <ToolEventCard tool={tool} compact />
                 </div>
               ))}
             </div>
@@ -586,6 +651,13 @@ export default function AiChatPage() {
                   style={{ width: `${phaseToProgress(streamPhase)}%` }}
                 />
               </div>
+              {toolEvents.length > 0 && (
+                <div className="mt-3 grid gap-2 md:grid-cols-2">
+                  {toolEvents.map((tool, idx) => (
+                    <ToolEventCard key={`${tool.name}-${idx}`} tool={tool} />
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
