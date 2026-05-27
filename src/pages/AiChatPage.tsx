@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Send, Bot, User, Trash2, Plus, Loader2, ChevronRight, ChevronLeft, CheckCircle2, Search, BrainCircuit, Database, PencilLine } from "lucide-react";
+import { Send, Bot, User, Trash2, Plus, Loader2, ChevronRight, ChevronLeft, CheckCircle2, Search, BrainCircuit, Database, PencilLine, ListChecks, Wand2, X } from "lucide-react";
 import { fetchEventSource } from "@microsoft/fetch-event-source";
 import { toast } from "react-toastify";
 import { useTranslation } from "react-i18next";
@@ -11,6 +11,7 @@ import { aiService, type ChatSession, type ChatMessage } from "@/services/ai.ser
 import type { ChatStreamPhase } from "@/types/chat-stream";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080/api";
@@ -23,7 +24,146 @@ type ToolEvent = {
   result?: string;
 };
 
-const WRITE_TOOL_NAMES = new Set(["assignTaskToMember", "updateTaskStatus", "createTask"]);
+type AssignmentRequirementRow = {
+  id: string;
+  taskId: string;
+  skills: string;
+  difficulty: string;
+};
+
+type AssignmentFormMode = "recommend" | "assign";
+
+type AssignmentRequest = {
+  projectId: string;
+  taskIds: string[];
+};
+
+type AssignmentDraft = {
+  projectId: string;
+  mode: AssignmentFormMode;
+  rows: AssignmentRequirementRow[];
+};
+
+type DynamicFormField = {
+  name: string;
+  label: string;
+  type?: "text" | "number" | "textarea" | "select" | "date" | "checkbox";
+  required?: boolean;
+  placeholder?: string;
+  min?: number;
+  max?: number;
+  options?: Array<string | { label: string; value: string }>;
+};
+
+type DynamicFormSpec = {
+  title?: string;
+  description?: string;
+  submitLabel?: string;
+  intent?: string;
+  fields: DynamicFormField[];
+};
+
+const WRITE_TOOL_NAMES = new Set(["assignTaskToMember", "recommendAndAssignTask", "updateTaskStatus", "createTask"]);
+
+function createAssignmentRow(taskId = "", id?: string): AssignmentRequirementRow {
+  return {
+    id: id ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    taskId,
+    skills: "",
+    difficulty: "5",
+  };
+}
+
+function normalizeText(value: string) {
+  return value
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\u0111/g, "d")
+    .replace(/\u00c4\u2018/g, "d");
+}
+
+function extractAssignmentRequest(content: string): AssignmentRequest | null {
+  const normalized = normalizeText(content);
+  const asksForTaskRequirements =
+    (normalized.includes("ky nang") || normalized.includes("skill")) &&
+    (normalized.includes("do kho") || normalized.includes("difficulty")) &&
+    normalized.includes("task");
+
+  if (!asksForTaskRequirements) {
+    return null;
+  }
+
+  const ids = new Set<string>();
+  const patterns = [
+    /\btask(?:\s+id)?\s*[:#]?\s*(\d{1,8})\b/gi,
+    /^\s*\|?\s*(\d{1,8})\s*\|/gm,
+  ];
+
+  for (const pattern of patterns) {
+    let match: RegExpExecArray | null;
+    while ((match = pattern.exec(content)) !== null) {
+      ids.add(match[1]);
+    }
+  }
+
+  const projectMatch = content.match(/\bproject(?:\s+id)?\s*[:#]?\s*(\d{1,8})\b/i);
+
+  return {
+    projectId: projectMatch?.[1] ?? "",
+    taskIds: Array.from(ids).slice(0, 8),
+  };
+}
+
+function createAssignmentDraft(formKey: string, request: AssignmentRequest): AssignmentDraft {
+  const taskIds = request.taskIds.length > 0 ? request.taskIds : [""];
+  return {
+    projectId: request.projectId,
+    mode: "recommend",
+    rows: taskIds.map((taskId, index) => createAssignmentRow(taskId, `${formKey}-${taskId || index}`)),
+  };
+}
+
+function stripDynamicFormBlocks(content: string) {
+  return content.replace(/```taskpilot-form\s*[\s\S]*?```/gi, "").trim();
+}
+
+function extractDynamicFormSpec(content: string): DynamicFormSpec | null {
+  const match = content.match(/```taskpilot-form\s*([\s\S]*?)```/i);
+  if (!match) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(match[1].trim()) as DynamicFormSpec;
+    if (!Array.isArray(parsed.fields) || parsed.fields.length === 0) {
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function parseConfirmationResult(value?: string) {
+  if (!value) return null;
+  try {
+    const parsed = JSON.parse(value) as Record<string, unknown>;
+    if (parsed.confirmationRequired === true && typeof parsed.actionId === "string") {
+      return parsed as {
+        actionId: string;
+        toolName?: string;
+        summary?: string;
+        arguments?: Record<string, unknown>;
+        preview?: unknown;
+        expiresAt?: string;
+      };
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
 
 function getToolAccess(name: string): ToolAccess {
   return WRITE_TOOL_NAMES.has(name) ? "write" : "read";
@@ -43,7 +183,21 @@ function summarizeToolResult(value?: string) {
   try {
     const parsed = JSON.parse(value);
     if (Array.isArray(parsed)) {
-      return `${parsed.length} item${parsed.length === 1 ? "" : "s"}`;
+      const labels = parsed
+        .slice(0, 3)
+        .map((item) => {
+          if (item && typeof item === "object") {
+            const record = item as Record<string, unknown>;
+            const id = typeof record.id === "number" || typeof record.id === "string" ? `#${record.id}` : "";
+            const title = typeof record.title === "string" ? record.title : "";
+            return [id, title].filter(Boolean).join(" ");
+          }
+          return "";
+        })
+        .filter(Boolean);
+      return labels.length > 0
+        ? `${parsed.length} item${parsed.length === 1 ? "" : "s"}: ${labels.join(", ")}`
+        : `${parsed.length} item${parsed.length === 1 ? "" : "s"}`;
     }
     if (parsed && typeof parsed === "object") {
       const record = parsed as Record<string, unknown>;
@@ -63,12 +217,21 @@ function summarizeToolResult(value?: string) {
   return value.length > 160 ? `${value.slice(0, 160)}...` : value;
 }
 
-function ToolEventCard({ tool, compact = false }: { tool: ToolEvent; compact?: boolean }) {
+function ToolEventCard({
+  tool,
+  compact = false,
+  onConfirmAction,
+}: {
+  tool: ToolEvent;
+  compact?: boolean;
+  onConfirmAction?: (actionId: string) => void;
+}) {
   const access = getToolAccess(tool.name);
   const Icon = access === "write" ? PencilLine : Database;
   const formattedArgs = formatToolPayload(tool.arguments);
   const formattedResult = formatToolPayload(tool.result);
   const resultSummary = summarizeToolResult(tool.result);
+  const confirmation = parseConfirmationResult(tool.result);
 
   return (
     <div className={`rounded-lg border ${access === "write" ? "border-amber-300/60 bg-amber-50/70 text-amber-950 dark:bg-amber-950/20 dark:text-amber-100" : "border-blue-300/50 bg-blue-50/70 text-blue-950 dark:bg-blue-950/20 dark:text-blue-100"} ${compact ? "p-2" : "p-3"}`}>
@@ -89,6 +252,22 @@ function ToolEventCard({ tool, compact = false }: { tool: ToolEvent; compact?: b
         <pre className="mt-2 max-h-36 overflow-auto whitespace-pre-wrap rounded bg-background/60 p-2 text-[11px] leading-relaxed text-foreground/70">
           {formattedResult}
         </pre>
+      )}
+      {confirmation && !compact && (
+        <div className="mt-3 rounded-md border border-amber-400/40 bg-background/70 p-2">
+          <div className="text-xs font-semibold">Cần xác nhận trước khi ghi dữ liệu</div>
+          <div className="mt-1 text-xs text-foreground/75">
+            {confirmation.summary || "Xác nhận thao tác ghi dữ liệu này."}
+          </div>
+          <Button
+            type="button"
+            size="sm"
+            className="mt-2"
+            onClick={() => onConfirmAction?.(confirmation.actionId)}
+          >
+            Xác nhận thực hiện
+          </Button>
+        </div>
       )}
     </div>
   );
@@ -111,6 +290,8 @@ export default function AiChatPage() {
   const [toolEvents, setToolEvents] = useState<ToolEvent[]>([]);
   const [expandedThinking, setExpandedThinking] = useState<string | null>(null);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [assignmentDrafts, setAssignmentDrafts] = useState<Record<string, AssignmentDraft>>({});
+  const [dynamicFormValues, setDynamicFormValues] = useState<Record<string, Record<string, string>>>({});
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const activeStreamControllerRef = useRef<AbortController | null>(null);
@@ -273,8 +454,9 @@ export default function AiChatPage() {
     }
   }
 
-  async function sendMessage() {
-    if (!inputVal.trim()) return;
+  async function sendMessage(messageOverride?: string) {
+    const outgoingText = (messageOverride ?? inputVal).trim();
+    if (!outgoingText) return;
 
     if (isStreaming) {
       abortActiveStream();
@@ -295,12 +477,12 @@ export default function AiChatPage() {
     const userMessage: ChatMessage = {
       id: Date.now(),
       sender: "USER",
-      content: inputVal,
+      content: outgoingText,
       createdAt: new Date().toISOString()
     };
 
     setMessages(prev => [...prev, userMessage]);
-    const messageText = inputVal;
+    const messageText = outgoingText;
     setInputVal("");
     setIsStreaming(true);
     setIsThinking(true);
@@ -444,6 +626,376 @@ export default function AiChatPage() {
     }
   }
 
+  const confirmPendingAction = (actionId: string) => {
+    void sendMessage(`CONFIRM_ACTION ${actionId} - tôi xác nhận thực hiện thao tác ghi dữ liệu này.`);
+  };
+
+  const getAssignmentDraft = (formKey: string, request: AssignmentRequest) => {
+    return assignmentDrafts[formKey] ?? createAssignmentDraft(formKey, request);
+  };
+
+  const updateAssignmentDraft = (
+    formKey: string,
+    request: AssignmentRequest,
+    updater: (draft: AssignmentDraft) => AssignmentDraft,
+  ) => {
+    setAssignmentDrafts((drafts) => {
+      const current = drafts[formKey] ?? createAssignmentDraft(formKey, request);
+      return { ...drafts, [formKey]: updater(current) };
+    });
+  };
+
+  const updateAssignmentRow = (
+    formKey: string,
+    request: AssignmentRequest,
+    rowId: string,
+    field: keyof Omit<AssignmentRequirementRow, "id">,
+    value: string,
+  ) => {
+    updateAssignmentDraft(formKey, request, (draft) => ({
+      ...draft,
+      rows: draft.rows.map((row) => (row.id === rowId ? { ...row, [field]: value } : row)),
+    }));
+  };
+
+  const addAssignmentRow = (formKey: string, request: AssignmentRequest) => {
+    updateAssignmentDraft(formKey, request, (draft) => ({
+      ...draft,
+      rows: [...draft.rows, createAssignmentRow("", `${formKey}-${draft.rows.length}`)],
+    }));
+  };
+
+  const removeAssignmentRow = (formKey: string, request: AssignmentRequest, rowId: string) => {
+    updateAssignmentDraft(formKey, request, (draft) => ({
+      ...draft,
+      rows: draft.rows.length === 1 ? [createAssignmentRow("", `${formKey}-0`)] : draft.rows.filter((row) => row.id !== rowId),
+    }));
+  };
+
+  const submitAssignmentForm = async (formKey: string, request: AssignmentRequest) => {
+    const draft = getAssignmentDraft(formKey, request);
+    const rows = draft.rows
+      .map((row) => ({
+        taskId: row.taskId.trim(),
+        skills: row.skills.trim(),
+        difficulty: row.difficulty.trim(),
+      }))
+      .filter((row) => row.taskId);
+
+    if (rows.length === 0) {
+      toast.error("Nhap it nhat mot task ID.");
+      return;
+    }
+
+    const invalid = rows.find((row) => {
+      const difficulty = Number(row.difficulty);
+      return !row.skills || !Number.isInteger(difficulty) || difficulty < 1 || difficulty > 10;
+    });
+    if (invalid) {
+      toast.error("Moi task can co skills va do kho tu 1 den 10.");
+      return;
+    }
+
+    const projectLine = draft.projectId.trim()
+      ? `Project ID: ${draft.projectId.trim()}`
+      : "Project ID: infer from each task if needed";
+    const modeLine =
+      draft.mode === "assign"
+        ? "Mode: recommend suitable assignees and assign each task to the top candidate immediately."
+        : "Mode: recommend suitable assignees only; do not assign yet.";
+    const taskLines = rows
+      .map(
+        (row) =>
+          `- Task ${row.taskId}: requiredSkills="${row.skills}", difficulty=${row.difficulty}`,
+      )
+      .join("\n");
+
+    const prompt = [
+      "Task assignment requirements form",
+      projectLine,
+      modeLine,
+      "Use real TaskPilot tools and process every task below.",
+      "If mode asks assignment, call recommendAndAssignTask for each task.",
+      "Tasks:",
+      taskLines,
+    ].join("\n");
+
+    setAssignmentDrafts((drafts) => {
+      const next = { ...drafts };
+      delete next[formKey];
+      return next;
+    });
+    await sendMessage(prompt);
+  };
+
+  const renderAssignmentRequestForm = (formKey: string, request: AssignmentRequest) => {
+    const draft = getAssignmentDraft(formKey, request);
+
+    return (
+      <div className="mt-3 rounded-lg border border-border/60 bg-background/55 p-3 shadow-lg backdrop-blur-[28px] backdrop-saturate-150">
+        <div className="mb-3 flex items-start gap-2">
+          <div className="mt-0.5 flex h-7 w-7 items-center justify-center rounded-md bg-primary/10 text-primary">
+            <ListChecks className="h-4 w-4" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="text-sm font-semibold text-foreground">Bổ sung thông tin task</div>
+            <div className="text-xs leading-relaxed text-foreground/70">
+              AI đang cần thêm dữ liệu cho bước này. Điền các trường còn thiếu rồi gửi lại vào cuộc hội thoại.
+            </div>
+          </div>
+        </div>
+
+        <div className="mb-3 grid gap-2 md:grid-cols-[150px_1fr]">
+          <Input
+            value={draft.projectId}
+            onChange={(event) =>
+              updateAssignmentDraft(formKey, request, (current) => ({
+                ...current,
+                projectId: event.target.value,
+              }))
+            }
+            inputMode="numeric"
+            placeholder="Project ID"
+            className="bg-background/70"
+          />
+          <div className="grid grid-cols-2 overflow-hidden rounded-md border border-input bg-background/70">
+            <button
+              type="button"
+              onClick={() =>
+                updateAssignmentDraft(formKey, request, (current) => ({
+                  ...current,
+                  mode: "recommend",
+                }))
+              }
+              className={`h-9 px-3 text-sm font-medium transition-colors ${draft.mode === "recommend" ? "bg-primary text-primary-foreground" : "text-foreground/70 hover:bg-muted"}`}
+            >
+              Chỉ gợi ý
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                updateAssignmentDraft(formKey, request, (current) => ({
+                  ...current,
+                  mode: "assign",
+                }))
+              }
+              className={`h-9 px-3 text-sm font-medium transition-colors ${draft.mode === "assign" ? "bg-primary text-primary-foreground" : "text-foreground/70 hover:bg-muted"}`}
+            >
+              Gợi ý + gán
+            </button>
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          {draft.rows.map((row) => (
+            <div key={row.id} className="grid gap-2 md:grid-cols-[92px_1fr_100px_34px]">
+              <Input
+                value={row.taskId}
+                onChange={(event) => updateAssignmentRow(formKey, request, row.id, "taskId", event.target.value)}
+                inputMode="numeric"
+                placeholder="Task ID"
+                className="bg-background/70"
+              />
+              <Input
+                value={row.skills}
+                onChange={(event) => updateAssignmentRow(formKey, request, row.id, "skills", event.target.value)}
+                placeholder="Skills: React, Spring Boot"
+                className="bg-background/70"
+              />
+              <Input
+                value={row.difficulty}
+                onChange={(event) => updateAssignmentRow(formKey, request, row.id, "difficulty", event.target.value)}
+                type="number"
+                min={1}
+                max={10}
+                placeholder="Độ khó"
+                className="bg-background/70"
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                onClick={() => removeAssignmentRow(formKey, request, row.id)}
+                className="h-9 w-9"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:justify-between">
+          <Button type="button" variant="outline" size="sm" onClick={() => addAssignmentRow(formKey, request)}>
+            <Plus className="h-4 w-4" />
+            Thêm task
+          </Button>
+          <Button type="button" size="sm" onClick={() => void submitAssignmentForm(formKey, request)}>
+            <Wand2 className="h-4 w-4" />
+            Gửi thông tin
+          </Button>
+        </div>
+      </div>
+    );
+  };
+
+  const updateDynamicFormValue = (formKey: string, fieldName: string, value: string) => {
+    setDynamicFormValues((forms) => ({
+      ...forms,
+      [formKey]: {
+        ...(forms[formKey] ?? {}),
+        [fieldName]: value,
+      },
+    }));
+  };
+
+  const submitDynamicForm = async (formKey: string, spec: DynamicFormSpec) => {
+    const values = dynamicFormValues[formKey] ?? {};
+    const missing = spec.fields.find((field) => field.required && !values[field.name]?.trim());
+    if (missing) {
+      toast.error(`Vui lòng nhập ${missing.label}.`);
+      return;
+    }
+
+    const fieldLines = spec.fields
+      .map((field) => `- ${field.name}: ${values[field.name] ?? ""}`)
+      .join("\n");
+    const prompt = [
+      "Structured form response",
+      `Intent: ${spec.intent || "additional_information"}`,
+      "Use this information to continue the previous user request.",
+      "Fields:",
+      fieldLines,
+    ].join("\n");
+
+    setDynamicFormValues((forms) => {
+      const next = { ...forms };
+      delete next[formKey];
+      return next;
+    });
+    await sendMessage(prompt);
+  };
+
+  const renderDynamicForm = (formKey: string, spec: DynamicFormSpec) => {
+    const values = dynamicFormValues[formKey] ?? {};
+
+    return (
+      <div className="mt-3 rounded-lg border border-border/60 bg-background/55 p-3 shadow-lg backdrop-blur-[28px] backdrop-saturate-150">
+        <div className="mb-3">
+          <div className="text-sm font-semibold text-foreground">{spec.title || "Bổ sung thông tin"}</div>
+          {spec.description && (
+            <div className="mt-1 text-xs leading-relaxed text-foreground/70">{spec.description}</div>
+          )}
+        </div>
+
+        <div className="space-y-2">
+          {spec.fields.map((field) => {
+            const value = values[field.name] ?? "";
+            const fieldLabel = (
+              <div className="mb-1 flex items-center gap-1 text-xs font-medium text-foreground/80">
+                <span>{field.label}</span>
+                {field.required && <span className="text-destructive">*</span>}
+              </div>
+            );
+            if (field.type === "checkbox") {
+              return (
+                <label
+                  key={field.name}
+                  className="flex items-center gap-2 rounded-md border border-input bg-background/70 px-3 py-2 text-sm text-foreground"
+                >
+                  <input
+                    type="checkbox"
+                    checked={value === "true"}
+                    onChange={(event) => updateDynamicFormValue(formKey, field.name, event.target.checked ? "true" : "false")}
+                    className="h-4 w-4 rounded border-input accent-primary"
+                  />
+                  <span>{field.label}</span>
+                  {field.required && <span className="text-destructive">*</span>}
+                </label>
+              );
+            }
+            if (field.type === "textarea") {
+              return (
+                <label key={field.name} className="block">
+                  {fieldLabel}
+                  <Textarea
+                    value={value}
+                    onChange={(event) => updateDynamicFormValue(formKey, field.name, event.target.value)}
+                    placeholder={field.placeholder || field.label}
+                    className="min-h-20 bg-background/70"
+                  />
+                </label>
+              );
+            }
+            if (field.type === "select") {
+              const options = field.options ?? [];
+              return (
+                <label key={field.name} className="block">
+                  {fieldLabel}
+                  <select
+                    value={value}
+                    onChange={(event) => updateDynamicFormValue(formKey, field.name, event.target.value)}
+                    className="h-9 w-full rounded-md border border-input bg-background/70 px-3 text-sm text-foreground"
+                  >
+                    <option value="">{field.placeholder || field.label}</option>
+                    {options.map((option) => {
+                      const label = typeof option === "string" ? option : option.label;
+                      const optionValue = typeof option === "string" ? option : option.value;
+                      return (
+                        <option key={optionValue} value={optionValue}>
+                          {label}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </label>
+              );
+            }
+            return (
+              <label key={field.name} className="block">
+                {fieldLabel}
+                <Input
+                  value={value}
+                  onChange={(event) => updateDynamicFormValue(formKey, field.name, event.target.value)}
+                  type={field.type === "number" || field.type === "date" ? field.type : "text"}
+                  min={field.min}
+                  max={field.max}
+                  placeholder={field.placeholder || field.label}
+                  className="bg-background/70"
+                />
+              </label>
+            );
+          })}
+        </div>
+
+        <div className="mt-3 flex justify-end">
+          <Button type="button" size="sm" onClick={() => void submitDynamicForm(formKey, spec)}>
+            <Wand2 className="h-4 w-4" />
+            {spec.submitLabel || "Gửi thông tin"}
+          </Button>
+        </div>
+      </div>
+    );
+  };
+
+  const renderMessageExtras = (msg: ChatMessage, idx: number) => {
+    if (msg.sender !== "ASSISTANT") {
+      return null;
+    }
+
+    const formKey = `message-${msg.id || idx}`;
+    const dynamicForm = extractDynamicFormSpec(msg.content);
+    if (dynamicForm) {
+      return renderDynamicForm(formKey, dynamicForm);
+    }
+
+    const assignmentRequest = extractAssignmentRequest(msg.content);
+    if (assignmentRequest) {
+      return renderAssignmentRequestForm(formKey, assignmentRequest);
+    }
+
+    return null;
+  };
+
   // Helper to parse thinking content into steps
   const parseThinkingToSteps = (thinking: string) => {
     // Split by "Step X:" or significant newlines
@@ -475,21 +1027,22 @@ export default function AiChatPage() {
 
   // Helper to render AI message with <think> tag support
   const renderAiMessage = (content: string, tools: ToolEvent[] = [], expanded?: string | null) => {
-    const thinkStart = content.indexOf("<think>");
-    const thinkEnd = content.indexOf("</think>");
+    const displayContent = stripDynamicFormBlocks(content);
+    const thinkStart = displayContent.indexOf("<think>");
+    const thinkEnd = displayContent.indexOf("</think>");
 
     if (thinkStart !== -1) {
-      const beforeThink = content.substring(0, thinkStart);
+      const beforeThink = displayContent.substring(0, thinkStart);
       const isThinkingComplete = thinkEnd > thinkStart;
 
       // Use expanded thinking if available and thinking is complete
       const displayThinking = (isThinkingComplete && expanded)
         ? expanded
         : (isThinkingComplete
-          ? content.substring(thinkStart + 7, thinkEnd)
-          : content.substring(thinkStart + 7));
+          ? displayContent.substring(thinkStart + 7, thinkEnd)
+          : displayContent.substring(thinkStart + 7));
 
-      const afterThink = isThinkingComplete ? content.substring(thinkEnd + 8) : "";
+      const afterThink = isThinkingComplete ? displayContent.substring(thinkEnd + 8) : "";
 
       const steps = parseThinkingToSteps(displayThinking);
 
@@ -497,17 +1050,17 @@ export default function AiChatPage() {
         <div className="flex flex-col gap-4">
           {beforeThink && <div className="prose prose-sm dark:prose-invert max-w-full"><ReactMarkdown remarkPlugins={[remarkGfm]}>{beforeThink}</ReactMarkdown></div>}
 
-          <div className="space-y-3 bg-muted/30 p-4 rounded-xl border border-border/50">
-            <div className="flex items-center gap-2 text-sm font-semibold text-primary mb-2">
+          <div className="space-y-3 rounded-xl border border-border/60 bg-background/55 p-4 shadow-lg backdrop-blur-[28px] backdrop-saturate-150">
+            <div className="flex items-center gap-2 text-sm font-semibold text-foreground mb-2">
               <BrainCircuit className="w-4 h-4" />
               <span>{t("copilot.thinking_accordion_label")}</span>
               {!isThinkingComplete && <Loader2 className="w-3 h-3 animate-spin ml-1" />}
             </div>
 
-            <div className="space-y-4 relative before:absolute before:left-[11px] before:top-2 before:bottom-2 before:w-[2px] before:bg-border/60">
+            <div className="space-y-4 relative before:absolute before:left-[11px] before:top-2 before:bottom-2 before:w-[2px] before:bg-border/70">
               {steps.map((step, idx) => (
                 <div key={idx} className="relative pl-8 group">
-                  <div className="absolute left-0 top-1.5 w-6 h-6 rounded-full bg-background border border-border flex items-center justify-center z-10 group-last:bg-primary/10 group-last:border-primary/30 transition-colors">
+                  <div className="absolute left-0 top-1.5 w-6 h-6 rounded-full bg-background/85 border border-border flex items-center justify-center z-10 group-last:bg-primary/10 group-last:border-primary/30 transition-colors">
                     {idx < steps.length - 1 || isThinkingComplete ? (
                       <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />
                     ) : (
@@ -515,8 +1068,8 @@ export default function AiChatPage() {
                     )}
                   </div>
                   <div className="flex flex-col">
-                    <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">{step.title}</span>
-                    <p className="text-sm text-foreground/80 mt-0.5 leading-relaxed">{step.content}</p>
+                    <span className="text-xs font-bold text-foreground/70 uppercase tracking-wider">{step.title}</span>
+                    <p className="text-sm text-foreground/90 mt-0.5 leading-relaxed">{step.content}</p>
                   </div>
                 </div>
               ))}
@@ -527,7 +1080,7 @@ export default function AiChatPage() {
                   <div className="absolute left-0 top-1.5 w-6 h-6 rounded-full bg-background border border-border flex items-center justify-center z-10">
                     <Search className="w-3.5 h-3.5 text-blue-500" />
                   </div>
-                  <ToolEventCard tool={tool} compact />
+                  <ToolEventCard tool={tool} compact onConfirmAction={confirmPendingAction} />
                 </div>
               ))}
             </div>
@@ -544,7 +1097,7 @@ export default function AiChatPage() {
 
     return (
       <div className="max-w-full prose prose-sm dark:prose-invert">
-        <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
+        <ReactMarkdown remarkPlugins={[remarkGfm]}>{displayContent}</ReactMarkdown>
       </div>
     );
   };
@@ -654,7 +1207,7 @@ export default function AiChatPage() {
               {toolEvents.length > 0 && (
                 <div className="mt-3 grid gap-2 md:grid-cols-2">
                   {toolEvents.map((tool, idx) => (
-                    <ToolEventCard key={`${tool.name}-${idx}`} tool={tool} />
+                    <ToolEventCard key={`${tool.name}-${idx}`} tool={tool} onConfirmAction={confirmPendingAction} />
                   ))}
                 </div>
               )}
@@ -675,32 +1228,38 @@ export default function AiChatPage() {
             </div>
           )}
 
-          {messages.map((msg, idx) => (
-            <div key={msg.id || idx} className={`flex gap-3 ${msg.sender === "USER" ? "justify-end" : "justify-start"}`}>
-              {msg.sender !== "USER" && (
-                <Avatar className="w-8 h-8">
-                  <AvatarFallback className="bg-primary/10 text-primary"><Bot className="w-4 h-4" /></AvatarFallback>
-                </Avatar>
-              )}
+          {messages.map((msg, idx) => {
+            const extras = renderMessageExtras(msg, idx);
+            return (
+              <div key={msg.id || idx} className={`flex gap-3 ${msg.sender === "USER" ? "justify-end" : "justify-start"}`}>
+                {msg.sender !== "USER" && (
+                  <Avatar className="w-8 h-8">
+                    <AvatarFallback className="bg-primary/10 text-primary"><Bot className="w-4 h-4" /></AvatarFallback>
+                  </Avatar>
+                )}
 
-              <div className={`max-w-[80%] rounded-2xl px-4 py-3 ${msg.sender === "USER"
-                ? "bg-primary text-primary-foreground rounded-br-none"
-                : "bg-muted border border-border rounded-bl-none text-foreground"
-                }`}>
-                {msg.sender === "USER" ? (
-                  <div className="whitespace-pre-wrap">{msg.content}</div>
-                ) : (
-                  renderAiMessage(msg.content)
+                <div className="max-w-[80%]">
+                  <div className={`rounded-2xl px-4 py-3 ${msg.sender === "USER"
+                    ? "bg-primary text-primary-foreground rounded-br-none"
+                    : "bg-muted border border-border rounded-bl-none text-foreground"
+                    }`}>
+                    {msg.sender === "USER" ? (
+                      <div className="whitespace-pre-wrap">{msg.content}</div>
+                    ) : (
+                      renderAiMessage(msg.content)
+                    )}
+                  </div>
+                  {extras}
+                </div>
+
+                {msg.sender === "USER" && (
+                  <Avatar className="w-8 h-8">
+                    <AvatarFallback className="bg-muted text-muted-foreground"><User className="w-4 h-4" /></AvatarFallback>
+                  </Avatar>
                 )}
               </div>
-
-              {msg.sender === "USER" && (
-                <Avatar className="w-8 h-8">
-                  <AvatarFallback className="bg-muted text-muted-foreground"><User className="w-4 h-4" /></AvatarFallback>
-                </Avatar>
-              )}
-            </div>
-          ))}
+            );
+          })}
 
           {/* Streaming Message Placeholder */}
           {isStreaming && activeSession?.id === streamingSessionId && (isThinking || currentStreamMsg) && (
@@ -722,7 +1281,7 @@ export default function AiChatPage() {
         {/* Input Area */}
         <div className="p-4 border-t border-border/40 bg-background/10 backdrop-blur-[40px] backdrop-saturate-150 relative z-10">
           <form
-            onSubmit={(e) => { e.preventDefault(); sendMessage(); }}
+            onSubmit={(e) => { e.preventDefault(); void sendMessage(); }}
             className="relative flex max-w-4xl mx-auto"
           >
             <Textarea
