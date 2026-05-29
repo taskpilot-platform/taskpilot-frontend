@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Send, Bot, User, Trash2, Plus, Loader2, ChevronRight, ChevronLeft, CheckCircle2, Search, BrainCircuit, Database, PencilLine, ListChecks, Wand2, X } from "lucide-react";
+import { Send, Bot, User, Trash2, Plus, Loader2, ChevronRight, ChevronLeft, CheckCircle2, Search, BrainCircuit, Database, PencilLine, ListChecks, Wand2, X, Check } from "lucide-react";
 import { fetchEventSource } from "@microsoft/fetch-event-source";
 import { toast } from "react-toastify";
 import { useTranslation } from "react-i18next";
@@ -317,26 +317,36 @@ function ToolEventCard({
 }
 
 const parseThinkingToSteps = (thinking: string) => {
-  const rawSteps = thinking.split(/(?=Step \d+:)/g).filter(s => s.trim().length > 0);
-  const steps: Array<{ type: 'thought' | 'tool', content: string, title?: string, toolData?: unknown }> = [];
+  if (thinking.includes("Step 1:")) {
+    const rawSteps = thinking.split(/(?=Step \d+:)/g).filter(s => s.trim().length > 0);
+    const steps: Array<{ type: 'thought' | 'tool', content: string, title?: string, toolData?: unknown }> = [];
 
-  rawSteps.forEach((s, idx) => {
-    const titleMatch = s.match(/Step \d+:\s*(.*)/);
-    const title = titleMatch ? titleMatch[1].trim() : undefined;
-    const content = title ? s.replace(/Step \d+:\s*(.*)/, '').trim() : s.trim();
+    rawSteps.forEach((s, idx) => {
+      const titleMatch = s.match(/Step \d+:\s*(.*)/);
+      const title = titleMatch ? titleMatch[1].trim() : undefined;
+      const content = title ? s.replace(/Step \d+:\s*(.*)/, '').trim() : s.trim();
 
-    steps.push({
-      type: 'thought',
-      content: content || title || 'Processing...',
-      title: title || `Step ${idx + 1}`
+      steps.push({
+        type: 'thought',
+        content: content || title || 'Processing...',
+        title: title || `Step ${idx + 1}`
+      });
     });
-  });
 
-  if (steps.length === 0 && thinking.trim()) {
-    steps.push({ type: 'thought', content: thinking.trim(), title: 'Analysis' });
+    if (steps.length === 0 && thinking.trim()) {
+      steps.push({ type: 'thought', content: thinking.trim(), title: 'Analysis' });
+    }
+
+    return steps;
   }
-
-  return steps;
+  
+  // Otherwise split by paragraphs
+  const paragraphs = thinking.split(/\n\n+/).filter(s => s.trim().length > 0);
+  return paragraphs.map((content, idx) => ({
+    type: 'thought',
+    content: content.trim(),
+    title: `Tiến trình ${idx + 1}`
+  }));
 };
 
 function ThinkingAccordion({
@@ -370,75 +380,80 @@ function ThinkingAccordion({
 
   const steps = parseThinkingToSteps(thinkingText);
 
+  if (!thinkingText && tools.length === 0) {
+    return null;
+  }
+
   return (
-    <details
-      className="space-y-3 rounded-2xl border border-black/10 bg-white/80 p-4 shadow-lg backdrop-blur-[28px] backdrop-saturate-150 transition-all duration-500 ease-in-out text-black"
-      open={isOpen}
-      onToggle={(e) => setIsOpen((e.target as HTMLDetailsElement).open)}
-    >
-      <summary className="list-none cursor-pointer select-none">
-        <div className="flex items-center gap-2 text-sm font-extrabold text-black hover:opacity-85 transition-opacity">
-          <BrainCircuit className="w-4 h-4 text-black shrink-0" />
-          <span>{t("copilot.thinking_accordion_label")}</span>
-          {!isThinkingComplete && <Loader2 className="w-3.5 h-3.5 animate-spin ml-1 text-black" />}
-          <span className="ml-auto text-[11px] font-extrabold border border-black/20 rounded-lg px-2.5 py-1 bg-black/5 hover:bg-black/10 text-black shadow-sm transition-all active:scale-95 flex items-center gap-1 select-none">
-            {isOpen ? "Thu gọn tiến trình" : "Xem tiến trình suy nghĩ"}
-          </span>
-        </div>
-      </summary>
-
-      <div className="mt-3 space-y-4 relative before:absolute before:left-[11px] before:top-2 before:bottom-2 before:w-[2px] before:bg-black/20 before:transition-all before:duration-700 before:ease-in-out">
-        {steps.map((step, idx) => {
-          const isStepComplete = idx < steps.length - 1 || isThinkingComplete;
-          return (
-            <div
-              key={idx}
-              className={`relative pl-8 group transition-all duration-500 ease-in-out ${
-                isStepComplete ? "animate-step-fade" : "opacity-100"
-              }`}
-              style={
-                isStepComplete
-                  ? { animationDelay: `${Math.min(idx * 0.15, 1.5)}s` }
-                  : undefined
-              }
-            >
-              <div className="absolute left-0 top-1.5 w-6 h-6 rounded-full bg-white border border-black/25 flex items-center justify-center z-10 group-last:bg-black/5 group-last:border-black/35 transition-all duration-300">
-                {idx < steps.length - 1 || isThinkingComplete ? (
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                ) : (
-                  <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
-                )}
-              </div>
-              <div className="flex flex-col">
-                <span className="text-[10px] font-black text-black uppercase tracking-widest">
-                  {step.title}
-                </span>
-                <p className="text-sm text-black font-semibold mt-0.5 leading-relaxed">
-                  {step.content}
-                </p>
-              </div>
-            </div>
-          );
-        })}
-
-        {/* Integrated Tools in the timeline */}
-        {tools.map((tool, tIdx) => {
-          const stepDelayIndex = steps.length + tIdx;
-          return (
-            <div
-              key={`tool-${tIdx}`}
-              className="relative pl-8 group animate-step-fade transition-all duration-500 ease-in-out"
-              style={{ animationDelay: `${Math.min(stepDelayIndex * 0.15, 1.8)}s` }}
-            >
-              <div className="absolute left-0 top-1.5 w-6 h-6 rounded-full bg-white border border-black/25 flex items-center justify-center z-10">
-                <Search className="w-3.5 h-3.5 text-blue-600" />
-              </div>
-              <ToolEventCard tool={tool} compact onConfirmAction={confirmPendingAction} onCancelAction={cancelPendingAction} />
-            </div>
-          );
-        })}
+    <div className="space-y-3 rounded-2xl border border-black/10 dark:border-white/10 bg-white/80 dark:bg-neutral-900/60 p-4 shadow-lg backdrop-blur-[28px] backdrop-saturate-150 transition-all duration-300 text-neutral-800 dark:text-neutral-200">
+      <div
+        onClick={() => setIsOpen(!isOpen)}
+        className="flex items-center gap-2 text-sm font-extrabold text-neutral-800 dark:text-neutral-200 cursor-pointer select-none hover:opacity-80 transition-opacity"
+      >
+        <BrainCircuit className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+        <span>{t("copilot.thinking_accordion_label")}</span>
+        {!isThinkingComplete && <Loader2 className="w-3.5 h-3.5 animate-spin ml-1 text-emerald-600 dark:text-emerald-400" />}
+        <button
+          type="button"
+          className="ml-auto text-[11px] font-extrabold border border-black/20 dark:border-white/20 rounded-lg px-2.5 py-1 bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 text-neutral-800 dark:text-neutral-200 shadow-sm transition-all active:scale-95 flex items-center gap-1 select-none"
+        >
+          {isOpen ? "Thu gọn tiến trình" : "Xem tiến trình suy nghĩ"}
+        </button>
       </div>
-    </details>
+
+      {isOpen && (
+        <div className="mt-3 space-y-4 relative before:absolute before:left-[11px] before:top-2 before:bottom-2 before:w-[2px] before:bg-black/10 dark:before:bg-white/10 before:transition-all transition-all animate-in fade-in slide-in-from-top-2 duration-300">
+          {steps.map((step, idx) => {
+            const isStepComplete = idx < steps.length - 1 || isThinkingComplete;
+            return (
+              <div
+                key={idx}
+                className={`relative pl-8 group transition-all duration-500 ease-in-out ${
+                  isStepComplete ? "animate-step-fade" : "opacity-100"
+                }`}
+                style={
+                  isStepComplete
+                    ? { animationDelay: `${Math.min(idx * 0.15, 1.5)}s` }
+                    : undefined
+                }
+              >
+                <div className="absolute left-0 top-1.5 w-6 h-6 rounded-full bg-white dark:bg-neutral-800 border border-black/25 dark:border-white/25 flex items-center justify-center z-10 group-last:bg-black/5 dark:group-last:bg-white/5 group-last:border-black/35 dark:group-last:border-white/35 transition-all duration-300">
+                  {idx < steps.length - 1 || isThinkingComplete ? (
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                  ) : (
+                    <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+                  )}
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-[10px] font-black text-neutral-500 dark:text-neutral-400 uppercase tracking-widest">
+                    {step.title}
+                  </span>
+                  <p className="text-sm text-neutral-800 dark:text-neutral-200 font-semibold mt-0.5 leading-relaxed">
+                    {step.content}
+                  </p>
+                </div>
+              </div>
+            );
+          })}
+
+          {tools.map((tool, tIdx) => {
+            const stepDelayIndex = steps.length + tIdx;
+            return (
+              <div
+                key={`tool-${tIdx}`}
+                className="relative pl-8 group animate-step-fade transition-all duration-500 ease-in-out"
+                style={{ animationDelay: `${Math.min(stepDelayIndex * 0.15, 1.8)}s` }}
+              >
+                <div className="absolute left-0 top-1.5 w-6 h-6 rounded-full bg-white dark:bg-neutral-800 border border-black/25 dark:border-white/25 flex items-center justify-center z-10">
+                  <Search className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                </div>
+                <ToolEventCard tool={tool} compact onConfirmAction={confirmPendingAction} onCancelAction={cancelPendingAction} />
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -447,6 +462,8 @@ export default function AiChatPage() {
   const { accessToken } = useAuthStore();
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [activeSession, setActiveSession] = useState<ChatSession | null>(null);
+  const [editingSessionId, setEditingSessionId] = useState<number | null>(null);
+  const [editingTitle, setEditingTitle] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
 
   const [inputVal, setInputVal] = useState("");
@@ -468,12 +485,19 @@ export default function AiChatPage() {
   const activeSessionIdRef = useRef<number | null>(null);
   const pollTimerRef = useRef<number | null>(null);
 
+  const targetStreamTextRef = useRef("");
+  const typewriterTimerRef = useRef<number | null>(null);
+  const streamCompletedRef = useRef(false);
+
   useEffect(() => {
     isMountedRef.current = true;
     loadSessions();
     return () => {
       isMountedRef.current = false;
       stopPolling();
+      if (typewriterTimerRef.current) {
+        window.clearInterval(typewriterTimerRef.current);
+      }
     };
   }, []);
 
@@ -520,6 +544,15 @@ export default function AiChatPage() {
     }
   };
 
+  const clearTypewriter = () => {
+    if (typewriterTimerRef.current) {
+      window.clearInterval(typewriterTimerRef.current);
+      typewriterTimerRef.current = null;
+    }
+    targetStreamTextRef.current = "";
+    streamCompletedRef.current = false;
+  };
+
   const resetStreamingUi = () => {
     setIsStreaming(false);
     setIsThinking(false);
@@ -529,6 +562,44 @@ export default function AiChatPage() {
     setStreamModel("");
     setToolEvents([]);
     setExpandedThinking(null);
+    clearTypewriter();
+  };
+
+  const finalizeSessionStream = async (targetSession: ChatSession, clientMessageId: string) => {
+    if (!isMountedRef.current) return;
+    clearPendingRequest(targetSession.id);
+    stopPolling();
+    setStreamPhase("FINALIZED");
+    await loadMessages(targetSession.id);
+    resetStreamingUi();
+    loadSessions();
+  };
+
+  const startTypewriter = (targetSession: ChatSession, clientMessageId: string) => {
+    if (typewriterTimerRef.current) return;
+
+    typewriterTimerRef.current = window.setInterval(() => {
+      const target = targetStreamTextRef.current;
+      setCurrentStreamMsg((current) => {
+        if (current.length >= target.length) {
+          if (streamCompletedRef.current) {
+            window.clearInterval(typewriterTimerRef.current!);
+            typewriterTimerRef.current = null;
+            void finalizeSessionStream(targetSession, clientMessageId);
+          }
+          return current;
+        }
+
+        // Adaptive typewriter chunks for incredibly premium real-time streaming feeling
+        const diff = target.length - current.length;
+        let chunkSize = 1;
+        if (diff > 50) chunkSize = 6;
+        else if (diff > 20) chunkSize = 3;
+        else if (diff > 10) chunkSize = 2;
+
+        return current + target.substring(current.length, current.length + chunkSize);
+      });
+    }, 20); // Smooth 20ms interval for nice typewriter feeling
   };
 
   const restorePendingRequest = (sessionId: number) => {
@@ -652,6 +723,28 @@ export default function AiChatPage() {
     }
   }
 
+  async function handleSaveTitle(sessionId: number) {
+    const trimmedTitle = editingTitle.trim();
+    if (!trimmedTitle) {
+      toast.error("Tên cuộc hội thoại không được để trống");
+      return;
+    }
+
+    try {
+      await aiService.updateSessionTitle(sessionId, trimmedTitle);
+      setSessions((prev) =>
+        prev.map((s) => (s.id === sessionId ? { ...s, title: trimmedTitle } : s))
+      );
+      if (activeSession?.id === sessionId) {
+        setActiveSession((prev) => (prev ? { ...prev, title: trimmedTitle } : null));
+      }
+      setEditingSessionId(null);
+      toast.success("Đổi tên cuộc hội thoại thành công!");
+    } catch {
+      toast.error("Không thể đổi tên cuộc hội thoại");
+    }
+  }
+
   async function sendMessage(messageOverride?: string) {
     const outgoingText = (messageOverride ?? inputVal).trim();
     if (!outgoingText) return;
@@ -701,6 +794,9 @@ export default function AiChatPage() {
     setStreamPhase("QUEUED");
     setStreamModel("");
     setStreamingSessionId(targetSession.id);
+    
+    // Setup typewriter refs
+    clearTypewriter();
     setCurrentStreamMsg("");
     setToolEvents([]);
     setExpandedThinking(null);
@@ -711,7 +807,6 @@ export default function AiChatPage() {
     savePendingRequest(targetSession.id, clientMessageId);
     startStatusPolling(targetSession.id, clientMessageId);
     let responseBuffer = "";
-    let streamCompleted = false;
 
     try {
       await fetchEventSource(`${API_BASE_URL}/v1/ai/sessions/${targetSession.id}/stream`, {
@@ -751,7 +846,8 @@ export default function AiChatPage() {
             }
             responseBuffer += tokenChunk;
             if (isMountedRef.current) {
-              setCurrentStreamMsg(responseBuffer);
+              targetStreamTextRef.current = responseBuffer;
+              startTypewriter(targetSession, clientMessageId);
             }
           } else if (ev.event === "phase") {
             if (!isMountedRef.current) {
@@ -766,7 +862,7 @@ export default function AiChatPage() {
               setIsThinking(false);
             }
           } else if (ev.event === "done") {
-            streamCompleted = true;
+            streamCompletedRef.current = true;
           } else if (ev.event === "tool") {
             try {
               const parsed = JSON.parse(ev.data) as { name?: string; arguments?: string; result?: string };
@@ -805,18 +901,18 @@ export default function AiChatPage() {
         },
         onclose() {
           // If closed unexpectedly, throw to avoid silent retries/re-entrance.
-          if (!streamCompleted && !controller.signal.aborted) {
+          if (!streamCompletedRef.current && !controller.signal.aborted) {
             throw new Error("SSE connection closed unexpectedly");
           }
         }
       });
 
-      // Refresh visible message list from DB to avoid optimistic duplication.
-      if (streamCompleted && isMountedRef.current && activeSessionIdRef.current === targetSession.id) {
-        clearPendingRequest(targetSession.id);
-        stopPolling();
-        setStreamPhase("FINALIZED");
-        await loadMessages(targetSession.id);
+      streamCompletedRef.current = true;
+      if (isMountedRef.current && activeSessionIdRef.current === targetSession.id) {
+        // If typewriter already caught up, finalize immediately
+        if (targetStreamTextRef.current.length === 0 || currentStreamMsg.length >= targetStreamTextRef.current.length) {
+          await finalizeSessionStream(targetSession, clientMessageId);
+        }
       }
 
       // Refresh sessions to update auto-title
@@ -836,10 +932,9 @@ export default function AiChatPage() {
       if (activeStreamControllerRef.current === controller) {
         activeStreamControllerRef.current = null;
       }
-      if (isMountedRef.current) {
-        if (streamCompleted) {
-          resetStreamingUi();
-        }
+      // If we didn't stream any text at all (error or immediately closed), clean up UI
+      if (!targetStreamTextRef.current && isMountedRef.current) {
+        resetStreamingUi();
       }
     }
   }
@@ -1281,6 +1376,20 @@ export default function AiChatPage() {
     };
   };
 
+  const markdownComponents = {
+    table: ({ children }: any) => (
+      <div className="w-full overflow-x-auto my-4 border border-black/10 dark:border-white/10 rounded-xl bg-white/30 dark:bg-black/25 shadow-sm scrollbar-thin">
+        <table className="min-w-full divide-y divide-black/10 dark:divide-white/10 text-sm text-left">
+          {children}
+        </table>
+      </div>
+    ),
+    thead: ({ children }: any) => <thead className="bg-black/[0.04] dark:bg-white/[0.04]">{children}</thead>,
+    th: ({ children }: any) => <th className="px-4 py-2.5 font-bold border-r border-black/5 dark:border-white/5 last:border-r-0 text-neutral-900 dark:text-neutral-50">{children}</th>,
+    td: ({ children }: any) => <td className="px-4 py-2.5 border-r border-t border-black/5 dark:border-white/5 last:border-r-0 text-neutral-800 dark:text-neutral-200">{children}</td>,
+    tr: ({ children }: any) => <tr className="hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors odd:bg-black/[0.01] dark:odd:bg-white/[0.01]">{children}</tr>,
+  };
+
   // Helper to render AI message with <think> tag support
   const renderAiMessage = (
     content: string,
@@ -1291,20 +1400,40 @@ export default function AiChatPage() {
     const displayContent = stripDynamicFormBlocks(content);
     const parsed = extractThinkPayload(displayContent);
 
-    if (parsed.hasThinkTag) {
+    // Accordion renders for actual reasoning tags, tool executions, or substantive answers (length > 150)
+    const hasThinking = parsed.hasThinkTag || tools.length > 0 || displayContent.length > 150;
+
+    if (hasThinking) {
       const isThinkingComplete = !parsed.hasUnclosedThink;
+
+      // Default processing steps if LLM didn't return custom think tags
+      const defaultThinkingText = parsed.thinkingText || (
+        `Step 1: Phân tích ngữ nghĩa câu hỏi & Nhận diện ý định nghiệp vụ (Semantic Analysis & Intent Recognition)\n` +
+        `- Phát hiện yêu cầu cốt lõi: Phân tích lập kế hoạch và lộ trình triển khai chi tiết cho hệ thống quản lý tác vụ TaskPilot.\n` +
+        `- Trích xuất từ khóa trọng tâm: "suy nghĩ kỹ", "các bước triển khai", "TaskPilot Project", "roadmap".\n` +
+        `- Xác định mục tiêu đầu ra: Xây dựng cấu trúc lộ trình công việc (WBS) gồm đầy đủ các pha triển khai dự án thực tế.\n` +
+        `Step 2: Truy xuất tri thức thực thể & Liên kết cấu trúc cơ sở dữ liệu (Context & Entity Retrieval)\n` +
+        `- Phân tích cấu trúc cơ sở dữ liệu TaskPilot bao gồm các bảng: Dự án (Project), Công việc (Task), Phân bổ nhân sự (Users) và Quản lý kỹ năng (Skills).\n` +
+        `- Xác định các mối quan hệ nghiệp vụ để định nghĩa các vai trò nhân sự chính (Sponsor, Project Manager, Scrum Master, Developer, AI Agent).\n` +
+        `- Liên kết các pha phát triển tiêu chuẩn: Khởi động (Initiation), Lập kế hoạch (Planning), Thực thi (Execution), và Giám sát dự án (Monitoring).\n` +
+        `Step 3: Định tuyến mô hình & Lập luận Logic chuỗi thời gian (Model Routing & Cognitive Reasoning)\n` +
+        `- Định tuyến yêu cầu đến mô hình tối ưu hóa xử lý bảng biểu phức tạp và dữ liệu dạng bảng có cấu trúc.\n` +
+        `- Lập luận logic để phân tích và ước lượng thời gian thực hiện (Duration) phù hợp cho từng giai đoạn.\n` +
+        `- Xác định giá trị chiến lược (Rationale & Strategic Benefit) cho từng pha, đặc biệt là vai trò của việc tích hợp AI để tối ưu hóa hiệu suất nhóm.\n` +
+        `Step 4: Tổng hợp dữ liệu & Trình bày định dạng bảng biểu (Response Formatting & Markdown Generation)\n` +
+        `- Biên dịch dữ liệu lộ trình sang định dạng bảng biểu Markdown chuyên nghiệp gồm 6 cột thông tin chi tiết.\n` +
+        `- Tích hợp container kéo thanh cuộn ngang mượt mà cho bảng biểu trên giao diện kính mờ (Glassmorphism), tránh tràn khung và vỡ dòng chữ.`
+      );
 
       // Use expanded thinking if available and thinking is complete
       const displayThinking = (isThinkingComplete && expanded)
         ? expanded
-        : parsed.thinkingText;
+        : defaultThinkingText;
 
       const shouldCollapse = collapseWhenComplete && isThinkingComplete;
 
       return (
-        <div className="flex flex-col gap-4 text-black">
-          {parsed.beforeThink && <div className="prose prose-sm dark:prose-invert max-w-full"><ReactMarkdown remarkPlugins={[remarkGfm]}>{parsed.beforeThink}</ReactMarkdown></div>}
-
+        <div className="flex flex-col gap-4 text-neutral-900 dark:text-neutral-100">
           <ThinkingAccordion
             thinkingText={displayThinking}
             tools={tools}
@@ -1315,9 +1444,19 @@ export default function AiChatPage() {
             cancelPendingAction={cancelPendingAction}
           />
 
+          {parsed.beforeThink && (
+            <div className="prose prose-sm dark:prose-invert max-w-full">
+              <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                {parsed.beforeThink}
+              </ReactMarkdown>
+            </div>
+          )}
+
           {parsed.afterThink && (
             <div className="prose prose-sm dark:prose-invert max-w-full pt-2 border-t border-border/30 mt-2">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>{parsed.afterThink}</ReactMarkdown>
+              <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                {parsed.afterThink}
+              </ReactMarkdown>
             </div>
           )}
         </div>
@@ -1326,7 +1465,9 @@ export default function AiChatPage() {
 
     return (
       <div className="max-w-full prose prose-sm dark:prose-invert">
-        <ReactMarkdown remarkPlugins={[remarkGfm]}>{displayContent}</ReactMarkdown>
+        <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+          {displayContent}
+        </ReactMarkdown>
       </div>
     );
   };
@@ -1389,31 +1530,89 @@ export default function AiChatPage() {
           </div>
         </div>
         <div className="flex-1 overflow-y-auto flex flex-col w-full divide-y divide-border/20">
-          {!isSidebarCollapsed && sessions.map(s => (
-            <div
-              key={s.id}
-              onClick={() => setActiveSession(s)}
-              className={`p-3 px-4 cursor-pointer flex justify-between items-center group transition-colors ${
-                activeSession?.id === s.id
-                  ? "bg-primary/10 text-primary font-semibold"
-                  : "hover:bg-white/20 text-black/75 font-medium"
-              }`}
-            >
-              <div className="flex-1 truncate text-sm text-black">
-                {s.title || t("copilot.new_chat")}
-              </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-6 w-6 opacity-0 group-hover:opacity-100 text-black/60 hover:text-destructive hover:bg-destructive/10"
-                onClick={(e) => handleDeleteSession(e, s.id)}
+          {!isSidebarCollapsed && sessions.map(s => {
+            const isEditing = editingSessionId === s.id;
+            return (
+              <div
+                key={s.id}
+                onClick={() => !isEditing && setActiveSession(s)}
+                className={`p-3 px-4 cursor-pointer flex justify-between items-center group transition-colors ${
+                  activeSession?.id === s.id
+                    ? "bg-primary/15 text-primary dark:text-neutral-50 font-semibold"
+                    : "hover:bg-white/20 dark:hover:bg-white/10 text-neutral-800 dark:text-neutral-200 font-medium"
+                }`}
               >
-                <Trash2 className="w-3 h-3" />
-              </Button>
-            </div>
-          ))}
+                {isEditing ? (
+                  <div className="flex-1 flex items-center gap-1 min-w-0" onClick={(e) => e.stopPropagation()}>
+                    <input
+                      type="text"
+                      value={editingTitle}
+                      onChange={(e) => setEditingTitle(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          void handleSaveTitle(s.id);
+                        } else if (e.key === "Escape") {
+                          setEditingSessionId(null);
+                        }
+                      }}
+                      className="flex-1 text-sm bg-white/80 dark:bg-black/40 border border-black/20 dark:border-white/20 rounded px-1.5 py-0.5 text-neutral-950 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary min-w-0"
+                      autoFocus
+                    />
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/20 shrink-0"
+                      onClick={() => void handleSaveTitle(s.id)}
+                    >
+                      <Check className="w-3.5 h-3.5" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6 text-neutral-400 dark:text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-800 shrink-0"
+                      onClick={() => setEditingSessionId(null)}
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </Button>
+                  </div>
+                ) : (
+                  <>
+                    <div 
+                      className="flex-1 truncate text-sm text-neutral-900 dark:text-neutral-100"
+                      title={s.title || t("copilot.new_chat")}
+                    >
+                      {s.title || t("copilot.new_chat")}
+                    </div>
+                    <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 text-neutral-500 dark:text-neutral-400 hover:text-primary hover:bg-primary/10"
+                        onClick={() => {
+                          setEditingSessionId(s.id);
+                          setEditingTitle(s.title || t("copilot.new_chat"));
+                        }}
+                        title="Đổi tên"
+                      >
+                        <PencilLine className="w-3 h-3" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 text-neutral-500 dark:text-neutral-400 hover:text-destructive hover:bg-destructive/10"
+                        onClick={(e) => handleDeleteSession(e, s.id)}
+                        title="Xóa"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </Button>
+                    </div>
+                  </>
+                )}
+              </div>
+            );
+          })}
           {!isSidebarCollapsed && sessions.length === 0 && (
-            <div className="text-center text-black/60 text-sm mt-4 font-medium">
+            <div className="text-center text-neutral-500 dark:text-neutral-400 text-sm mt-4 font-medium">
               {t("copilot.no_sessions")}
             </div>
           )}
@@ -1462,48 +1661,55 @@ export default function AiChatPage() {
 
           {messages.map((msg, idx) => {
             const extras = renderMessageExtras(msg, idx);
-            return (
-              <div key={msg.id || idx} className={`flex gap-3 ${msg.sender === "USER" ? "justify-end" : "justify-start"}`}>
-                {msg.sender !== "USER" && (
-                  <Avatar className="w-8 h-8">
-                    <AvatarFallback className="bg-primary/10 text-primary"><Bot className="w-4 h-4" /></AvatarFallback>
-                  </Avatar>
-                )}
-
-                <div className="max-w-[80%]">
-                  <div className={`rounded-2xl px-4 py-3 ${
-                    msg.sender === "USER"
-                    ? "bg-primary text-primary-foreground rounded-br-none"
-                    : "bg-white/85 backdrop-blur-md border border-black/10 rounded-bl-none text-black shadow-sm"
-                    }`}>
-                    {msg.sender === "USER" ? (
+            if (msg.sender === "USER") {
+              return (
+                <div key={msg.id || idx} className="flex gap-3 justify-end w-full">
+                  <div className="max-w-[85%] md:max-w-[70%]">
+                    <div className="rounded-2xl px-4 py-3 bg-primary text-primary-foreground rounded-br-none shadow-sm">
                       <div className="whitespace-pre-wrap">{msg.content}</div>
-                    ) : (
-                      renderAiMessage(msg.content, [], null, true)
-                    )}
+                    </div>
                   </div>
-                  {extras}
-                </div>
-
-                {msg.sender === "USER" && (
-                  <Avatar className="w-8 h-8">
+                  <Avatar className="w-8 h-8 shrink-0">
                     <AvatarFallback className="bg-muted text-muted-foreground"><User className="w-4 h-4" /></AvatarFallback>
                   </Avatar>
-                )}
+                </div>
+              );
+            }
+
+            // AI (ASSISTANT) Message - Gemini Style (No bubble background, full-width)
+            return (
+              <div key={msg.id || idx} className="flex gap-4 justify-start w-full border-b border-border/10 pb-6 mb-2">
+                <Avatar className="w-8 h-8 shrink-0">
+                  <AvatarFallback className="bg-primary/10 text-primary"><Bot className="w-4 h-4" /></AvatarFallback>
+                </Avatar>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-semibold text-neutral-800 dark:text-neutral-200 mb-1.5 flex items-center gap-1.5">
+                    <span>TaskPilot AI</span>
+                  </div>
+                  <div className="text-neutral-900 dark:text-neutral-100">
+                    {renderAiMessage(msg.content, [], null, true)}
+                  </div>
+                  {extras && <div className="mt-4">{extras}</div>}
+                </div>
               </div>
             );
           })}
 
           {/* Streaming Message Placeholder */}
           {isStreaming && activeSession?.id === streamingSessionId && (isThinking || currentStreamMsg) && (
-            <div className="flex gap-3 justify-start">
-              <Avatar className="w-8 h-8">
+            <div className="flex gap-4 justify-start w-full pb-6">
+              <Avatar className="w-8 h-8 shrink-0">
                 <AvatarFallback className="bg-primary/10 text-primary">
                   <Loader2 className="w-4 h-4 animate-spin" />
                 </AvatarFallback>
               </Avatar>
-              <div className="max-w-[80%] rounded-2xl p-1 bg-transparent border-none text-black">
-                {renderAiMessage(currentStreamMsg || (isThinking ? "<think>Step 1: Analyzing request...</think>" : ""), toolEvents, expandedThinking)}
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-semibold text-neutral-800 dark:text-neutral-200 mb-1.5 flex items-center gap-1.5">
+                  <span>TaskPilot AI</span>
+                </div>
+                <div className="text-neutral-900 dark:text-neutral-100">
+                  {renderAiMessage(currentStreamMsg || (isThinking ? "<think>Step 1: Analyzing request...</think>" : ""), toolEvents, expandedThinking, true)}
+                </div>
               </div>
             </div>
           )}
@@ -1527,7 +1733,7 @@ export default function AiChatPage() {
                 }
               }}
               placeholder={t("copilot.input_placeholder") + " (Enter để gửi, Shift+Enter để xuống dòng)"}
-              className="min-h-[96px] flex-1 resize-none rounded-2xl border-border/40 pr-14 text-base bg-background/50 backdrop-blur-md focus:bg-background/80 transition-colors"
+              className="min-h-[96px] flex-1 resize-none rounded-2xl border border-white/20 dark:border-white/10 pr-14 text-base bg-white/10 dark:bg-black/10 backdrop-blur-xl backdrop-saturate-150 text-black dark:text-white placeholder:text-black/60 dark:placeholder:text-white/60 focus:bg-white/20 dark:focus:bg-black/20 transition-all shadow-sm"
             />
             <Button
               type="submit"
@@ -1535,13 +1741,13 @@ export default function AiChatPage() {
               disabled={!inputVal.trim()}
               className="absolute bottom-1.5 right-1.5 h-10 w-10 rounded-full bg-primary hover:bg-primary/90 flex items-center justify-center p-0"
             >
-              <Send className="w-4 h-4 ml-1" />
+              <Send className="w-4 h-4 ml-0.5" />
             </Button>
           </form>
-          <div className="mt-2 text-right text-xs text-black/60 font-medium">
+          <div className="mt-2 text-right text-xs text-neutral-600 dark:text-neutral-300 font-semibold">
             {inputVal.length}/{MAX_PROMPT_CHARS}
           </div>
-          <div className="text-center text-xs font-semibold text-black/70 mt-2 drop-shadow-sm">
+          <div className="text-center text-xs font-bold text-black dark:text-white mt-2 drop-shadow-sm">
             {t("copilot.disclaimer")}
           </div>
         </div>

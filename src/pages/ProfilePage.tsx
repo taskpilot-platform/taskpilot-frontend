@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import type { FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -10,6 +10,7 @@ import {
   ShieldAlert,
   UserCircle2,
   UserCog,
+  Upload,
 } from "lucide-react";
 import { toast } from "react-toastify";
 import { useTranslation } from "react-i18next";
@@ -22,6 +23,7 @@ import { getApiErrorMessage } from "@/lib/http";
 import { profileService } from "@/services/profile.service";
 import { useAuthStore } from "@/stores/auth.store";
 import type { UserProfile } from "@/types/user";
+import { UserAvatar } from "@/components/ui/user-avatar";
 
 type ProfileTab = "profile" | "security";
 
@@ -33,6 +35,9 @@ export default function ProfilePage() {
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [isChangingPassword, setIsChangingPassword] = useState(false);
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [fullName, setFullName] = useState("");
   const [avatarUrl, setAvatarUrl] = useState("");
@@ -92,10 +97,40 @@ export default function ProfilePage() {
       });
       setProfile(response.data);
       toast.success(t("profile.save_btn"));
+      window.dispatchEvent(new Event('profileUpdated'));
     } catch (error) {
       toast.error(getApiErrorMessage(error));
     } finally {
       setIsSavingProfile(false);
+    }
+  };
+
+  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (file.size > 1_000_000) {
+      toast.error("File size exceeds 1MB limit");
+      return;
+    }
+    if (!file.type.startsWith("image/")) {
+      toast.error("Only images are allowed");
+      return;
+    }
+
+    setIsUploadingAvatar(true);
+    try {
+      const response = await profileService.uploadAvatar(file);
+      setProfile(response.data);
+      setAvatarUrl(response.data.avatarUrl || "");
+      toast.success("Avatar uploaded successfully");
+      window.dispatchEvent(new Event('profileUpdated'));
+    } catch (error) {
+      toast.error(getApiErrorMessage(error));
+    } finally {
+      setIsUploadingAvatar(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
     }
   };
 
@@ -193,18 +228,27 @@ export default function ProfilePage() {
               </CardTitle>
               <CardDescription>{t("profile.current_info_desc")}</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-3 text-sm">
-              <div>
-                <p className="text-muted-foreground">{t("auth.email")}</p>
-                <p className="font-medium">{profile?.email || "-"}</p>
+            <CardContent className="space-y-4 text-sm">
+              <div className="flex flex-col items-center justify-center space-y-3 pb-4">
+                <UserAvatar 
+                  avatarUrl={avatarUrl} 
+                  name={fullName} 
+                  className="h-24 w-24 text-3xl shadow-md border-2 border-primary/20" 
+                />
+                <div className="text-center">
+                  <h3 className="font-bold text-lg">{fullName || "Unknown User"}</h3>
+                  <p className="text-muted-foreground text-xs">{profile?.email}</p>
+                </div>
               </div>
-              <div>
-                <p className="text-muted-foreground">{t("profile.role")}</p>
-                <p className="font-medium">{profile?.role || "-"}</p>
-              </div>
-              <div>
-                <p className="text-muted-foreground">{t("profile.status")}</p>
-                <p className="font-medium">{statusLabel}</p>
+              <div className="space-y-3 pt-4 border-t border-border/50">
+                <div>
+                  <p className="text-muted-foreground">{t("profile.role")}</p>
+                  <p className="font-medium">{profile?.role || "-"}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">{t("profile.status")}</p>
+                  <p className="font-medium">{statusLabel}</p>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -234,12 +278,31 @@ export default function ProfilePage() {
 
                 <div className="space-y-2">
                   <Label htmlFor="avatarUrl">{t("profile.avatar_url")}</Label>
-                  <Input
-                    id="avatarUrl"
-                    value={avatarUrl}
-                    onChange={(event) => setAvatarUrl(event.target.value)}
-                    placeholder="https://..."
-                  />
+                  <div className="flex gap-2">
+                    <Input
+                      id="avatarUrl"
+                      value={avatarUrl}
+                      onChange={(event) => setAvatarUrl(event.target.value)}
+                      placeholder="https://..."
+                      className="flex-1"
+                    />
+                    <input 
+                      type="file" 
+                      ref={fileInputRef} 
+                      className="hidden" 
+                      accept="image/*" 
+                      onChange={handleFileChange} 
+                    />
+                    <Button 
+                      type="button" 
+                      variant="outline" 
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={isUploadingAvatar}
+                    >
+                      {isUploadingAvatar ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Upload className="h-4 w-4 mr-2" />}
+                      Upload
+                    </Button>
+                  </div>
                 </div>
 
                 <Button type="submit" className="gap-2" disabled={isSavingProfile || !isProfileFormValid}>

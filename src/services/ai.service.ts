@@ -43,6 +43,12 @@ export const aiService = {
 		await http.delete(`/v1/ai/sessions/${sessionId}`);
 	},
 
+	async updateSessionTitle(sessionId: number, title: string): Promise<void> {
+		await http.patch(`/v1/ai/sessions/${sessionId}/title`, null, {
+			params: { title },
+		});
+	},
+
 	async getMessages(
 		sessionId: number,
 		page = 0,

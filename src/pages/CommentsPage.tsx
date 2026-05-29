@@ -13,8 +13,8 @@ import {
   X,
 } from "lucide-react";
 import { toast } from "react-toastify";
+import { UserAvatar } from "@/components/ui/user-avatar";
 
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -87,11 +87,11 @@ function CommentResultItem({ item, onOpen }: CommentResultItemProps) {
       onClick={() => onOpen(item)}
     >
       <div className="flex items-start gap-3">
-        <Avatar className="h-9 w-9 border border-border/60">
-          <AvatarFallback className="text-xs font-semibold">
-            {getInitials(item.author.fullName)}
-          </AvatarFallback>
-        </Avatar>
+        <UserAvatar
+          avatarUrl={item.author.avatarUrl}
+          name={item.author.fullName}
+          className="h-9 w-9 border border-border/60"
+        />
 
         <div className="min-w-0 flex-1 space-y-3">
           <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">

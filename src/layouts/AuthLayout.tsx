@@ -16,7 +16,11 @@ export default function AuthLayout() {
     <div className="relative min-h-screen overflow-hidden bg-slate-950 text-foreground">
       <div className="absolute right-4 top-4 z-50">
         <Button variant="ghost" size="icon" onClick={toggleLanguage} title="Change Language" className="text-slate-300 hover:text-white">
-          <Globe className="h-5 w-5" />
+          <img 
+            src={i18n.language === "vi" ? "https://flagcdn.com/w40/vn.png" : "https://flagcdn.com/w40/gb.png"} 
+            alt={i18n.language === "vi" ? "Tiếng Việt" : "English"}
+            className="h-3.5 w-5 object-cover rounded-sm shadow-sm select-none"
+          />
         </Button>
       </div>
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(14,165,233,0.2),transparent_35%),radial-gradient(circle_at_80%_10%,rgba(59,130,246,0.2),transparent_30%),linear-gradient(135deg,#020617_0%,#0f172a_45%,#082f49_100%)]" />

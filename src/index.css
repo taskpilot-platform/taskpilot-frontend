@@ -113,15 +113,17 @@ html.dark.theme-orange { --primary: 24.6 85% 63.1% !important; --primary-foregro
   /* Task Card Specific Glass Style */
   html.glass .project-task-card {
     background-color: rgba(255, 255, 255, 0.12) !important;
-    backdrop-filter: blur(12px) saturate(130%) !important;
+    backdrop-filter: blur(8px) saturate(130%) !important;
     border: 1px solid rgba(255, 255, 255, 0.25) !important;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease, transform 0.2s ease !important;
+    transform: translateZ(0); /* Hardware Acceleration */
+    will-change: transform, opacity;
   }
   
   html.glass .project-task-card:hover {
     background-color: rgba(255, 255, 255, 0.2) !important;
     border-color: rgba(255, 255, 255, 0.4) !important;
-    transform: translateY(-3px);
+    transform: translateY(-3px) translateZ(0) !important;
     box-shadow: 0 10px 20px -5px rgba(0, 0, 0, 0.1) !important;
   }
 
@@ -176,6 +178,54 @@ html.dark.theme-orange { --primary: 24.6 85% 63.1% !important; --primary-foregro
     color: #000000 !important;
   }
 
+  /* ======================================================== */
+  /* GLASS DARK MODE - OVERRIDE FOR CRISP WHITE/LIGHT TEXT    */
+  /* ======================================================== */
+  html.dark.glass {
+    color: #ffffff !important;
+  }
+
+  html.dark.glass h1, html.dark.glass h2, html.dark.glass h3, html.dark.glass h4, html.dark.glass h5, html.dark.glass h6, 
+  html.dark.glass label, html.dark.glass strong, html.dark.glass p, html.dark.glass li,
+  html.dark.glass td, html.dark.glass th, html.dark.glass blockquote, html.dark.glass figcaption,
+  html.dark.glass span:not([class*="bg-"]):not([class*="text-white"]):not([class*="text-primary"]):not([class*="text-emerald"]):not([class*="text-blue"]) {
+    color: #ffffff !important;
+  }
+
+  html.dark.glass .prose {
+    --tw-prose-body: #ffffff !important;
+    --tw-prose-headings: #ffffff !important;
+    --tw-prose-links: #60a5fa !important;
+    --tw-prose-bold: #ffffff !important;
+    --tw-prose-counters: #ffffff !important;
+    --tw-prose-bullets: #ffffff !important;
+    --tw-prose-quotes: #ffffff !important;
+    --tw-prose-code: #ffffff !important;
+    --tw-prose-captions: #ffffff !important;
+    color: #ffffff !important;
+  }
+
+  html.dark.glass .prose p, html.dark.glass .prose li, html.dark.glass .prose strong, 
+  html.dark.glass .prose span, html.dark.glass .prose h1, html.dark.glass .prose h2, html.dark.glass .prose h3,
+  html.dark.glass .prose h4, html.dark.glass .prose code, html.dark.glass .prose pre,
+  html.dark.glass .prose th, html.dark.glass .prose td, html.dark.glass .prose blockquote {
+    color: #ffffff !important;
+  }
+
+  html.dark.glass .text-muted-foreground {
+    color: #cbd5e1 !important;
+    font-weight: 500;
+  }
+
+  html.dark.glass .text-foreground {
+    color: #ffffff !important;
+  }
+
+  html.dark.glass .bg-muted,
+  html.dark.glass .bg-muted * {
+    color: #ffffff !important;
+  }
+
   /* === RESTORE colors for interactive colored elements === */
   /* Primary button: text must follow --primary-foreground (white) */
   html.glass button.bg-primary,
@@ -227,8 +277,10 @@ html.dark.theme-orange { --primary: 24.6 85% 63.1% !important; --primary-foregro
   html.glass input:not(.bg-transparent),
   html.glass select:not(.bg-transparent),
   html.glass textarea:not(.bg-transparent) {
-    background-color: rgba(255, 255, 255, 0.2) !important;
-    border: 1px solid rgba(255, 255, 255, 0.4) !important;
+    background-color: rgba(255, 255, 255, 0.15) !important;
+    backdrop-filter: blur(20px) !important;
+    -webkit-backdrop-filter: blur(20px) !important;
+    border: 1px solid rgba(255, 255, 255, 0.3) !important;
     color: #000000 !important;
   }
 
@@ -245,9 +297,60 @@ html.dark.theme-orange { --primary: 24.6 85% 63.1% !important; --primary-foregro
     border: none !important;
   }
 
+  /* High contrast placeholders for glass theme */
+  html.glass textarea::placeholder,
+  html.glass input::placeholder {
+    color: rgba(0, 0, 0, 0.6) !important;
+  }
+
+  /* Glass Dark Mode Inputs & Placeholders */
+  html.dark.glass input:not(.bg-transparent),
+  html.dark.glass select:not(.bg-transparent),
+  html.dark.glass textarea:not(.bg-transparent) {
+    background-color: rgba(15, 23, 42, 0.75) !important;
+    border: 1px solid rgba(255, 255, 255, 0.15) !important;
+    color: #f8fafc !important;
+  }
+
+  html.dark.glass input.bg-transparent,
+  html.dark.glass select.bg-transparent,
+  html.dark.glass textarea.bg-transparent {
+    background-color: transparent !important;
+    color: #f8fafc !important;
+  }
+
+  html.dark.glass textarea::placeholder,
+  html.dark.glass input::placeholder {
+    color: rgba(255, 255, 255, 0.5) !important;
+  }
+
 @layer base {
   * { @apply border-border; }
   body { @apply bg-background text-foreground; }
+}
+
+input[type="date"].date-input-empty {
+  color: transparent;
+}
+
+input[type="date"].date-input-empty::-webkit-datetime-edit {
+  color: transparent;
+}
+
+input[type="date"].date-input-ddmmyyyy::-webkit-calendar-picker-indicator {
+  opacity: 1;
+}
+
+html.glass input[type="date"].date-input-empty {
+  color: transparent !important;
+}
+
+html.glass .date-input-placeholder {
+  color: rgba(0, 0, 0, 0.6) !important;
+}
+
+html.dark.glass .date-input-placeholder {
+  color: rgba(255, 255, 255, 0.5) !important;
 }
 
 /* Premium step timelines with buttery smooth ease-out entry transitions */
@@ -267,4 +370,44 @@ html.dark.theme-orange { --primary: 24.6 85% 63.1% !important; --primary-foregro
 .animate-step-fade {
   opacity: 0;
   animation: smoothStepEnter 0.9s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Glassmorphic React-Toastify Overrides */
+.Toastify__toast {
+  background-color: rgba(255, 255, 255, 0.4) !important;
+  backdrop-filter: blur(20px) saturate(140%) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(140%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.25) !important;
+  border-radius: 1rem !important; /* rounded-2xl */
+  box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.02) !important;
+  color: #111827 !important;
+  font-family: inherit !important;
+  font-weight: 500 !important;
+}
+
+/* Glassmorphic Dark Mode Toast */
+.dark .Toastify__toast,
+html.dark .Toastify__toast {
+  background-color: rgba(15, 23, 42, 0.6) !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  color: #f8fafc !important;
+  box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.3), 0 1px 3px rgba(0, 0, 0, 0.1) !important;
+}
+
+/* Internal Toastify Styling Elements */
+.Toastify__toast-body {
+  font-size: 0.875rem !important;
+}
+
+.Toastify__close-button {
+  color: inherit !important;
+  opacity: 0.6 !important;
+}
+.Toastify__close-button:hover {
+  opacity: 1 !important;
+}
+
+.Toastify__toast-icon {
+  width: 20px !important;
+  height: 20px !important;
 }

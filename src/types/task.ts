@@ -12,6 +12,7 @@ export interface UserProfileDto {
 export interface UserProfileLiteDto {
   id: number;
   fullName: string;
+  avatarUrl?: string | null;
 }
 
 export interface LabelDto {

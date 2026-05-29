@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { getApiErrorMessage } from "@/lib/http";
 import { useAuthStore } from "@/stores/auth.store";
-import { toast } from "react-toastify";
+import { UserAvatar } from "@/components/ui/user-avatar";
+import type { UserProfile } from "@/types/user";
 import { LayoutDashboard, ShieldCheck, UserRound, LogOut, FolderKanban, Globe, Users, Code, Settings, Menu, ChevronLeft, Bot, Bell, MessageSquare } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { profileService } from "@/services/profile.service";
@@ -129,20 +130,27 @@ export default function MainLayout() {
   const { t, i18n } = useTranslation();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [userRole, setUserRole] = useState<string | null>(localStorage.getItem("userRole"));
+  const [profile, setProfile] = useState<UserProfile | null>(null);
   const [unreadCount, setUnreadCount] = useState(0);
   const [isNotificationBlinking, setIsNotificationBlinking] = useState(false);
 
   useEffect(() => {
-    // Lấy thông tin user để kiểm tra phân quyền Sidebar
-    profileService.getMe()
-      .then(res => {
-        setUserRole(res.data.role);
-        localStorage.setItem("userRole", res.data.role);
-      })
-      .catch(() => {
-        setUserRole("USER");
-        localStorage.removeItem("userRole");
-      });
+    const fetchProfile = () => {
+      profileService.getMe()
+        .then(res => {
+          setProfile(res.data);
+          setUserRole(res.data.role);
+          localStorage.setItem("userRole", res.data.role);
+        })
+        .catch(() => {
+          setUserRole("USER");
+          localStorage.removeItem("userRole");
+        });
+    };
+    
+    fetchProfile();
+    window.addEventListener('profileUpdated', fetchProfile);
+    return () => window.removeEventListener('profileUpdated', fetchProfile);
   }, []);
 
   useEffect(() => {
@@ -260,7 +268,11 @@ export default function MainLayout() {
             </Button>
             {!isCollapsed && (
               <Button variant="ghost" size="icon" onClick={toggleLanguage} title={t("layout.change_lang", { defaultValue: "Change Language" })}>
-                <Globe className="h-4 w-4" />
+                <img 
+                  src={i18n.language === "vi" ? "https://flagcdn.com/w40/vn.png" : "https://flagcdn.com/w40/gb.png"} 
+                  alt={i18n.language === "vi" ? "Tiếng Việt" : "English"}
+                  className="h-3.5 w-5 object-cover rounded-sm shadow-sm select-none"
+                />
               </Button>
             )}
           </div>
@@ -268,8 +280,12 @@ export default function MainLayout() {
 
         <nav className="space-y-2 w-full">
           {isCollapsed && (
-            <Button variant="ghost" size="icon" onClick={toggleLanguage} title={t("layout.change_lang", { defaultValue: "Change Language" })} className="mb-4 w-full">
-              <Globe className="h-4 w-4" />
+            <Button variant="ghost" size="icon" onClick={toggleLanguage} title={t("layout.change_lang", { defaultValue: "Change Language" })} className="mb-4 w-full flex justify-center">
+              <img 
+                src={i18n.language === "vi" ? "https://flagcdn.com/w40/vn.png" : "https://flagcdn.com/w40/gb.png"} 
+                alt={i18n.language === "vi" ? "Tiếng Việt" : "English"}
+                className="h-3.5 w-5 object-cover rounded-sm shadow-sm select-none"
+              />
             </Button>
           )}
           <NavLink
@@ -356,7 +372,11 @@ export default function MainLayout() {
               }
               title={t("layout.profile")}
             >
-              <UserRound className="h-4 w-4 shrink-0" />
+              {profile ? (
+                <UserAvatar avatarUrl={profile.avatarUrl} name={profile.fullName || `User ${profile.id}`} className="h-5 w-5 shrink-0 bg-transparent" />
+              ) : (
+                <UserRound className="h-4 w-4 shrink-0" />
+              )}
               {!isCollapsed && <span>{t("layout.profile")}</span>}
             </NavLink>
 

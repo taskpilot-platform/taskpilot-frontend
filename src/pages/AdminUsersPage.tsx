@@ -237,7 +237,7 @@ export default function AdminUsersPage() {
                 onChange={(e) => setSearchInput(e.target.value)}
                 className="max-w-sm"
               />
-              <Button type="submit" variant="secondary" className="gap-2" disabled={isLoading}>
+              <Button type="submit" variant="secondary" className="gap-2 shrink-0" disabled={isLoading}>
                 <Search className="h-4 w-4" />
                 {t("admin.users.search_btn")}
               </Button>
@@ -467,7 +467,7 @@ export default function AdminUsersPage() {
                         </Button>
                       </form>
 
-                      <div className="flex gap-2">
+                      <div className="flex flex-col gap-2">
                         <Button
                           type="button"
                           className="w-full gap-2"
