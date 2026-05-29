@@ -67,7 +67,7 @@ type DynamicFormSpec = {
   fields: DynamicFormField[];
 };
 
-const WRITE_TOOL_NAMES = new Set(["assignTaskToMember", "recommendAndAssignTask", "updateTaskStatus", "createTask"]);
+const WRITE_TOOL_NAMES = new Set(["assignTaskToMember", "recommendAndAssignTask", "updateTaskStatus", "createTask", "createSprint", "startSprint", "completeSprint", "assignTaskToSprint"]);
 
 function createAssignmentRow(taskId = "", id?: string): AssignmentRequirementRow {
   return {
@@ -225,10 +225,12 @@ function ToolEventCard({
   tool,
   compact = false,
   onConfirmAction,
+  onCancelAction,
 }: {
   tool: ToolEvent;
   compact?: boolean;
   onConfirmAction?: (actionId: string) => void;
+  onCancelAction?: (actionId: string) => void;
 }) {
   const access = getToolAccess(tool.name);
   const Icon = access === "write" ? PencilLine : Database;
@@ -238,42 +240,205 @@ function ToolEventCard({
   const confirmation = parseConfirmationResult(tool.result);
 
   return (
-    <div className={`rounded-lg border ${access === "write" ? "border-amber-300/60 bg-amber-50/70 text-amber-950 dark:bg-amber-950/20 dark:text-amber-100" : "border-blue-300/50 bg-blue-50/70 text-blue-950 dark:bg-blue-950/20 dark:text-blue-100"} ${compact ? "p-2" : "p-3"}`}>
-      <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide">
-        <Icon className="h-3.5 w-3.5" />
-        <span>{access === "write" ? "Real data action" : "Data lookup"}</span>
-        <span className="ml-auto rounded border border-current/20 px-1.5 py-0.5 normal-case tracking-normal">{tool.name}</span>
+    <div className={`rounded-xl border ${access === "write" ? "border-amber-400/60 bg-amber-50/80 text-black" : "border-blue-400/50 bg-blue-50/80 text-black"} ${compact ? "p-2" : "p-3"} backdrop-blur-md shadow-sm`}>
+      <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider">
+        <Icon className="h-3.5 w-3.5 text-black" />
+        <span>{access === "write" ? "Thao tác ghi dữ liệu" : "Truy vấn dữ liệu"}</span>
+        <span className="ml-auto rounded border border-black/30 bg-black/5 px-1.5 py-0.5 normal-case tracking-normal text-black font-semibold">{tool.name}</span>
       </div>
       {formattedArgs && (
-        <pre className="mt-2 max-h-28 overflow-auto whitespace-pre-wrap rounded bg-background/60 p-2 text-[11px] leading-relaxed text-foreground/75">
+        <pre className="mt-2 max-h-28 overflow-auto whitespace-pre-wrap rounded bg-white/70 border border-black/10 p-2 text-[11px] leading-relaxed text-black font-medium">
           {formattedArgs}
         </pre>
       )}
       {resultSummary && !compact && (
-        <div className="mt-2 text-xs font-medium text-foreground/80">{resultSummary}</div>
+        <div className="mt-2 text-xs font-bold text-black">{resultSummary}</div>
       )}
       {formattedResult && !compact && formattedResult !== resultSummary && (
-        <pre className="mt-2 max-h-36 overflow-auto whitespace-pre-wrap rounded bg-background/60 p-2 text-[11px] leading-relaxed text-foreground/70">
+        <pre className="mt-2 max-h-36 overflow-auto whitespace-pre-wrap rounded bg-white/70 border border-black/10 p-2 text-[11px] leading-relaxed text-black font-medium">
           {formattedResult}
         </pre>
       )}
       {confirmation && !compact && (
-        <div className="mt-3 rounded-md border border-amber-400/40 bg-background/70 p-2">
-          <div className="text-xs font-semibold">Cần xác nhận trước khi ghi dữ liệu</div>
-          <div className="mt-1 text-xs text-foreground/75">
-            {confirmation.summary || "Xác nhận thao tác ghi dữ liệu này."}
+        <div className="mt-4 rounded-2xl border-2 border-amber-400/50 bg-white/95 p-4 shadow-xl backdrop-blur-md animate-step-fade text-black">
+          <div className="flex items-center gap-2 text-xs font-extrabold text-amber-800 uppercase tracking-widest">
+            <span className="inline-block px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 mr-1 animate-pulse">⚠️</span>
+            Yêu cầu phê duyệt hành động
           </div>
-          <Button
-            type="button"
-            size="sm"
-            className="mt-2"
-            onClick={() => onConfirmAction?.(confirmation.actionId)}
-          >
-            Xác nhận thực hiện
-          </Button>
+          <div className="mt-2 text-sm font-bold text-black leading-relaxed">
+            {confirmation.summary || "Bạn có muốn đồng ý thực hiện thao tác ghi dữ liệu này không?"}
+          </div>
+          
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            {/* Option 1: Confirm / Approve */}
+            <div
+              onClick={() => onConfirmAction?.(confirmation.actionId)}
+              className="relative group cursor-pointer overflow-hidden rounded-xl border-2 border-emerald-300 bg-emerald-50/50 hover:bg-emerald-100/60 p-3.5 transition-all duration-300 hover:shadow-md hover:-translate-y-0.5 active:scale-[0.98] flex gap-3 items-start select-none"
+            >
+              <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 border border-emerald-300 group-hover:scale-110 transition-transform">
+                <CheckCircle2 className="h-4 w-4" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="text-sm font-extrabold text-black group-hover:text-emerald-800 transition-colors">
+                  Phê duyệt thực hiện
+                </div>
+                <div className="mt-0.5 text-xs text-black font-semibold leading-relaxed">
+                  Đồng ý ghi nhận và chạy hành động này vào cơ sở dữ liệu.
+                </div>
+              </div>
+              {/* Decorative background gradient */}
+              <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/0 to-emerald-500/5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
+            </div>
+
+            {/* Option 2: Cancel / Reject */}
+            <div
+              onClick={() => onCancelAction?.(confirmation.actionId)}
+              className="relative group cursor-pointer overflow-hidden rounded-xl border-2 border-rose-300 bg-rose-50/50 hover:bg-rose-100/60 p-3.5 transition-all duration-300 hover:shadow-md hover:-translate-y-0.5 active:scale-[0.98] flex gap-3 items-start select-none"
+            >
+              <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-rose-100 text-rose-700 border border-rose-300 group-hover:scale-110 transition-transform">
+                <X className="h-4 w-4" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="text-sm font-extrabold text-black group-hover:text-rose-800 transition-colors">
+                  Từ chối & Hủy bỏ
+                </div>
+                <div className="mt-0.5 text-xs text-black font-semibold leading-relaxed">
+                  Từ chối yêu cầu và loại bỏ hành động này khỏi hàng đợi.
+                </div>
+              </div>
+              {/* Decorative background gradient */}
+              <div className="absolute inset-0 bg-gradient-to-r from-rose-500/0 to-rose-500/5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
+            </div>
+          </div>
         </div>
       )}
     </div>
+  );
+}
+
+const parseThinkingToSteps = (thinking: string) => {
+  const rawSteps = thinking.split(/(?=Step \d+:)/g).filter(s => s.trim().length > 0);
+  const steps: Array<{ type: 'thought' | 'tool', content: string, title?: string, toolData?: unknown }> = [];
+
+  rawSteps.forEach((s, idx) => {
+    const titleMatch = s.match(/Step \d+:\s*(.*)/);
+    const title = titleMatch ? titleMatch[1].trim() : undefined;
+    const content = title ? s.replace(/Step \d+:\s*(.*)/, '').trim() : s.trim();
+
+    steps.push({
+      type: 'thought',
+      content: content || title || 'Processing...',
+      title: title || `Step ${idx + 1}`
+    });
+  });
+
+  if (steps.length === 0 && thinking.trim()) {
+    steps.push({ type: 'thought', content: thinking.trim(), title: 'Analysis' });
+  }
+
+  return steps;
+};
+
+function ThinkingAccordion({
+  thinkingText,
+  tools,
+  isThinkingComplete,
+  collapseWhenComplete,
+  t,
+  confirmPendingAction,
+  cancelPendingAction,
+}: {
+  thinkingText: string;
+  tools: ToolEvent[];
+  isThinkingComplete: boolean;
+  collapseWhenComplete: boolean;
+  t: (key: string) => string;
+  confirmPendingAction: (actionId: string) => void;
+  cancelPendingAction: (actionId: string) => void;
+}) {
+  const [isOpen, setIsOpen] = useState(!isThinkingComplete);
+  const wasThinkingRef = useRef(!isThinkingComplete);
+
+  useEffect(() => {
+    if (wasThinkingRef.current && isThinkingComplete) {
+      if (collapseWhenComplete) {
+        setIsOpen(false);
+      }
+      wasThinkingRef.current = false;
+    }
+  }, [isThinkingComplete, collapseWhenComplete]);
+
+  const steps = parseThinkingToSteps(thinkingText);
+
+  return (
+    <details
+      className="space-y-3 rounded-2xl border border-black/10 bg-white/80 p-4 shadow-lg backdrop-blur-[28px] backdrop-saturate-150 transition-all duration-500 ease-in-out text-black"
+      open={isOpen}
+      onToggle={(e) => setIsOpen((e.target as HTMLDetailsElement).open)}
+    >
+      <summary className="list-none cursor-pointer select-none">
+        <div className="flex items-center gap-2 text-sm font-extrabold text-black hover:opacity-85 transition-opacity">
+          <BrainCircuit className="w-4 h-4 text-black shrink-0" />
+          <span>{t("copilot.thinking_accordion_label")}</span>
+          {!isThinkingComplete && <Loader2 className="w-3.5 h-3.5 animate-spin ml-1 text-black" />}
+          <span className="ml-auto text-[11px] font-extrabold border border-black/20 rounded-lg px-2.5 py-1 bg-black/5 hover:bg-black/10 text-black shadow-sm transition-all active:scale-95 flex items-center gap-1 select-none">
+            {isOpen ? "Thu gọn tiến trình" : "Xem tiến trình suy nghĩ"}
+          </span>
+        </div>
+      </summary>
+
+      <div className="mt-3 space-y-4 relative before:absolute before:left-[11px] before:top-2 before:bottom-2 before:w-[2px] before:bg-black/20 before:transition-all before:duration-700 before:ease-in-out">
+        {steps.map((step, idx) => {
+          const isStepComplete = idx < steps.length - 1 || isThinkingComplete;
+          return (
+            <div
+              key={idx}
+              className={`relative pl-8 group transition-all duration-500 ease-in-out ${
+                isStepComplete ? "animate-step-fade" : "opacity-100"
+              }`}
+              style={
+                isStepComplete
+                  ? { animationDelay: `${Math.min(idx * 0.15, 1.5)}s` }
+                  : undefined
+              }
+            >
+              <div className="absolute left-0 top-1.5 w-6 h-6 rounded-full bg-white border border-black/25 flex items-center justify-center z-10 group-last:bg-black/5 group-last:border-black/35 transition-all duration-300">
+                {idx < steps.length - 1 || isThinkingComplete ? (
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                ) : (
+                  <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+                )}
+              </div>
+              <div className="flex flex-col">
+                <span className="text-[10px] font-black text-black uppercase tracking-widest">
+                  {step.title}
+                </span>
+                <p className="text-sm text-black font-semibold mt-0.5 leading-relaxed">
+                  {step.content}
+                </p>
+              </div>
+            </div>
+          );
+        })}
+
+        {/* Integrated Tools in the timeline */}
+        {tools.map((tool, tIdx) => {
+          const stepDelayIndex = steps.length + tIdx;
+          return (
+            <div
+              key={`tool-${tIdx}`}
+              className="relative pl-8 group animate-step-fade transition-all duration-500 ease-in-out"
+              style={{ animationDelay: `${Math.min(stepDelayIndex * 0.15, 1.8)}s` }}
+            >
+              <div className="absolute left-0 top-1.5 w-6 h-6 rounded-full bg-white border border-black/25 flex items-center justify-center z-10">
+                <Search className="w-3.5 h-3.5 text-blue-600" />
+              </div>
+              <ToolEventCard tool={tool} compact onConfirmAction={confirmPendingAction} onCancelAction={cancelPendingAction} />
+            </div>
+          );
+        })}
+      </div>
+    </details>
   );
 }
 
@@ -683,6 +848,10 @@ export default function AiChatPage() {
     void sendMessage(`CONFIRM_ACTION ${actionId} - tôi xác nhận thực hiện thao tác ghi dữ liệu này.`);
   };
 
+  const cancelPendingAction = (actionId: string) => {
+    void sendMessage(`CANCEL_ACTION ${actionId} - tôi từ chối và muốn hủy bỏ thao tác này.`);
+  };
+
   const getAssignmentDraft = (formKey: string, request: AssignmentRequest) => {
     return assignmentDrafts[formKey] ?? createAssignmentDraft(formKey, request);
   };
@@ -1049,34 +1218,7 @@ export default function AiChatPage() {
     return null;
   };
 
-  // Helper to parse thinking content into steps
-  const parseThinkingToSteps = (thinking: string) => {
-    // Split by "Step X:" or significant newlines
-    const rawSteps = thinking.split(/(?=Step \d+:)/g).filter(s => s.trim().length > 0);
-    const steps: Array<{ type: 'thought' | 'tool', content: string, title?: string, toolData?: unknown }> = [];
 
-    // Simple heuristic: interleaving tools based on their sequence
-    // In a real scenario, we might want the backend to emit "thinking_step" events
-    // but for now, we'll map the text steps and then append tool calls.
-    rawSteps.forEach((s, idx) => {
-      const titleMatch = s.match(/Step \d+:\s*(.*)/);
-      const title = titleMatch ? titleMatch[1].trim() : undefined;
-      const content = title ? s.replace(/Step \d+:\s*(.*)/, '').trim() : s.trim();
-
-      steps.push({
-        type: 'thought',
-        content: content || title || 'Processing...',
-        title: title || `Step ${idx + 1}`
-      });
-    });
-
-    // If no explicit steps found, treat whole thinking as one step
-    if (steps.length === 0 && thinking.trim()) {
-      steps.push({ type: 'thought', content: thinking.trim(), title: 'Analysis' });
-    }
-
-    return steps;
-  };
 
   const extractThinkPayload = (content: string) => {
     const openTag = "<think>";
@@ -1157,53 +1299,21 @@ export default function AiChatPage() {
         ? expanded
         : parsed.thinkingText;
 
-      const steps = parseThinkingToSteps(displayThinking);
       const shouldCollapse = collapseWhenComplete && isThinkingComplete;
 
       return (
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-4 text-black">
           {parsed.beforeThink && <div className="prose prose-sm dark:prose-invert max-w-full"><ReactMarkdown remarkPlugins={[remarkGfm]}>{parsed.beforeThink}</ReactMarkdown></div>}
 
-          <details
-            className="space-y-3 rounded-xl border border-border/60 bg-background/55 p-4 shadow-lg backdrop-blur-[28px] backdrop-saturate-150"
-            open={!shouldCollapse}
-          >
-            <summary className="list-none cursor-pointer">
-              <div className="flex items-center gap-2 text-sm font-semibold text-foreground mb-2">
-                <BrainCircuit className="w-4 h-4" />
-                <span>{t("copilot.thinking_accordion_label")}</span>
-                {!isThinkingComplete && <Loader2 className="w-3 h-3 animate-spin ml-1" />}
-              </div>
-            </summary>
-
-            <div className="space-y-4 relative before:absolute before:left-[11px] before:top-2 before:bottom-2 before:w-[2px] before:bg-border/70">
-              {steps.map((step, idx) => (
-                <div key={idx} className="relative pl-8 group">
-                  <div className="absolute left-0 top-1.5 w-6 h-6 rounded-full bg-background/85 border border-border flex items-center justify-center z-10 group-last:bg-primary/10 group-last:border-primary/30 transition-colors">
-                    {idx < steps.length - 1 || isThinkingComplete ? (
-                      <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />
-                    ) : (
-                      <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
-                    )}
-                  </div>
-                  <div className="flex flex-col">
-                    <span className="text-xs font-bold text-foreground/70 uppercase tracking-wider">{step.title}</span>
-                    <p className="text-sm text-foreground/90 mt-0.5 leading-relaxed">{step.content}</p>
-                  </div>
-                </div>
-              ))}
-
-              {/* Integrated Tools in the timeline */}
-              {tools.map((tool, tIdx) => (
-                <div key={`tool-${tIdx}`} className="relative pl-8 group">
-                  <div className="absolute left-0 top-1.5 w-6 h-6 rounded-full bg-background border border-border flex items-center justify-center z-10">
-                    <Search className="w-3.5 h-3.5 text-blue-500" />
-                  </div>
-                  <ToolEventCard tool={tool} compact onConfirmAction={confirmPendingAction} />
-                </div>
-              ))}
-            </div>
-          </details>
+          <ThinkingAccordion
+            thinkingText={displayThinking}
+            tools={tools}
+            isThinkingComplete={isThinkingComplete}
+            collapseWhenComplete={shouldCollapse}
+            t={t}
+            confirmPendingAction={confirmPendingAction}
+            cancelPendingAction={cancelPendingAction}
+          />
 
           {parsed.afterThink && (
             <div className="prose prose-sm dark:prose-invert max-w-full pt-2 border-t border-border/30 mt-2">
@@ -1283,16 +1393,19 @@ export default function AiChatPage() {
             <div
               key={s.id}
               onClick={() => setActiveSession(s)}
-              className={`p-3 px-4 cursor-pointer flex justify-between items-center group transition-colors ${activeSession?.id === s.id ? "bg-primary/10 text-primary font-medium" : "hover:bg-muted/30 text-muted-foreground"
-                }`}
+              className={`p-3 px-4 cursor-pointer flex justify-between items-center group transition-colors ${
+                activeSession?.id === s.id
+                  ? "bg-primary/10 text-primary font-semibold"
+                  : "hover:bg-white/20 text-black/75 font-medium"
+              }`}
             >
-              <div className="flex-1 truncate text-sm">
+              <div className="flex-1 truncate text-sm text-black">
                 {s.title || t("copilot.new_chat")}
               </div>
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-6 w-6 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                className="h-6 w-6 opacity-0 group-hover:opacity-100 text-black/60 hover:text-destructive hover:bg-destructive/10"
                 onClick={(e) => handleDeleteSession(e, s.id)}
               >
                 <Trash2 className="w-3 h-3" />
@@ -1300,7 +1413,7 @@ export default function AiChatPage() {
             </div>
           ))}
           {!isSidebarCollapsed && sessions.length === 0 && (
-            <div className="text-center text-muted-foreground text-sm mt-4">
+            <div className="text-center text-black/60 text-sm mt-4 font-medium">
               {t("copilot.no_sessions")}
             </div>
           )}
@@ -1312,21 +1425,21 @@ export default function AiChatPage() {
         {/* Messages */}
         <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4 relative z-10">
           {isStreaming && activeSession?.id === streamingSessionId && (
-            <div className="rounded-lg border border-border bg-background/70 px-3 py-2">
-              <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
+            <div className="rounded-xl border border-black/10 bg-white/80 px-3 py-2 backdrop-blur-md shadow-sm">
+              <div className="flex items-center justify-between text-xs text-black font-extrabold mb-1">
                 <span>{phaseLabel(streamPhase)}</span>
                 {streamModel && <span>{streamModel}</span>}
               </div>
-              <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+              <div className="h-1.5 w-full rounded-full bg-black/10 overflow-hidden">
                 <div
-                  className="h-full bg-primary transition-all duration-300"
+                  className="h-full bg-emerald-600 transition-all duration-300"
                   style={{ width: `${phaseToProgress(streamPhase)}%` }}
                 />
               </div>
               {toolEvents.length > 0 && (
                 <div className="mt-3 grid gap-2 md:grid-cols-2">
                   {toolEvents.map((tool, idx) => (
-                    <ToolEventCard key={`${tool.name}-${idx}`} tool={tool} onConfirmAction={confirmPendingAction} />
+                    <ToolEventCard key={`${tool.name}-${idx}`} tool={tool} onConfirmAction={confirmPendingAction} onCancelAction={cancelPendingAction} />
                   ))}
                 </div>
               )}
@@ -1358,9 +1471,10 @@ export default function AiChatPage() {
                 )}
 
                 <div className="max-w-[80%]">
-                  <div className={`rounded-2xl px-4 py-3 ${msg.sender === "USER"
+                  <div className={`rounded-2xl px-4 py-3 ${
+                    msg.sender === "USER"
                     ? "bg-primary text-primary-foreground rounded-br-none"
-                    : "bg-muted border border-border rounded-bl-none text-foreground"
+                    : "bg-white/85 backdrop-blur-md border border-black/10 rounded-bl-none text-black shadow-sm"
                     }`}>
                     {msg.sender === "USER" ? (
                       <div className="whitespace-pre-wrap">{msg.content}</div>
@@ -1388,7 +1502,7 @@ export default function AiChatPage() {
                   <Loader2 className="w-4 h-4 animate-spin" />
                 </AvatarFallback>
               </Avatar>
-              <div className="max-w-[80%] rounded-2xl p-1 bg-transparent border-none text-foreground">
+              <div className="max-w-[80%] rounded-2xl p-1 bg-transparent border-none text-black">
                 {renderAiMessage(currentStreamMsg || (isThinking ? "<think>Step 1: Analyzing request...</think>" : ""), toolEvents, expandedThinking)}
               </div>
             </div>
@@ -1424,10 +1538,10 @@ export default function AiChatPage() {
               <Send className="w-4 h-4 ml-1" />
             </Button>
           </form>
-          <div className="mt-2 text-right text-xs text-muted-foreground">
+          <div className="mt-2 text-right text-xs text-black/60 font-medium">
             {inputVal.length}/{MAX_PROMPT_CHARS}
           </div>
-          <div className="text-center text-xs font-medium text-foreground/80 mt-2 drop-shadow-sm">
+          <div className="text-center text-xs font-semibold text-black/70 mt-2 drop-shadow-sm">
             {t("copilot.disclaimer")}
           </div>
         </div>

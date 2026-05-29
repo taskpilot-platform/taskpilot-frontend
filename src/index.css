@@ -127,27 +127,85 @@ html.dark.theme-orange { --primary: 24.6 85% 63.1% !important; --primary-foregro
 
   /* Force Crisp Black Text everywhere in Glass mode EXCEPT on primary/destructive backgrounds */
   html.glass {
-    color: #000000;
-  }
-  
-  html.glass h1, html.glass h2, html.glass h3, html.glass h4, html.glass h5, html.glass h6, 
-  html.glass label, html.glass strong {
     color: #000000 !important;
   }
   
-  /* Remove !important from p to allow text-primary to work */
-  html.glass p {
-    color: #1e293b;
+  /* All standard text elements - headings, labels, paragraphs, lists */
+  html.glass h1, html.glass h2, html.glass h3, html.glass h4, html.glass h5, html.glass h6, 
+  html.glass label, html.glass strong, html.glass p, html.glass li,
+  html.glass td, html.glass th, html.glass blockquote, html.glass figcaption,
+  html.glass span:not([class*="bg-"]):not([class*="text-white"]):not([class*="text-primary"]) {
+    color: #000000 !important;
   }
 
-  /* Subtitle/Muted text adjustments */
+  /* Tailwind Typography prose variables and all prose child elements */
+  html.glass .prose {
+    --tw-prose-body: #000000 !important;
+    --tw-prose-headings: #000000 !important;
+    --tw-prose-links: #1d4ed8 !important;
+    --tw-prose-bold: #000000 !important;
+    --tw-prose-counters: #000000 !important;
+    --tw-prose-bullets: #000000 !important;
+    --tw-prose-quotes: #000000 !important;
+    --tw-prose-code: #000000 !important;
+    --tw-prose-captions: #000000 !important;
+    color: #000000 !important;
+  }
+
+  html.glass .prose p, html.glass .prose li, html.glass .prose strong, 
+  html.glass .prose span, html.glass .prose h1, html.glass .prose h2, html.glass .prose h3,
+  html.glass .prose h4, html.glass .prose code, html.glass .prose pre,
+  html.glass .prose th, html.glass .prose td, html.glass .prose blockquote {
+    color: #000000 !important;
+  }
+
+  /* Sidebar session list — items with text-muted-foreground */
   html.glass .text-muted-foreground {
-    color: #475569 !important;
+    color: #1e293b !important;
     font-weight: 500;
   }
-  
-  /* Đảm bảo Badge/Button giữ đúng màu chữ trắng */
+
+  /* text-foreground class */
+  html.glass .text-foreground {
+    color: #000000 !important;
+  }
+
+  /* AI chat bubble uses bg-muted - force all its text descendants to black */
+  html.glass .bg-muted,
+  html.glass .bg-muted * {
+    color: #000000 !important;
+  }
+
+  /* === RESTORE colors for interactive colored elements === */
+  /* Primary button: text must follow --primary-foreground (white) */
+  html.glass button.bg-primary,
+  html.glass .bg-primary {
+    color: hsl(var(--primary-foreground)) !important;
+  }
+  html.glass button.bg-primary span,
+  html.glass button.bg-primary div,
+  html.glass .bg-primary span,
+  html.glass .bg-primary div {
+    color: hsl(var(--primary-foreground)) !important;
+  }
+
+  /* Destructive (red) buttons */
   html.glass .bg-destructive,
+  html.glass .bg-destructive span,
+  html.glass .bg-destructive div {
+    color: #ffffff !important;
+  }
+
+  /* Emerald approve cards: keep black text on light backgrounds (already set inline), but icon divs inside them need inherit */
+  html.glass .bg-emerald-600,
+  html.glass .bg-emerald-700 {
+    color: #ffffff !important;
+  }
+  html.glass .bg-rose-600,
+  html.glass .bg-rose-700 {
+    color: #ffffff !important;
+  }
+
   html.glass .bg-slate-900 {
     color: #ffffff !important;
   }
@@ -190,4 +248,23 @@ html.dark.theme-orange { --primary: 24.6 85% 63.1% !important; --primary-foregro
 @layer base {
   * { @apply border-border; }
   body { @apply bg-background text-foreground; }
+}
+
+/* Premium step timelines with buttery smooth ease-out entry transitions */
+@keyframes smoothStepEnter {
+  0% {
+    opacity: 0;
+    transform: translateY(12px) scale(0.985);
+    filter: blur(3px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
+}
+
+.animate-step-fade {
+  opacity: 0;
+  animation: smoothStepEnter 0.9s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
