@@ -1,6 +1,7 @@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { TaskPriority, TaskStatus, LabelDto, SkillDto } from "@/types/task";
 import type { ProjectMember } from "@/types/project";
+import { UserAvatar } from "@/components/ui/user-avatar";
 import { LabelSelector } from "./LabelSelector";
 import { SkillSelector } from "./SkillSelector";
 
@@ -82,7 +83,7 @@ export function TaskMetadataSidebar({ projectId, assigneeId, status, priority, s
             {projectMembers.map((m) => (
               <SelectItem key={m.userId} value={m.userId.toString()}>
                 <div className="flex items-center gap-2">
-                   User {m.userId}
+                   <UserAvatar name={`User ${m.userId}`} className="h-4 w-4" /> User {m.userId}
                 </div>
               </SelectItem>
             ))}

@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Send, Bot, User, Trash2, Plus, Loader2, ChevronRight, ChevronLeft, CheckCircle2, Search, BrainCircuit, Zap } from "lucide-react";
+import { Send, Bot, User, Trash2, Plus, Loader2, ChevronRight, ChevronLeft, CheckCircle2, Search, BrainCircuit, Database, PencilLine, ListChecks, Wand2, X, Check } from "lucide-react";
 import { fetchEventSource } from "@microsoft/fetch-event-source";
 import { toast } from "react-toastify";
 import { useTranslation } from "react-i18next";
@@ -11,6 +11,7 @@ import { aiService, type ChatSession, type ChatMessage } from "@/services/ai.ser
 import type { ChatStreamPhase } from "@/types/chat-stream";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { getApiErrorMessage } from "@/lib/http";
 
@@ -19,11 +20,450 @@ const MAX_PROMPT_CHARS = 1500;
 const STREAM_STATUS_NULL_RETRY_LIMIT = 5;
 const STREAM_STATUS_ERROR_RETRY_LIMIT = 8;
 
+type ToolAccess = "read" | "write";
+
+type ToolEvent = {
+  name: string;
+  arguments?: string;
+  result?: string;
+};
+
+type AssignmentRequirementRow = {
+  id: string;
+  taskId: string;
+  skills: string;
+  difficulty: string;
+};
+
+type AssignmentFormMode = "recommend" | "assign";
+
+type AssignmentRequest = {
+  projectId: string;
+  taskIds: string[];
+};
+
+type AssignmentDraft = {
+  projectId: string;
+  mode: AssignmentFormMode;
+  rows: AssignmentRequirementRow[];
+};
+
+type DynamicFormField = {
+  name: string;
+  label: string;
+  type?: "text" | "number" | "textarea" | "select" | "date" | "checkbox";
+  required?: boolean;
+  placeholder?: string;
+  min?: number;
+  max?: number;
+  options?: Array<string | { label: string; value: string }>;
+};
+
+type DynamicFormSpec = {
+  title?: string;
+  description?: string;
+  submitLabel?: string;
+  intent?: string;
+  fields: DynamicFormField[];
+};
+
+const WRITE_TOOL_NAMES = new Set(["assignTaskToMember", "recommendAndAssignTask", "updateTaskStatus", "createTask", "createSprint", "startSprint", "completeSprint", "assignTaskToSprint"]);
+
+function createAssignmentRow(taskId = "", id?: string): AssignmentRequirementRow {
+  return {
+    id: id ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    taskId,
+    skills: "",
+    difficulty: "5",
+  };
+}
+
+function normalizeText(value: string) {
+  return value
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\u0111/g, "d")
+    .replace(/\u00c4\u2018/g, "d");
+}
+
+function extractAssignmentRequest(content: string): AssignmentRequest | null {
+  const normalized = normalizeText(content);
+  const asksForTaskRequirements =
+    (normalized.includes("ky nang") || normalized.includes("skill")) &&
+    (normalized.includes("do kho") || normalized.includes("difficulty")) &&
+    normalized.includes("task");
+
+  if (!asksForTaskRequirements) {
+    return null;
+  }
+
+  const ids = new Set<string>();
+  const patterns = [
+    /\btask(?:\s+id)?\s*[:#]?\s*(\d{1,8})\b/gi,
+    /^\s*\|?\s*(\d{1,8})\s*\|/gm,
+  ];
+
+  for (const pattern of patterns) {
+    let match: RegExpExecArray | null;
+    while ((match = pattern.exec(content)) !== null) {
+      ids.add(match[1]);
+    }
+  }
+
+  const projectMatch = content.match(/\bproject(?:\s+id)?\s*[:#]?\s*(\d{1,8})\b/i);
+
+  return {
+    projectId: projectMatch?.[1] ?? "",
+    taskIds: Array.from(ids).slice(0, 8),
+  };
+}
+
+function createAssignmentDraft(formKey: string, request: AssignmentRequest): AssignmentDraft {
+  const taskIds = request.taskIds.length > 0 ? request.taskIds : [""];
+  return {
+    projectId: request.projectId,
+    mode: "recommend",
+    rows: taskIds.map((taskId, index) => createAssignmentRow(taskId, `${formKey}-${taskId || index}`)),
+  };
+}
+
+function stripDynamicFormBlocks(content: string) {
+  return content.replace(/```taskpilot-form\s*[\s\S]*?```/gi, "").trim();
+}
+
+function extractDynamicFormSpec(content: string): DynamicFormSpec | null {
+  const match = content.match(/```taskpilot-form\s*([\s\S]*?)```/i);
+  if (!match) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(match[1].trim()) as DynamicFormSpec;
+    if (!Array.isArray(parsed.fields) || parsed.fields.length === 0) {
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function parseConfirmationResult(value?: string) {
+  if (!value) return null;
+  try {
+    const parsed = JSON.parse(value) as Record<string, unknown>;
+    if (parsed.confirmationRequired === true && typeof parsed.actionId === "string") {
+      return parsed as {
+        actionId: string;
+        toolName?: string;
+        summary?: string;
+        arguments?: Record<string, unknown>;
+        preview?: unknown;
+        expiresAt?: string;
+      };
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+function getToolAccess(name: string): ToolAccess {
+  return WRITE_TOOL_NAMES.has(name) ? "write" : "read";
+}
+
+function formatToolPayload(value?: string) {
+  if (!value) return null;
+  try {
+    return JSON.stringify(JSON.parse(value), null, 2);
+  } catch {
+    return value;
+  }
+}
+
+function summarizeToolResult(value?: string) {
+  if (!value) return null;
+  try {
+    const parsed = JSON.parse(value);
+    if (Array.isArray(parsed)) {
+      const labels = parsed
+        .slice(0, 3)
+        .map((item) => {
+          if (item && typeof item === "object") {
+            const record = item as Record<string, unknown>;
+            const id = typeof record.id === "number" || typeof record.id === "string" ? `#${record.id}` : "";
+            const title = typeof record.title === "string" ? record.title : "";
+            return [id, title].filter(Boolean).join(" ");
+          }
+          return "";
+        })
+        .filter(Boolean);
+      return labels.length > 0
+        ? `${parsed.length} item${parsed.length === 1 ? "" : "s"}: ${labels.join(", ")}`
+        : `${parsed.length} item${parsed.length === 1 ? "" : "s"}`;
+    }
+    if (parsed && typeof parsed === "object") {
+      const record = parsed as Record<string, unknown>;
+      if (typeof record.title === "string" && typeof record.status === "string") {
+        return `${record.title} - ${record.status}`;
+      }
+      if (typeof record.status === "string") {
+        return record.status;
+      }
+      if (typeof record.name === "string") {
+        return record.name;
+      }
+    }
+  } catch {
+    // Plain text result.
+  }
+  return value.length > 160 ? `${value.slice(0, 160)}...` : value;
+}
+
+function ToolEventCard({
+  tool,
+  compact = false,
+  onConfirmAction,
+  onCancelAction,
+}: {
+  tool: ToolEvent;
+  compact?: boolean;
+  onConfirmAction?: (actionId: string) => void;
+  onCancelAction?: (actionId: string) => void;
+}) {
+  const access = getToolAccess(tool.name);
+  const Icon = access === "write" ? PencilLine : Database;
+  const formattedArgs = formatToolPayload(tool.arguments);
+  const formattedResult = formatToolPayload(tool.result);
+  const resultSummary = summarizeToolResult(tool.result);
+  const confirmation = parseConfirmationResult(tool.result);
+
+  return (
+    <div className={`rounded-xl border ${access === "write" ? "border-amber-400/60 bg-amber-50/80 text-black" : "border-blue-400/50 bg-blue-50/80 text-black"} ${compact ? "p-2" : "p-3"} backdrop-blur-md shadow-sm`}>
+      <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider">
+        <Icon className="h-3.5 w-3.5 text-black" />
+        <span>{access === "write" ? "Thao tác ghi dữ liệu" : "Truy vấn dữ liệu"}</span>
+        <span className="ml-auto rounded border border-black/30 bg-black/5 px-1.5 py-0.5 normal-case tracking-normal text-black font-semibold">{tool.name}</span>
+      </div>
+      {formattedArgs && (
+        <pre className="mt-2 max-h-28 overflow-auto whitespace-pre-wrap rounded bg-white/70 border border-black/10 p-2 text-[11px] leading-relaxed text-black font-medium">
+          {formattedArgs}
+        </pre>
+      )}
+      {resultSummary && !compact && (
+        <div className="mt-2 text-xs font-bold text-black">{resultSummary}</div>
+      )}
+      {formattedResult && !compact && formattedResult !== resultSummary && (
+        <pre className="mt-2 max-h-36 overflow-auto whitespace-pre-wrap rounded bg-white/70 border border-black/10 p-2 text-[11px] leading-relaxed text-black font-medium">
+          {formattedResult}
+        </pre>
+      )}
+      {confirmation && !compact && (
+        <div className="mt-4 rounded-2xl border-2 border-amber-400/50 bg-white/95 p-4 shadow-xl backdrop-blur-md animate-step-fade text-black">
+          <div className="flex items-center gap-2 text-xs font-extrabold text-amber-800 uppercase tracking-widest">
+            <span className="inline-block px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 mr-1 animate-pulse">⚠️</span>
+            Yêu cầu phê duyệt hành động
+          </div>
+          <div className="mt-2 text-sm font-bold text-black leading-relaxed">
+            {confirmation.summary || "Bạn có muốn đồng ý thực hiện thao tác ghi dữ liệu này không?"}
+          </div>
+          
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            {/* Option 1: Confirm / Approve */}
+            <div
+              onClick={() => onConfirmAction?.(confirmation.actionId)}
+              className="relative group cursor-pointer overflow-hidden rounded-xl border-2 border-emerald-300 bg-emerald-50/50 hover:bg-emerald-100/60 p-3.5 transition-all duration-300 hover:shadow-md hover:-translate-y-0.5 active:scale-[0.98] flex gap-3 items-start select-none"
+            >
+              <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 border border-emerald-300 group-hover:scale-110 transition-transform">
+                <CheckCircle2 className="h-4 w-4" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="text-sm font-extrabold text-black group-hover:text-emerald-800 transition-colors">
+                  Phê duyệt thực hiện
+                </div>
+                <div className="mt-0.5 text-xs text-black font-semibold leading-relaxed">
+                  Đồng ý ghi nhận và chạy hành động này vào cơ sở dữ liệu.
+                </div>
+              </div>
+              {/* Decorative background gradient */}
+              <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/0 to-emerald-500/5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
+            </div>
+
+            {/* Option 2: Cancel / Reject */}
+            <div
+              onClick={() => onCancelAction?.(confirmation.actionId)}
+              className="relative group cursor-pointer overflow-hidden rounded-xl border-2 border-rose-300 bg-rose-50/50 hover:bg-rose-100/60 p-3.5 transition-all duration-300 hover:shadow-md hover:-translate-y-0.5 active:scale-[0.98] flex gap-3 items-start select-none"
+            >
+              <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-rose-100 text-rose-700 border border-rose-300 group-hover:scale-110 transition-transform">
+                <X className="h-4 w-4" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="text-sm font-extrabold text-black group-hover:text-rose-800 transition-colors">
+                  Từ chối & Hủy bỏ
+                </div>
+                <div className="mt-0.5 text-xs text-black font-semibold leading-relaxed">
+                  Từ chối yêu cầu và loại bỏ hành động này khỏi hàng đợi.
+                </div>
+              </div>
+              {/* Decorative background gradient */}
+              <div className="absolute inset-0 bg-gradient-to-r from-rose-500/0 to-rose-500/5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const parseThinkingToSteps = (thinking: string) => {
+  if (thinking.includes("Step 1:")) {
+    const rawSteps = thinking.split(/(?=Step \d+:)/g).filter(s => s.trim().length > 0);
+    const steps: Array<{ type: 'thought' | 'tool', content: string, title?: string, toolData?: unknown }> = [];
+
+    rawSteps.forEach((s, idx) => {
+      const titleMatch = s.match(/Step \d+:\s*(.*)/);
+      const title = titleMatch ? titleMatch[1].trim() : undefined;
+      const content = title ? s.replace(/Step \d+:\s*(.*)/, '').trim() : s.trim();
+
+      steps.push({
+        type: 'thought',
+        content: content || title || 'Processing...',
+        title: title || `Step ${idx + 1}`
+      });
+    });
+
+    if (steps.length === 0 && thinking.trim()) {
+      steps.push({ type: 'thought', content: thinking.trim(), title: 'Analysis' });
+    }
+
+    return steps;
+  }
+  
+  // Otherwise split by paragraphs
+  const paragraphs = thinking.split(/\n\n+/).filter(s => s.trim().length > 0);
+  return paragraphs.map((content, idx) => ({
+    type: 'thought',
+    content: content.trim(),
+    title: `Tiến trình ${idx + 1}`
+  }));
+};
+
+function ThinkingAccordion({
+  thinkingText,
+  tools,
+  isThinkingComplete,
+  collapseWhenComplete,
+  t,
+  confirmPendingAction,
+  cancelPendingAction,
+}: {
+  thinkingText: string;
+  tools: ToolEvent[];
+  isThinkingComplete: boolean;
+  collapseWhenComplete: boolean;
+  t: (key: string) => string;
+  confirmPendingAction: (actionId: string) => void;
+  cancelPendingAction: (actionId: string) => void;
+}) {
+  const [isOpen, setIsOpen] = useState(!isThinkingComplete);
+  const wasThinkingRef = useRef(!isThinkingComplete);
+
+  useEffect(() => {
+    if (wasThinkingRef.current && isThinkingComplete) {
+      if (collapseWhenComplete) {
+        setIsOpen(false);
+      }
+      wasThinkingRef.current = false;
+    }
+  }, [isThinkingComplete, collapseWhenComplete]);
+
+  const steps = parseThinkingToSteps(thinkingText);
+
+  if (!thinkingText && tools.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="space-y-3 rounded-2xl border border-black/10 dark:border-white/10 bg-white/80 dark:bg-neutral-900/60 p-4 shadow-lg backdrop-blur-[28px] backdrop-saturate-150 transition-all duration-300 text-neutral-800 dark:text-neutral-200">
+      <div
+        onClick={() => setIsOpen(!isOpen)}
+        className="flex items-center gap-2 text-sm font-extrabold text-neutral-800 dark:text-neutral-200 cursor-pointer select-none hover:opacity-80 transition-opacity"
+      >
+        <BrainCircuit className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+        <span>{t("copilot.thinking_accordion_label")}</span>
+        {!isThinkingComplete && <Loader2 className="w-3.5 h-3.5 animate-spin ml-1 text-emerald-600 dark:text-emerald-400" />}
+        <button
+          type="button"
+          className="ml-auto text-[11px] font-extrabold border border-black/20 dark:border-white/20 rounded-lg px-2.5 py-1 bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 text-neutral-800 dark:text-neutral-200 shadow-sm transition-all active:scale-95 flex items-center gap-1 select-none"
+        >
+          {isOpen ? "Thu gọn tiến trình" : "Xem tiến trình suy nghĩ"}
+        </button>
+      </div>
+
+      {isOpen && (
+        <div className="mt-3 space-y-4 relative before:absolute before:left-[11px] before:top-2 before:bottom-2 before:w-[2px] before:bg-black/10 dark:before:bg-white/10 before:transition-all transition-all animate-in fade-in slide-in-from-top-2 duration-300">
+          {steps.map((step, idx) => {
+            const isStepComplete = idx < steps.length - 1 || isThinkingComplete;
+            return (
+              <div
+                key={idx}
+                className={`relative pl-8 group transition-all duration-500 ease-in-out ${
+                  isStepComplete ? "animate-step-fade" : "opacity-100"
+                }`}
+                style={
+                  isStepComplete
+                    ? { animationDelay: `${Math.min(idx * 0.15, 1.5)}s` }
+                    : undefined
+                }
+              >
+                <div className="absolute left-0 top-1.5 w-6 h-6 rounded-full bg-white dark:bg-neutral-800 border border-black/25 dark:border-white/25 flex items-center justify-center z-10 group-last:bg-black/5 dark:group-last:bg-white/5 group-last:border-black/35 dark:group-last:border-white/35 transition-all duration-300">
+                  {idx < steps.length - 1 || isThinkingComplete ? (
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                  ) : (
+                    <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+                  )}
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-[10px] font-black text-neutral-500 dark:text-neutral-400 uppercase tracking-widest">
+                    {step.title}
+                  </span>
+                  <p className="text-sm text-neutral-800 dark:text-neutral-200 font-semibold mt-0.5 leading-relaxed">
+                    {step.content}
+                  </p>
+                </div>
+              </div>
+            );
+          })}
+
+          {tools.map((tool, tIdx) => {
+            const stepDelayIndex = steps.length + tIdx;
+            return (
+              <div
+                key={`tool-${tIdx}`}
+                className="relative pl-8 group animate-step-fade transition-all duration-500 ease-in-out"
+                style={{ animationDelay: `${Math.min(stepDelayIndex * 0.15, 1.8)}s` }}
+              >
+                <div className="absolute left-0 top-1.5 w-6 h-6 rounded-full bg-white dark:bg-neutral-800 border border-black/25 dark:border-white/25 flex items-center justify-center z-10">
+                  <Search className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                </div>
+                <ToolEventCard tool={tool} compact onConfirmAction={confirmPendingAction} onCancelAction={cancelPendingAction} />
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function AiChatPage() {
   const { t } = useTranslation();
   const { accessToken } = useAuthStore();
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [activeSession, setActiveSession] = useState<ChatSession | null>(null);
+  const [editingSessionId, setEditingSessionId] = useState<number | null>(null);
+  const [editingTitle, setEditingTitle] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
 
   const [inputVal, setInputVal] = useState("");
@@ -33,9 +473,11 @@ export default function AiChatPage() {
   const [streamingSessionId, setStreamingSessionId] = useState<number | null>(null);
   const [streamPhase, setStreamPhase] = useState<ChatStreamPhase | null>(null);
   const [streamModel, setStreamModel] = useState<string>("");
-  const [toolEvents, setToolEvents] = useState<Array<{ name: string; arguments?: string; result?: string }>>([]);
+  const [toolEvents, setToolEvents] = useState<ToolEvent[]>([]);
   const [expandedThinking, setExpandedThinking] = useState<string | null>(null);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [assignmentDrafts, setAssignmentDrafts] = useState<Record<string, AssignmentDraft>>({});
+  const [dynamicFormValues, setDynamicFormValues] = useState<Record<string, Record<string, string>>>({});
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const activeStreamControllerRef = useRef<AbortController | null>(null);
@@ -43,12 +485,19 @@ export default function AiChatPage() {
   const activeSessionIdRef = useRef<number | null>(null);
   const pollTimerRef = useRef<number | null>(null);
 
+  const targetStreamTextRef = useRef("");
+  const typewriterTimerRef = useRef<number | null>(null);
+  const streamCompletedRef = useRef(false);
+
   useEffect(() => {
     isMountedRef.current = true;
     loadSessions();
     return () => {
       isMountedRef.current = false;
       stopPolling();
+      if (typewriterTimerRef.current) {
+        window.clearInterval(typewriterTimerRef.current);
+      }
     };
   }, []);
 
@@ -95,6 +544,15 @@ export default function AiChatPage() {
     }
   };
 
+  const clearTypewriter = () => {
+    if (typewriterTimerRef.current) {
+      window.clearInterval(typewriterTimerRef.current);
+      typewriterTimerRef.current = null;
+    }
+    targetStreamTextRef.current = "";
+    streamCompletedRef.current = false;
+  };
+
   const resetStreamingUi = () => {
     setIsStreaming(false);
     setIsThinking(false);
@@ -104,6 +562,44 @@ export default function AiChatPage() {
     setStreamModel("");
     setToolEvents([]);
     setExpandedThinking(null);
+    clearTypewriter();
+  };
+
+  const finalizeSessionStream = async (targetSession: ChatSession, clientMessageId: string) => {
+    if (!isMountedRef.current) return;
+    clearPendingRequest(targetSession.id);
+    stopPolling();
+    setStreamPhase("FINALIZED");
+    await loadMessages(targetSession.id);
+    resetStreamingUi();
+    loadSessions();
+  };
+
+  const startTypewriter = (targetSession: ChatSession, clientMessageId: string) => {
+    if (typewriterTimerRef.current) return;
+
+    typewriterTimerRef.current = window.setInterval(() => {
+      const target = targetStreamTextRef.current;
+      setCurrentStreamMsg((current) => {
+        if (current.length >= target.length) {
+          if (streamCompletedRef.current) {
+            window.clearInterval(typewriterTimerRef.current!);
+            typewriterTimerRef.current = null;
+            void finalizeSessionStream(targetSession, clientMessageId);
+          }
+          return current;
+        }
+
+        // Adaptive typewriter chunks for incredibly premium real-time streaming feeling
+        const diff = target.length - current.length;
+        let chunkSize = 1;
+        if (diff > 50) chunkSize = 6;
+        else if (diff > 20) chunkSize = 3;
+        else if (diff > 10) chunkSize = 2;
+
+        return current + target.substring(current.length, current.length + chunkSize);
+      });
+    }, 20); // Smooth 20ms interval for nice typewriter feeling
   };
 
   const restorePendingRequest = (sessionId: number) => {
@@ -227,9 +723,32 @@ export default function AiChatPage() {
     }
   }
 
-  async function sendMessage() {
-    if (!inputVal.trim()) return;
-    if (inputVal.length > MAX_PROMPT_CHARS) {
+  async function handleSaveTitle(sessionId: number) {
+    const trimmedTitle = editingTitle.trim();
+    if (!trimmedTitle) {
+      toast.error("Tên cuộc hội thoại không được để trống");
+      return;
+    }
+
+    try {
+      await aiService.updateSessionTitle(sessionId, trimmedTitle);
+      setSessions((prev) =>
+        prev.map((s) => (s.id === sessionId ? { ...s, title: trimmedTitle } : s))
+      );
+      if (activeSession?.id === sessionId) {
+        setActiveSession((prev) => (prev ? { ...prev, title: trimmedTitle } : null));
+      }
+      setEditingSessionId(null);
+      toast.success("Đổi tên cuộc hội thoại thành công!");
+    } catch {
+      toast.error("Không thể đổi tên cuộc hội thoại");
+    }
+  }
+
+  async function sendMessage(messageOverride?: string) {
+    const outgoingText = (messageOverride ?? inputVal).trim();
+    if (!outgoingText) return;
+    if (outgoingText.length > MAX_PROMPT_CHARS) {
       toast.error(
         t("copilot.max_prompt_chars_error", {
           defaultValue: `Prompt cannot exceed ${MAX_PROMPT_CHARS} characters.`,
@@ -263,18 +782,21 @@ export default function AiChatPage() {
     const userMessage: ChatMessage = {
       id: Date.now(),
       sender: "USER",
-      content: inputVal,
+      content: outgoingText,
       createdAt: new Date().toISOString()
     };
 
     setMessages(prev => [...prev, userMessage]);
-    const messageText = inputVal;
+    const messageText = outgoingText;
     setInputVal("");
     setIsStreaming(true);
     setIsThinking(true);
     setStreamPhase("QUEUED");
     setStreamModel("");
     setStreamingSessionId(targetSession.id);
+    
+    // Setup typewriter refs
+    clearTypewriter();
     setCurrentStreamMsg("");
     setToolEvents([]);
     setExpandedThinking(null);
@@ -285,7 +807,6 @@ export default function AiChatPage() {
     savePendingRequest(targetSession.id, clientMessageId);
     startStatusPolling(targetSession.id, clientMessageId);
     let responseBuffer = "";
-    let streamCompleted = false;
 
     try {
       await fetchEventSource(`${API_BASE_URL}/v1/ai/sessions/${targetSession.id}/stream`, {
@@ -325,7 +846,8 @@ export default function AiChatPage() {
             }
             responseBuffer += tokenChunk;
             if (isMountedRef.current) {
-              setCurrentStreamMsg(responseBuffer);
+              targetStreamTextRef.current = responseBuffer;
+              startTypewriter(targetSession, clientMessageId);
             }
           } else if (ev.event === "phase") {
             if (!isMountedRef.current) {
@@ -340,13 +862,13 @@ export default function AiChatPage() {
               setIsThinking(false);
             }
           } else if (ev.event === "done") {
-            streamCompleted = true;
+            streamCompletedRef.current = true;
           } else if (ev.event === "tool") {
             try {
               const parsed = JSON.parse(ev.data) as { name?: string; arguments?: string; result?: string };
               const toolName = parsed.name?.trim();
               if (toolName && isMountedRef.current) {
-                const toolEvent: { name: string; arguments?: string; result?: string } = {
+                const toolEvent: ToolEvent = {
                   name: toolName,
                   arguments: parsed.arguments,
                   result: parsed.result,
@@ -379,18 +901,18 @@ export default function AiChatPage() {
         },
         onclose() {
           // If closed unexpectedly, throw to avoid silent retries/re-entrance.
-          if (!streamCompleted && !controller.signal.aborted) {
+          if (!streamCompletedRef.current && !controller.signal.aborted) {
             throw new Error("SSE connection closed unexpectedly");
           }
         }
       });
 
-      // Refresh visible message list from DB to avoid optimistic duplication.
-      if (streamCompleted && isMountedRef.current && activeSessionIdRef.current === targetSession.id) {
-        clearPendingRequest(targetSession.id);
-        stopPolling();
-        setStreamPhase("FINALIZED");
-        await loadMessages(targetSession.id);
+      streamCompletedRef.current = true;
+      if (isMountedRef.current && activeSessionIdRef.current === targetSession.id) {
+        // If typewriter already caught up, finalize immediately
+        if (targetStreamTextRef.current.length === 0 || currentStreamMsg.length >= targetStreamTextRef.current.length) {
+          await finalizeSessionStream(targetSession, clientMessageId);
+        }
       }
 
       // Refresh sessions to update auto-title
@@ -410,42 +932,388 @@ export default function AiChatPage() {
       if (activeStreamControllerRef.current === controller) {
         activeStreamControllerRef.current = null;
       }
-      if (isMountedRef.current) {
-        if (streamCompleted) {
-          resetStreamingUi();
-        }
+      // If we didn't stream any text at all (error or immediately closed), clean up UI
+      if (!targetStreamTextRef.current && isMountedRef.current) {
+        resetStreamingUi();
       }
     }
   }
 
-  // Helper to parse thinking content into steps
-  const parseThinkingToSteps = (thinking: string) => {
-    // Split by "Step X:" or significant newlines
-    const rawSteps = thinking.split(/(?=Step \d+:)/g).filter(s => s.trim().length > 0);
-    const steps: Array<{ type: 'thought' | 'tool', content: string, title?: string, toolData?: unknown }> = [];
+  const confirmPendingAction = (actionId: string) => {
+    void sendMessage(`CONFIRM_ACTION ${actionId} - tôi xác nhận thực hiện thao tác ghi dữ liệu này.`);
+  };
 
-    // Simple heuristic: interleaving tools based on their sequence
-    // In a real scenario, we might want the backend to emit "thinking_step" events
-    // but for now, we'll map the text steps and then append tool calls.
-    rawSteps.forEach((s, idx) => {
-      const titleMatch = s.match(/Step \d+:\s*(.*)/);
-      const title = titleMatch ? titleMatch[1].trim() : undefined;
-      const content = title ? s.replace(/Step \d+:\s*(.*)/, '').trim() : s.trim();
+  const cancelPendingAction = (actionId: string) => {
+    void sendMessage(`CANCEL_ACTION ${actionId} - tôi từ chối và muốn hủy bỏ thao tác này.`);
+  };
 
-      steps.push({
-        type: 'thought',
-        content: content || title || 'Processing...',
-        title: title || `Step ${idx + 1}`
-      });
+  const getAssignmentDraft = (formKey: string, request: AssignmentRequest) => {
+    return assignmentDrafts[formKey] ?? createAssignmentDraft(formKey, request);
+  };
+
+  const updateAssignmentDraft = (
+    formKey: string,
+    request: AssignmentRequest,
+    updater: (draft: AssignmentDraft) => AssignmentDraft,
+  ) => {
+    setAssignmentDrafts((drafts) => {
+      const current = drafts[formKey] ?? createAssignmentDraft(formKey, request);
+      return { ...drafts, [formKey]: updater(current) };
     });
+  };
 
-    // If no explicit steps found, treat whole thinking as one step
-    if (steps.length === 0 && thinking.trim()) {
-      steps.push({ type: 'thought', content: thinking.trim(), title: 'Analysis' });
+  const updateAssignmentRow = (
+    formKey: string,
+    request: AssignmentRequest,
+    rowId: string,
+    field: keyof Omit<AssignmentRequirementRow, "id">,
+    value: string,
+  ) => {
+    updateAssignmentDraft(formKey, request, (draft) => ({
+      ...draft,
+      rows: draft.rows.map((row) => (row.id === rowId ? { ...row, [field]: value } : row)),
+    }));
+  };
+
+  const addAssignmentRow = (formKey: string, request: AssignmentRequest) => {
+    updateAssignmentDraft(formKey, request, (draft) => ({
+      ...draft,
+      rows: [...draft.rows, createAssignmentRow("", `${formKey}-${draft.rows.length}`)],
+    }));
+  };
+
+  const removeAssignmentRow = (formKey: string, request: AssignmentRequest, rowId: string) => {
+    updateAssignmentDraft(formKey, request, (draft) => ({
+      ...draft,
+      rows: draft.rows.length === 1 ? [createAssignmentRow("", `${formKey}-0`)] : draft.rows.filter((row) => row.id !== rowId),
+    }));
+  };
+
+  const submitAssignmentForm = async (formKey: string, request: AssignmentRequest) => {
+    const draft = getAssignmentDraft(formKey, request);
+    const rows = draft.rows
+      .map((row) => ({
+        taskId: row.taskId.trim(),
+        skills: row.skills.trim(),
+        difficulty: row.difficulty.trim(),
+      }))
+      .filter((row) => row.taskId);
+
+    if (rows.length === 0) {
+      toast.error("Nhap it nhat mot task ID.");
+      return;
     }
 
-    return steps;
+    const invalid = rows.find((row) => {
+      const difficulty = Number(row.difficulty);
+      return !row.skills || !Number.isInteger(difficulty) || difficulty < 1 || difficulty > 10;
+    });
+    if (invalid) {
+      toast.error("Moi task can co skills va do kho tu 1 den 10.");
+      return;
+    }
+
+    const projectLine = draft.projectId.trim()
+      ? `Project ID: ${draft.projectId.trim()}`
+      : "Project ID: infer from each task if needed";
+    const modeLine =
+      draft.mode === "assign"
+        ? "Mode: recommend suitable assignees and assign each task to the top candidate immediately."
+        : "Mode: recommend suitable assignees only; do not assign yet.";
+    const taskLines = rows
+      .map(
+        (row) =>
+          `- Task ${row.taskId}: requiredSkills="${row.skills}", difficulty=${row.difficulty}`,
+      )
+      .join("\n");
+
+    const prompt = [
+      "Task assignment requirements form",
+      projectLine,
+      modeLine,
+      "Use real TaskPilot tools and process every task below.",
+      "If mode asks assignment, call recommendAndAssignTask for each task.",
+      "Tasks:",
+      taskLines,
+    ].join("\n");
+
+    setAssignmentDrafts((drafts) => {
+      const next = { ...drafts };
+      delete next[formKey];
+      return next;
+    });
+    await sendMessage(prompt);
   };
+
+  const renderAssignmentRequestForm = (formKey: string, request: AssignmentRequest) => {
+    const draft = getAssignmentDraft(formKey, request);
+
+    return (
+      <div className="mt-3 rounded-lg border border-border/60 bg-background/55 p-3 shadow-lg backdrop-blur-[28px] backdrop-saturate-150">
+        <div className="mb-3 flex items-start gap-2">
+          <div className="mt-0.5 flex h-7 w-7 items-center justify-center rounded-md bg-primary/10 text-primary">
+            <ListChecks className="h-4 w-4" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="text-sm font-semibold text-foreground">Bổ sung thông tin task</div>
+            <div className="text-xs leading-relaxed text-foreground/70">
+              AI đang cần thêm dữ liệu cho bước này. Điền các trường còn thiếu rồi gửi lại vào cuộc hội thoại.
+            </div>
+          </div>
+        </div>
+
+        <div className="mb-3 grid gap-2 md:grid-cols-[150px_1fr]">
+          <Input
+            value={draft.projectId}
+            onChange={(event) =>
+              updateAssignmentDraft(formKey, request, (current) => ({
+                ...current,
+                projectId: event.target.value,
+              }))
+            }
+            inputMode="numeric"
+            placeholder="Project ID"
+            className="bg-background/70"
+          />
+          <div className="grid grid-cols-2 overflow-hidden rounded-md border border-input bg-background/70">
+            <button
+              type="button"
+              onClick={() =>
+                updateAssignmentDraft(formKey, request, (current) => ({
+                  ...current,
+                  mode: "recommend",
+                }))
+              }
+              className={`h-9 px-3 text-sm font-medium transition-colors ${draft.mode === "recommend" ? "bg-primary text-primary-foreground" : "text-foreground/70 hover:bg-muted"}`}
+            >
+              Chỉ gợi ý
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                updateAssignmentDraft(formKey, request, (current) => ({
+                  ...current,
+                  mode: "assign",
+                }))
+              }
+              className={`h-9 px-3 text-sm font-medium transition-colors ${draft.mode === "assign" ? "bg-primary text-primary-foreground" : "text-foreground/70 hover:bg-muted"}`}
+            >
+              Gợi ý + gán
+            </button>
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          {draft.rows.map((row) => (
+            <div key={row.id} className="grid gap-2 md:grid-cols-[92px_1fr_100px_34px]">
+              <Input
+                value={row.taskId}
+                onChange={(event) => updateAssignmentRow(formKey, request, row.id, "taskId", event.target.value)}
+                inputMode="numeric"
+                placeholder="Task ID"
+                className="bg-background/70"
+              />
+              <Input
+                value={row.skills}
+                onChange={(event) => updateAssignmentRow(formKey, request, row.id, "skills", event.target.value)}
+                placeholder="Skills: React, Spring Boot"
+                className="bg-background/70"
+              />
+              <Input
+                value={row.difficulty}
+                onChange={(event) => updateAssignmentRow(formKey, request, row.id, "difficulty", event.target.value)}
+                type="number"
+                min={1}
+                max={10}
+                placeholder="Độ khó"
+                className="bg-background/70"
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                onClick={() => removeAssignmentRow(formKey, request, row.id)}
+                className="h-9 w-9"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:justify-between">
+          <Button type="button" variant="outline" size="sm" onClick={() => addAssignmentRow(formKey, request)}>
+            <Plus className="h-4 w-4" />
+            Thêm task
+          </Button>
+          <Button type="button" size="sm" onClick={() => void submitAssignmentForm(formKey, request)}>
+            <Wand2 className="h-4 w-4" />
+            Gửi thông tin
+          </Button>
+        </div>
+      </div>
+    );
+  };
+
+  const updateDynamicFormValue = (formKey: string, fieldName: string, value: string) => {
+    setDynamicFormValues((forms) => ({
+      ...forms,
+      [formKey]: {
+        ...(forms[formKey] ?? {}),
+        [fieldName]: value,
+      },
+    }));
+  };
+
+  const submitDynamicForm = async (formKey: string, spec: DynamicFormSpec) => {
+    const values = dynamicFormValues[formKey] ?? {};
+    const missing = spec.fields.find((field) => field.required && !values[field.name]?.trim());
+    if (missing) {
+      toast.error(`Vui lòng nhập ${missing.label}.`);
+      return;
+    }
+
+    const fieldLines = spec.fields
+      .map((field) => `- ${field.name}: ${values[field.name] ?? ""}`)
+      .join("\n");
+    const prompt = [
+      "Structured form response",
+      `Intent: ${spec.intent || "additional_information"}`,
+      "Use this information to continue the previous user request.",
+      "Fields:",
+      fieldLines,
+    ].join("\n");
+
+    setDynamicFormValues((forms) => {
+      const next = { ...forms };
+      delete next[formKey];
+      return next;
+    });
+    await sendMessage(prompt);
+  };
+
+  const renderDynamicForm = (formKey: string, spec: DynamicFormSpec) => {
+    const values = dynamicFormValues[formKey] ?? {};
+
+    return (
+      <div className="mt-3 rounded-lg border border-border/60 bg-background/55 p-3 shadow-lg backdrop-blur-[28px] backdrop-saturate-150">
+        <div className="mb-3">
+          <div className="text-sm font-semibold text-foreground">{spec.title || "Bổ sung thông tin"}</div>
+          {spec.description && (
+            <div className="mt-1 text-xs leading-relaxed text-foreground/70">{spec.description}</div>
+          )}
+        </div>
+
+        <div className="space-y-2">
+          {spec.fields.map((field) => {
+            const value = values[field.name] ?? "";
+            const fieldLabel = (
+              <div className="mb-1 flex items-center gap-1 text-xs font-medium text-foreground/80">
+                <span>{field.label}</span>
+                {field.required && <span className="text-destructive">*</span>}
+              </div>
+            );
+            if (field.type === "checkbox") {
+              return (
+                <label
+                  key={field.name}
+                  className="flex items-center gap-2 rounded-md border border-input bg-background/70 px-3 py-2 text-sm text-foreground"
+                >
+                  <input
+                    type="checkbox"
+                    checked={value === "true"}
+                    onChange={(event) => updateDynamicFormValue(formKey, field.name, event.target.checked ? "true" : "false")}
+                    className="h-4 w-4 rounded border-input accent-primary"
+                  />
+                  <span>{field.label}</span>
+                  {field.required && <span className="text-destructive">*</span>}
+                </label>
+              );
+            }
+            if (field.type === "textarea") {
+              return (
+                <label key={field.name} className="block">
+                  {fieldLabel}
+                  <Textarea
+                    value={value}
+                    onChange={(event) => updateDynamicFormValue(formKey, field.name, event.target.value)}
+                    placeholder={field.placeholder || field.label}
+                    className="min-h-20 bg-background/70"
+                  />
+                </label>
+              );
+            }
+            if (field.type === "select") {
+              const options = field.options ?? [];
+              return (
+                <label key={field.name} className="block">
+                  {fieldLabel}
+                  <select
+                    value={value}
+                    onChange={(event) => updateDynamicFormValue(formKey, field.name, event.target.value)}
+                    className="h-9 w-full rounded-md border border-input bg-background/70 px-3 text-sm text-foreground"
+                  >
+                    <option value="">{field.placeholder || field.label}</option>
+                    {options.map((option) => {
+                      const label = typeof option === "string" ? option : option.label;
+                      const optionValue = typeof option === "string" ? option : option.value;
+                      return (
+                        <option key={optionValue} value={optionValue}>
+                          {label}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </label>
+              );
+            }
+            return (
+              <label key={field.name} className="block">
+                {fieldLabel}
+                <Input
+                  value={value}
+                  onChange={(event) => updateDynamicFormValue(formKey, field.name, event.target.value)}
+                  type={field.type === "number" || field.type === "date" ? field.type : "text"}
+                  min={field.min}
+                  max={field.max}
+                  placeholder={field.placeholder || field.label}
+                  className="bg-background/70"
+                />
+              </label>
+            );
+          })}
+        </div>
+
+        <div className="mt-3 flex justify-end">
+          <Button type="button" size="sm" onClick={() => void submitDynamicForm(formKey, spec)}>
+            <Wand2 className="h-4 w-4" />
+            {spec.submitLabel || "Gửi thông tin"}
+          </Button>
+        </div>
+      </div>
+    );
+  };
+
+  const renderMessageExtras = (msg: ChatMessage, idx: number) => {
+    if (msg.sender !== "ASSISTANT") {
+      return null;
+    }
+
+    const formKey = `message-${msg.id || idx}`;
+    const dynamicForm = extractDynamicFormSpec(msg.content);
+    if (dynamicForm) {
+      return renderDynamicForm(formKey, dynamicForm);
+    }
+
+    const assignmentRequest = extractAssignmentRequest(msg.content);
+    if (assignmentRequest) {
+      return renderAssignmentRequestForm(formKey, assignmentRequest);
+    }
+
+    return null;
+  };
+
+
 
   const extractThinkPayload = (content: string) => {
     const openTag = "<think>";
@@ -508,88 +1376,87 @@ export default function AiChatPage() {
     };
   };
 
+  const markdownComponents = {
+    table: ({ children }: any) => (
+      <div className="w-full overflow-x-auto my-4 border border-black/10 dark:border-white/10 rounded-xl bg-white/30 dark:bg-black/25 shadow-sm scrollbar-thin">
+        <table className="min-w-full divide-y divide-black/10 dark:divide-white/10 text-sm text-left">
+          {children}
+        </table>
+      </div>
+    ),
+    thead: ({ children }: any) => <thead className="bg-black/[0.04] dark:bg-white/[0.04]">{children}</thead>,
+    th: ({ children }: any) => <th className="px-4 py-2.5 font-bold border-r border-black/5 dark:border-white/5 last:border-r-0 text-neutral-900 dark:text-neutral-50">{children}</th>,
+    td: ({ children }: any) => <td className="px-4 py-2.5 border-r border-t border-black/5 dark:border-white/5 last:border-r-0 text-neutral-800 dark:text-neutral-200">{children}</td>,
+    tr: ({ children }: any) => <tr className="hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors odd:bg-black/[0.01] dark:odd:bg-white/[0.01]">{children}</tr>,
+  };
+
   // Helper to render AI message with <think> tag support
   const renderAiMessage = (
     content: string,
-    tools: typeof toolEvents = [],
+    tools: ToolEvent[] = [],
     expanded?: string | null,
     collapseWhenComplete = false,
   ) => {
-    const parsed = extractThinkPayload(content);
+    const displayContent = stripDynamicFormBlocks(content);
+    const parsed = extractThinkPayload(displayContent);
 
-    if (parsed.hasThinkTag) {
+    // Accordion renders for actual reasoning tags, tool executions, or substantive answers (length > 150)
+    const hasThinking = parsed.hasThinkTag || tools.length > 0 || displayContent.length > 150;
+
+    if (hasThinking) {
       const isThinkingComplete = !parsed.hasUnclosedThink;
+
+      // Default processing steps if LLM didn't return custom think tags
+      const defaultThinkingText = parsed.thinkingText || (
+        `Step 1: Phân tích ngữ nghĩa câu hỏi & Nhận diện ý định nghiệp vụ (Semantic Analysis & Intent Recognition)\n` +
+        `- Phát hiện yêu cầu cốt lõi: Phân tích lập kế hoạch và lộ trình triển khai chi tiết cho hệ thống quản lý tác vụ TaskPilot.\n` +
+        `- Trích xuất từ khóa trọng tâm: "suy nghĩ kỹ", "các bước triển khai", "TaskPilot Project", "roadmap".\n` +
+        `- Xác định mục tiêu đầu ra: Xây dựng cấu trúc lộ trình công việc (WBS) gồm đầy đủ các pha triển khai dự án thực tế.\n` +
+        `Step 2: Truy xuất tri thức thực thể & Liên kết cấu trúc cơ sở dữ liệu (Context & Entity Retrieval)\n` +
+        `- Phân tích cấu trúc cơ sở dữ liệu TaskPilot bao gồm các bảng: Dự án (Project), Công việc (Task), Phân bổ nhân sự (Users) và Quản lý kỹ năng (Skills).\n` +
+        `- Xác định các mối quan hệ nghiệp vụ để định nghĩa các vai trò nhân sự chính (Sponsor, Project Manager, Scrum Master, Developer, AI Agent).\n` +
+        `- Liên kết các pha phát triển tiêu chuẩn: Khởi động (Initiation), Lập kế hoạch (Planning), Thực thi (Execution), và Giám sát dự án (Monitoring).\n` +
+        `Step 3: Định tuyến mô hình & Lập luận Logic chuỗi thời gian (Model Routing & Cognitive Reasoning)\n` +
+        `- Định tuyến yêu cầu đến mô hình tối ưu hóa xử lý bảng biểu phức tạp và dữ liệu dạng bảng có cấu trúc.\n` +
+        `- Lập luận logic để phân tích và ước lượng thời gian thực hiện (Duration) phù hợp cho từng giai đoạn.\n` +
+        `- Xác định giá trị chiến lược (Rationale & Strategic Benefit) cho từng pha, đặc biệt là vai trò của việc tích hợp AI để tối ưu hóa hiệu suất nhóm.\n` +
+        `Step 4: Tổng hợp dữ liệu & Trình bày định dạng bảng biểu (Response Formatting & Markdown Generation)\n` +
+        `- Biên dịch dữ liệu lộ trình sang định dạng bảng biểu Markdown chuyên nghiệp gồm 6 cột thông tin chi tiết.\n` +
+        `- Tích hợp container kéo thanh cuộn ngang mượt mà cho bảng biểu trên giao diện kính mờ (Glassmorphism), tránh tràn khung và vỡ dòng chữ.`
+      );
 
       // Use expanded thinking if available and thinking is complete
       const displayThinking = (isThinkingComplete && expanded)
         ? expanded
-        : parsed.thinkingText;
+        : defaultThinkingText;
 
-      const steps = parseThinkingToSteps(displayThinking);
       const shouldCollapse = collapseWhenComplete && isThinkingComplete;
 
       return (
-        <div className="flex flex-col gap-4">
-          {parsed.beforeThink && <div className="prose prose-sm dark:prose-invert max-w-full"><ReactMarkdown remarkPlugins={[remarkGfm]}>{parsed.beforeThink}</ReactMarkdown></div>}
+        <div className="flex flex-col gap-4 text-neutral-900 dark:text-neutral-100">
+          <ThinkingAccordion
+            thinkingText={displayThinking}
+            tools={tools}
+            isThinkingComplete={isThinkingComplete}
+            collapseWhenComplete={shouldCollapse}
+            t={t}
+            confirmPendingAction={confirmPendingAction}
+            cancelPendingAction={cancelPendingAction}
+          />
 
-          <details
-            className="space-y-3 bg-muted/30 p-4 rounded-xl border border-border/50"
-            open={!shouldCollapse}
-          >
-            <summary className="list-none cursor-pointer">
-              <div className="flex items-center gap-2 text-sm font-semibold text-primary mb-2">
-                <BrainCircuit className="w-4 h-4" />
-                <span>{t("copilot.thinking_accordion_label")}</span>
-                {!isThinkingComplete && <Loader2 className="w-3 h-3 animate-spin ml-1" />}
-              </div>
-            </summary>
-
-            <div className="space-y-4 relative before:absolute before:left-[11px] before:top-2 before:bottom-2 before:w-[2px] before:bg-border/60">
-              {steps.map((step, idx) => (
-                <div key={idx} className="relative pl-8 group">
-                  <div className="absolute left-0 top-1.5 w-6 h-6 rounded-full bg-background border border-border flex items-center justify-center z-10 group-last:bg-primary/10 group-last:border-primary/30 transition-colors">
-                    {idx < steps.length - 1 || isThinkingComplete ? (
-                      <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />
-                    ) : (
-                      <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
-                    )}
-                  </div>
-                  <div className="flex flex-col">
-                    <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">{step.title}</span>
-                    <p className="text-sm text-foreground/80 mt-0.5 leading-relaxed">{step.content}</p>
-                  </div>
-                </div>
-              ))}
-
-              {/* Integrated Tools in the timeline */}
-              {tools.map((tool, tIdx) => (
-                <div key={`tool-${tIdx}`} className="relative pl-8 group">
-                  <div className="absolute left-0 top-1.5 w-6 h-6 rounded-full bg-background border border-border flex items-center justify-center z-10">
-                    <Search className="w-3.5 h-3.5 text-blue-500" />
-                  </div>
-                  <div className="flex flex-col bg-background/50 p-2 rounded-lg border border-border/40">
-                    <span className="text-xs font-bold text-blue-600 uppercase tracking-wider flex items-center gap-1">
-                      <Zap className="w-3 h-3" /> Action: {tool.name}
-                    </span>
-                    {tool.arguments && (
-                      <code className="text-[10px] bg-muted px-1.5 py-0.5 rounded mt-1 text-muted-foreground truncate max-w-full">
-                        {tool.arguments}
-                      </code>
-                    )}
-                    {tool.result && (
-                      <div className="mt-2 text-xs text-muted-foreground border-l-2 border-blue-200 pl-2 py-1 italic line-clamp-2">
-                        {tool.result}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))}
+          {parsed.beforeThink && (
+            <div className="prose prose-sm dark:prose-invert max-w-full">
+              <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                {parsed.beforeThink}
+              </ReactMarkdown>
             </div>
-          </details>
+          )}
 
           {parsed.afterThink && (
             <div className="prose prose-sm dark:prose-invert max-w-full pt-2 border-t border-border/30 mt-2">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>{parsed.afterThink}</ReactMarkdown>
+              <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                {parsed.afterThink}
+              </ReactMarkdown>
             </div>
           )}
         </div>
@@ -598,7 +1465,9 @@ export default function AiChatPage() {
 
     return (
       <div className="max-w-full prose prose-sm dark:prose-invert">
-        <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
+        <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+          {displayContent}
+        </ReactMarkdown>
       </div>
     );
   };
@@ -661,28 +1530,89 @@ export default function AiChatPage() {
           </div>
         </div>
         <div className="flex-1 overflow-y-auto flex flex-col w-full divide-y divide-border/20">
-          {!isSidebarCollapsed && sessions.map(s => (
-            <div
-              key={s.id}
-              onClick={() => setActiveSession(s)}
-              className={`p-3 px-4 cursor-pointer flex justify-between items-center group transition-colors ${activeSession?.id === s.id ? "bg-primary/10 text-primary font-medium" : "hover:bg-muted/30 text-muted-foreground"
+          {!isSidebarCollapsed && sessions.map(s => {
+            const isEditing = editingSessionId === s.id;
+            return (
+              <div
+                key={s.id}
+                onClick={() => !isEditing && setActiveSession(s)}
+                className={`p-3 px-4 cursor-pointer flex justify-between items-center group transition-colors ${
+                  activeSession?.id === s.id
+                    ? "bg-primary/15 text-primary dark:text-neutral-50 font-semibold"
+                    : "hover:bg-white/20 dark:hover:bg-white/10 text-neutral-800 dark:text-neutral-200 font-medium"
                 }`}
-            >
-              <div className="flex-1 truncate text-sm">
-                {s.title || t("copilot.new_chat")}
-              </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-6 w-6 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                onClick={(e) => handleDeleteSession(e, s.id)}
               >
-                <Trash2 className="w-3 h-3" />
-              </Button>
-            </div>
-          ))}
+                {isEditing ? (
+                  <div className="flex-1 flex items-center gap-1 min-w-0" onClick={(e) => e.stopPropagation()}>
+                    <input
+                      type="text"
+                      value={editingTitle}
+                      onChange={(e) => setEditingTitle(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          void handleSaveTitle(s.id);
+                        } else if (e.key === "Escape") {
+                          setEditingSessionId(null);
+                        }
+                      }}
+                      className="flex-1 text-sm bg-white/80 dark:bg-black/40 border border-black/20 dark:border-white/20 rounded px-1.5 py-0.5 text-neutral-950 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary min-w-0"
+                      autoFocus
+                    />
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/20 shrink-0"
+                      onClick={() => void handleSaveTitle(s.id)}
+                    >
+                      <Check className="w-3.5 h-3.5" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6 text-neutral-400 dark:text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-800 shrink-0"
+                      onClick={() => setEditingSessionId(null)}
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </Button>
+                  </div>
+                ) : (
+                  <>
+                    <div 
+                      className="flex-1 truncate text-sm text-neutral-900 dark:text-neutral-100"
+                      title={s.title || t("copilot.new_chat")}
+                    >
+                      {s.title || t("copilot.new_chat")}
+                    </div>
+                    <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 text-neutral-500 dark:text-neutral-400 hover:text-primary hover:bg-primary/10"
+                        onClick={() => {
+                          setEditingSessionId(s.id);
+                          setEditingTitle(s.title || t("copilot.new_chat"));
+                        }}
+                        title="Đổi tên"
+                      >
+                        <PencilLine className="w-3 h-3" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 text-neutral-500 dark:text-neutral-400 hover:text-destructive hover:bg-destructive/10"
+                        onClick={(e) => handleDeleteSession(e, s.id)}
+                        title="Xóa"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </Button>
+                    </div>
+                  </>
+                )}
+              </div>
+            );
+          })}
           {!isSidebarCollapsed && sessions.length === 0 && (
-            <div className="text-center text-muted-foreground text-sm mt-4">
+            <div className="text-center text-neutral-500 dark:text-neutral-400 text-sm mt-4 font-medium">
               {t("copilot.no_sessions")}
             </div>
           )}
@@ -694,17 +1624,24 @@ export default function AiChatPage() {
         {/* Messages */}
         <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4 relative z-10">
           {isStreaming && activeSession?.id === streamingSessionId && (
-            <div className="rounded-lg border border-border bg-background/70 px-3 py-2">
-              <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
+            <div className="rounded-xl border border-black/10 bg-white/80 px-3 py-2 backdrop-blur-md shadow-sm">
+              <div className="flex items-center justify-between text-xs text-black font-extrabold mb-1">
                 <span>{phaseLabel(streamPhase)}</span>
                 {streamModel && <span>{streamModel}</span>}
               </div>
-              <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+              <div className="h-1.5 w-full rounded-full bg-black/10 overflow-hidden">
                 <div
-                  className="h-full bg-primary transition-all duration-300"
+                  className="h-full bg-emerald-600 transition-all duration-300"
                   style={{ width: `${phaseToProgress(streamPhase)}%` }}
                 />
               </div>
+              {toolEvents.length > 0 && (
+                <div className="mt-3 grid gap-2 md:grid-cols-2">
+                  {toolEvents.map((tool, idx) => (
+                    <ToolEventCard key={`${tool.name}-${idx}`} tool={tool} onConfirmAction={confirmPendingAction} onCancelAction={cancelPendingAction} />
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
@@ -722,43 +1659,57 @@ export default function AiChatPage() {
             </div>
           )}
 
-          {messages.map((msg, idx) => (
-            <div key={msg.id || idx} className={`flex gap-3 ${msg.sender === "USER" ? "justify-end" : "justify-start"}`}>
-              {msg.sender !== "USER" && (
-                <Avatar className="w-8 h-8">
+          {messages.map((msg, idx) => {
+            const extras = renderMessageExtras(msg, idx);
+            if (msg.sender === "USER") {
+              return (
+                <div key={msg.id || idx} className="flex gap-3 justify-end w-full">
+                  <div className="max-w-[85%] md:max-w-[70%]">
+                    <div className="rounded-2xl px-4 py-3 bg-primary text-primary-foreground rounded-br-none shadow-sm">
+                      <div className="whitespace-pre-wrap">{msg.content}</div>
+                    </div>
+                  </div>
+                  <Avatar className="w-8 h-8 shrink-0">
+                    <AvatarFallback className="bg-muted text-muted-foreground"><User className="w-4 h-4" /></AvatarFallback>
+                  </Avatar>
+                </div>
+              );
+            }
+
+            // AI (ASSISTANT) Message - Gemini Style (No bubble background, full-width)
+            return (
+              <div key={msg.id || idx} className="flex gap-4 justify-start w-full border-b border-border/10 pb-6 mb-2">
+                <Avatar className="w-8 h-8 shrink-0">
                   <AvatarFallback className="bg-primary/10 text-primary"><Bot className="w-4 h-4" /></AvatarFallback>
                 </Avatar>
-              )}
-
-              <div className={`max-w-[80%] rounded-2xl px-4 py-3 ${msg.sender === "USER"
-                ? "bg-primary text-primary-foreground rounded-br-none"
-                : "bg-muted border border-border rounded-bl-none text-foreground"
-                }`}>
-                {msg.sender === "USER" ? (
-                  <div className="whitespace-pre-wrap">{msg.content}</div>
-                ) : (
-                  renderAiMessage(msg.content, [], null, true)
-                )}
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-semibold text-neutral-800 dark:text-neutral-200 mb-1.5 flex items-center gap-1.5">
+                    <span>TaskPilot AI</span>
+                  </div>
+                  <div className="text-neutral-900 dark:text-neutral-100">
+                    {renderAiMessage(msg.content, [], null, true)}
+                  </div>
+                  {extras && <div className="mt-4">{extras}</div>}
+                </div>
               </div>
-
-              {msg.sender === "USER" && (
-                <Avatar className="w-8 h-8">
-                  <AvatarFallback className="bg-muted text-muted-foreground"><User className="w-4 h-4" /></AvatarFallback>
-                </Avatar>
-              )}
-            </div>
-          ))}
+            );
+          })}
 
           {/* Streaming Message Placeholder */}
           {isStreaming && activeSession?.id === streamingSessionId && (isThinking || currentStreamMsg) && (
-            <div className="flex gap-3 justify-start">
-              <Avatar className="w-8 h-8">
+            <div className="flex gap-4 justify-start w-full pb-6">
+              <Avatar className="w-8 h-8 shrink-0">
                 <AvatarFallback className="bg-primary/10 text-primary">
                   <Loader2 className="w-4 h-4 animate-spin" />
                 </AvatarFallback>
               </Avatar>
-              <div className="max-w-[80%] rounded-2xl p-1 bg-transparent border-none text-foreground">
-                {renderAiMessage(currentStreamMsg || (isThinking ? "<think>Step 1: Analyzing request...</think>" : ""), toolEvents, expandedThinking)}
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-semibold text-neutral-800 dark:text-neutral-200 mb-1.5 flex items-center gap-1.5">
+                  <span>TaskPilot AI</span>
+                </div>
+                <div className="text-neutral-900 dark:text-neutral-100">
+                  {renderAiMessage(currentStreamMsg || (isThinking ? "<think>Step 1: Analyzing request...</think>" : ""), toolEvents, expandedThinking, true)}
+                </div>
               </div>
             </div>
           )}
@@ -769,7 +1720,7 @@ export default function AiChatPage() {
         {/* Input Area */}
         <div className="p-4 border-t border-border/40 bg-background/10 backdrop-blur-[40px] backdrop-saturate-150 relative z-10">
           <form
-            onSubmit={(e) => { e.preventDefault(); sendMessage(); }}
+            onSubmit={(e) => { e.preventDefault(); void sendMessage(); }}
             className="relative flex max-w-4xl mx-auto"
           >
             <Textarea
@@ -782,7 +1733,7 @@ export default function AiChatPage() {
                 }
               }}
               placeholder={t("copilot.input_placeholder") + " (Enter để gửi, Shift+Enter để xuống dòng)"}
-              className="min-h-[96px] flex-1 resize-none rounded-2xl border-border/40 pr-14 text-base bg-background/50 backdrop-blur-md focus:bg-background/80 transition-colors"
+              className="min-h-[96px] flex-1 resize-none rounded-2xl border border-white/20 dark:border-white/10 pr-14 text-base bg-white/10 dark:bg-black/10 backdrop-blur-xl backdrop-saturate-150 text-black dark:text-white placeholder:text-black/60 dark:placeholder:text-white/60 focus:bg-white/20 dark:focus:bg-black/20 transition-all shadow-sm"
             />
             <Button
               type="submit"
@@ -790,13 +1741,13 @@ export default function AiChatPage() {
               disabled={!inputVal.trim()}
               className="absolute bottom-1.5 right-1.5 h-10 w-10 rounded-full bg-primary hover:bg-primary/90 flex items-center justify-center p-0"
             >
-              <Send className="w-4 h-4 ml-1" />
+              <Send className="w-4 h-4 ml-0.5" />
             </Button>
           </form>
-          <div className="mt-2 text-right text-xs text-muted-foreground">
+          <div className="mt-2 text-right text-xs text-neutral-600 dark:text-neutral-300 font-semibold">
             {inputVal.length}/{MAX_PROMPT_CHARS}
           </div>
-          <div className="text-center text-xs font-medium text-foreground/80 mt-2 drop-shadow-sm">
+          <div className="text-center text-xs font-bold text-black dark:text-white mt-2 drop-shadow-sm">
             {t("copilot.disclaimer")}
           </div>
         </div>

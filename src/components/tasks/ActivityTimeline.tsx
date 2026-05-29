@@ -25,6 +25,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Textarea } from "@/components/ui/textarea";
 import { getApiErrorMessage } from "@/lib/http";
+import { UserAvatar } from "@/components/ui/user-avatar";
+import { useAuthStore } from "@/stores/auth.store";
 import { authStorage } from "@/lib/storage";
 import { cn } from "@/lib/utils";
 import { taskService } from "@/services/task.service";
@@ -372,11 +374,7 @@ function CommentEditor({
                     handleMentionSelect(profile);
                   }}
                 >
-                  <Avatar className="h-7 w-7">
-                    <AvatarFallback className="text-[10px] font-semibold">
-                      {getInitials(profile.fullName)}
-                    </AvatarFallback>
-                  </Avatar>
+                  <UserAvatar avatarUrl={profile.avatarUrl} name={profile.fullName} className="h-7 w-7" />
                   <span className="truncate">{profile.fullName}</span>
                 </button>
               ))
@@ -480,11 +478,11 @@ function CommentThreadItem({
         style={{ marginLeft: indent }}
       >
         <div className="flex gap-3 px-2 py-3">
-          <Avatar className={cn("h-9 w-9 border border-border/60", isDeleted && "opacity-60")}>
-            <AvatarFallback className="text-xs font-semibold">
-              {getInitials(comment.author.fullName)}
-            </AvatarFallback>
-          </Avatar>
+          <UserAvatar 
+            avatarUrl={comment.author.avatarUrl}
+            name={comment.author.fullName} 
+            className={cn("h-9 w-9 border border-border/60", isDeleted && "opacity-60")} 
+          />
 
           <div className="min-w-0 flex-1">
             <div className="flex items-start justify-between gap-3">

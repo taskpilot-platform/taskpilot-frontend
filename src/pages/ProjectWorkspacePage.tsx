@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import React, { forwardRef, useEffect, useMemo, useState, type ComponentPropsWithoutRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard,
@@ -98,7 +98,39 @@ const formSchema = z.object({
   dueDate: z.string().optional(),
 });
 
+const DateInput = forwardRef<HTMLInputElement, ComponentPropsWithoutRef<"input">>(
+  ({ className, onChange, value, defaultValue, ...props }, ref) => {
+    const [uncontrolledEmpty, setUncontrolledEmpty] = useState(() => !defaultValue);
+    const isControlled = value !== undefined;
+    const isEmpty = isControlled ? !value : uncontrolledEmpty;
 
+    return (
+      <div className="relative">
+        <Input
+          ref={ref}
+          type="date"
+          lang="en-GB"
+          value={value}
+          defaultValue={defaultValue}
+          className={`date-input-ddmmyyyy ${isEmpty ? "date-input-empty" : ""} ${className ?? ""}`}
+          onChange={(event) => {
+            if (!isControlled) {
+              setUncontrolledEmpty(!event.currentTarget.value);
+            }
+            onChange?.(event);
+          }}
+          {...props}
+        />
+        {isEmpty && (
+          <span className="date-input-placeholder pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-base text-muted-foreground md:text-sm">
+            dd/mm/yyyy
+          </span>
+        )}
+      </div>
+    );
+  }
+);
+DateInput.displayName = "DateInput";
 
 export default function ProjectWorkspacePage() {
   const { t } = useTranslation();
@@ -154,6 +186,75 @@ export default function ProjectWorkspacePage() {
 
   const mergeTasks = (nextTasks: TaskDto[]) => {
     setTasks(prev => Array.from(new Map([...prev, ...nextTasks].map(task => [task.id, task])).values()));
+  };
+
+  const updateTaskInAllStates = (taskId: number, payload: Partial<TaskDto>) => {
+    setTasks(prev => prev.map(t => t.id === taskId ? { ...t, ...payload } as TaskDto : t));
+    setBoardData(prev => {
+      if (!prev) return null;
+      return {
+        ...prev,
+        tasks: prev.tasks.map(t => t.id === taskId ? { ...t, ...payload } as TaskDto : t),
+      };
+    });
+
+    const getSprintSectionId = (section: unknown) => {
+      const byNestedSprint = section as { sprint?: { id?: number } };
+      const byId = section as { id?: number };
+      return byNestedSprint.sprint?.id ?? byId.id;
+    };
+
+    const processSprintGroups = <
+      TTask extends { id: number },
+      TSprint extends { tasks: TTask[] },
+      TGroup extends { unscheduledTasks: TTask[]; sprints: TSprint[] }
+    >(prev: TGroup): TGroup => {
+      const hasSprintIdChange = Object.prototype.hasOwnProperty.call(payload, "sprintId");
+      if (!hasSprintIdChange) {
+        return {
+          ...prev,
+          unscheduledTasks: prev.unscheduledTasks.map((task) => task.id === taskId ? { ...task, ...payload } as TTask : task),
+          sprints: prev.sprints.map((section) => ({
+            ...section,
+            tasks: section.tasks.map((task) => task.id === taskId ? { ...task, ...payload } as TTask : task),
+          })),
+        };
+      }
+
+      let targetTask: TTask | null = null;
+      const newUnscheduled = prev.unscheduledTasks.filter((task) => {
+        if (task.id === taskId) {
+          targetTask = { ...task, ...payload } as TTask;
+          return false;
+        }
+        return true;
+      });
+      const newSprints = prev.sprints.map((section) => ({
+        ...section,
+        tasks: section.tasks.filter((task) => {
+          if (task.id === taskId) {
+            targetTask = { ...task, ...payload } as TTask;
+            return false;
+          }
+          return true;
+        })
+      }));
+
+      if (targetTask) {
+        if (payload.sprintId === null || payload.sprintId === undefined) {
+          newUnscheduled.push(targetTask);
+        } else {
+          const targetSprint = newSprints.find(section => getSprintSectionId(section) === payload.sprintId);
+          if (targetSprint) targetSprint.tasks.push(targetTask);
+          else newUnscheduled.push(targetTask);
+        }
+      }
+
+      return { ...prev, unscheduledTasks: newUnscheduled, sprints: newSprints };
+    };
+
+    setBacklogData(prev => prev ? processSprintGroups(prev) : null);
+    setTimelineData(prev => prev ? processSprintGroups(prev) : null);
   };
 
   const loadBaseData = async (pid: number) => {
@@ -341,7 +442,7 @@ export default function ProjectWorkspacePage() {
       await taskService.updateTask(selectedTaskDetail.task.id, payload);
       toast.success("Task updated successfully");
 
-      setTasks(prev => prev.map(t => t.id === selectedTaskDetail.task.id ? { ...t, ...payload } as TaskDto : t));
+      updateTaskInAllStates(selectedTaskDetail.task.id, payload);
 
       const res = await taskService.getTaskById(selectedTaskDetail.task.id);
       setSelectedTaskDetail(res.data);
@@ -411,13 +512,33 @@ export default function ProjectWorkspacePage() {
     const task = tasks.find((t) => t.id === taskId);
     if (!task || task.status === status) return;
 
-    setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, status } : t)));
+    updateTaskInAllStates(taskId, { status });
 
     try {
       await taskService.moveTaskKanban(taskId, { status, position: task.position });
     } catch (error) {
       toast.error(getApiErrorMessage(error));
-      void loadData(currentProjectId);
+      void loadTabData(currentProjectId, activeTab, true);
+    }
+  };
+
+  const handleDropToSprint = async (e: React.DragEvent, sprintId: number | null) => {
+    if (isArchived) return;
+    e.preventDefault();
+    const taskIdStr = e.dataTransfer.getData("taskId");
+    if (!taskIdStr) return;
+    const taskId = Number(taskIdStr);
+
+    const task = tasks.find((t) => t.id === taskId);
+    if (!task || task.sprintId === sprintId) return;
+
+    updateTaskInAllStates(taskId, { sprintId: sprintId ?? undefined });
+    try {
+      await taskService.updateTaskSprint(taskId, sprintId);
+      void loadTabData(currentProjectId, activeTab, true);
+    } catch (error) {
+      toast.error(getApiErrorMessage(error));
+      void loadTabData(currentProjectId, activeTab, true);
     }
   };
 
@@ -455,7 +576,10 @@ export default function ProjectWorkspacePage() {
   const timelineBounds = useMemo(() => {
     const dates: number[] = [];
     const addDate = (value?: string | null) => {
-      if (value) dates.push(new Date(value).getTime());
+      if (value) {
+        const time = new Date(value).getTime();
+        if (!isNaN(time)) dates.push(time);
+      }
     };
     addDate(timelineData?.project.startDate);
     addDate(timelineData?.project.endDate);
@@ -481,14 +605,22 @@ export default function ProjectWorkspacePage() {
     if (!start || !end) return null;
     const startTime = new Date(start).getTime();
     const endTime = new Date(end).getTime();
+    if (isNaN(startTime) || isNaN(endTime)) return null;
     const span = timelineBounds.max - timelineBounds.min;
-    const left = Math.max(0, ((startTime - timelineBounds.min) / span) * 100);
-    const width = Math.max(2, ((endTime - startTime) / span) * 100);
-    return { left: `${left}%`, width: `${Math.min(width, 100 - left)}%` };
+    if (!span || isNaN(span)) return null;
+    const left = Math.max(0, Math.min(100, ((startTime - timelineBounds.min) / span) * 100));
+    const width = Math.max(2, Math.min(100 - left, ((endTime - startTime) / span) * 100));
+    return { left: `${left}%`, width: `${width}%` };
   };
 
   const buildTimelineLanes = (items: TimelineTaskDto[]) => {
-    const dated = items.filter(task => task.startDate && task.dueDate)
+    const isValidDate = (d?: string | null) => {
+      if (!d) return false;
+      const t = new Date(d).getTime();
+      return !isNaN(t);
+    };
+
+    const dated = items.filter(task => isValidDate(task.startDate) && isValidDate(task.dueDate))
       .sort((a, b) => new Date(a.startDate!).getTime() - new Date(b.startDate!).getTime());
     const lanes: TimelineTaskDto[][] = [];
     dated.forEach(task => {
@@ -500,7 +632,10 @@ export default function ProjectWorkspacePage() {
       if (lane) lane.push(task);
       else lanes.push([task]);
     });
-    return { lanes, noDates: items.filter(task => !task.startDate || !task.dueDate) };
+    return {
+      lanes,
+      noDates: items.filter(task => !isValidDate(task.startDate) || !isValidDate(task.dueDate))
+    };
   };
 
   const renderTaskTimelineBar = (task: TimelineTaskDto) => {
@@ -511,12 +646,12 @@ export default function ProjectWorkspacePage() {
       <button
         key={task.id}
         type="button"
-        className={`absolute top-1 h-8 rounded-md border px-2 text-left text-xs shadow-sm overflow-hidden whitespace-nowrap ${overdue ? "border-red-500 bg-red-500/10 text-red-700 dark:text-red-300" : "border-primary/30 bg-primary/10 text-primary"}`}
+        className={`absolute top-1 h-8 min-w-max rounded-md border text-left text-xs shadow-sm overflow-visible whitespace-nowrap flex items-center justify-start z-10 ${overdue ? "border-red-500 bg-red-500/10 text-red-700 dark:text-red-300" : "border-primary/30 bg-primary/10 text-primary"}`}
         style={position}
         onClick={() => openTaskDetail(task.id)}
         title={`${task.title} (${task.status})`}
       >
-        TP-{task.id} {task.title}
+        <span className="px-2 drop-shadow-sm font-semibold">TP-{task.id} {task.title}</span>
       </button>
     );
   };
@@ -529,6 +664,8 @@ export default function ProjectWorkspacePage() {
     return (
       <div key={task.id} className="flex flex-col">
         <div
+          draggable={!isArchived}
+          onDragStart={(e) => handleDragStart(e, task.id)}
           className={`group flex items-center justify-between p-3 rounded-md border bg-card hover:border-primary/40 cursor-pointer transition-colors ${level > 0 ? "ml-6 mt-1 border-dashed bg-muted/10 hover:bg-muted/30" : "mt-2 shadow-sm"}`}
           onClick={() => openTaskDetail(task.id)}
         >
@@ -702,13 +839,13 @@ export default function ProjectWorkspacePage() {
                   <div className="grid grid-cols-2 gap-4">
                     <FormField control={form.control} name="startDate" render={({ field }) => (
                       <FormItem><FormLabel>Start Date</FormLabel>
-                        <FormControl><Input type="date" {...field} value={field.value || ""} /></FormControl>
+                        <FormControl><DateInput {...field} value={field.value || ""} /></FormControl>
                         <FormMessage />
                       </FormItem>
                     )} />
                     <FormField control={form.control} name="dueDate" render={({ field }) => (
                       <FormItem><FormLabel>Due Date</FormLabel>
-                        <FormControl><Input type="date" {...field} value={field.value || ""} /></FormControl>
+                        <FormControl><DateInput {...field} value={field.value || ""} /></FormControl>
                         <FormMessage />
                       </FormItem>
                     )} />
@@ -726,7 +863,7 @@ export default function ProjectWorkspacePage() {
 
           <Dialog open={isSprintDialogOpen} onOpenChange={setIsSprintDialogOpen}>
             <DialogTrigger asChild>
-              <Button variant="outline" className="gap-2 shadow-sm" disabled={isArchived}>
+              <Button variant="outline" className="gap-2 shadow-sm shrink-0" disabled={isArchived}>
                 <CalendarDays className="h-4 w-4" />
                 Create Sprint
               </Button>
@@ -748,11 +885,11 @@ export default function ProjectWorkspacePage() {
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-2">
                     <Label htmlFor="sprint-start">Start date</Label>
-                    <Input id="sprint-start" type="date" {...sprintForm.register("startDate")} />
+                    <DateInput id="sprint-start" {...sprintForm.register("startDate")} />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="sprint-end">End date</Label>
-                    <Input id="sprint-end" type="date" {...sprintForm.register("endDate")} />
+                    <DateInput id="sprint-end" {...sprintForm.register("endDate")} />
                   </div>
                 </div>
                 <DialogFooter>
@@ -1038,7 +1175,7 @@ export default function ProjectWorkspacePage() {
                     </Card>
 
                     {/* Quick Actions Placeholder */}
-                    <Card className="shadow-sm border-muted/60 bg-primary/5 border-primary/10">
+                    <Card className="shadow-sm border-white/20 dark:border-white/10 bg-white/40 dark:bg-black/20 backdrop-blur-xl backdrop-saturate-150">
                       <CardContent className="p-5">
                         <h3 className="text-sm font-semibold mb-3 text-primary">Quick Actions</h3>
                         <div className="space-y-2">
@@ -1161,7 +1298,7 @@ export default function ProjectWorkspacePage() {
                     </div>
                     <div className="flex items-center gap-3">
                       <Select value={sortBy} onValueChange={(value) => setSortBy(value as BacklogSortMode)}>
-                        <SelectTrigger className="w-[140px] h-9 bg-background border shadow-sm">
+                        <SelectTrigger className="w-[180px] h-9 bg-background border shadow-sm">
                           <SelectValue placeholder="Sort by" />
                         </SelectTrigger>
                         <SelectContent>
@@ -1185,13 +1322,17 @@ export default function ProjectWorkspacePage() {
                         </div>
                       ) : (
                         <>
-                          <section className="rounded-lg border bg-background/60">
+                          <section 
+                            className="rounded-lg border bg-background/60"
+                            onDragOver={handleDragOver}
+                            onDrop={(e) => handleDropToSprint(e, null)}
+                          >
                             <div className="flex items-center justify-between border-b px-4 py-3">
                               <div>
                                 <h3 className="font-semibold">Backlog / Unscheduled</h3>
                                 <p className="text-xs text-muted-foreground">{backlogData.unscheduledTasks.length} tasks</p>
                               </div>
-                              <Button size="sm" variant="outline" disabled={isArchived} onClick={() => openCreateTask(null)}>
+                              <Button size="sm" variant="outline" className="shrink-0" disabled={isArchived} onClick={() => openCreateTask(null)}>
                                 <PlusCircle className="mr-2 h-4 w-4" /> Create Task
                               </Button>
                             </div>
@@ -1209,7 +1350,12 @@ export default function ProjectWorkspacePage() {
                           </section>
 
                           {backlogData.sprints.map(section => (
-                            <section key={section.sprint.id} className="rounded-lg border bg-background/60">
+                            <section 
+                              key={section.sprint.id} 
+                              className="rounded-lg border bg-background/60"
+                              onDragOver={handleDragOver}
+                              onDrop={(e) => handleDropToSprint(e, section.sprint.id)}
+                            >
                               <div className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3">
                                 <div className="space-y-1">
                                   <div className="flex items-center gap-2">
@@ -1224,7 +1370,7 @@ export default function ProjectWorkspacePage() {
                                 </div>
                                 <div className="flex items-center gap-2">
                                   {section.sprint.status !== "COMPLETED" && (
-                                    <Button size="sm" variant="outline" disabled={isArchived} onClick={() => openCreateTask(section.sprint.id)}>
+                                      <Button size="sm" variant="outline" className="shrink-0" disabled={isArchived} onClick={() => openCreateTask(section.sprint.id)}>
                                       <PlusCircle className="mr-2 h-4 w-4" /> Create Task
                                     </Button>
                                   )}

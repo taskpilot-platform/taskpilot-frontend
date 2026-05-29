@@ -17,6 +17,17 @@ export const profileService = {
     return response.data;
   },
 
+  async uploadAvatar(file: File): Promise<ApiResponse<UserProfile>> {
+    const formData = new FormData();
+    formData.append("file", file);
+    const response = await http.post<ApiResponse<UserProfile>>("/v1/users/me/avatar", formData, {
+      headers: {
+        "Content-Type": "multipart/form-data",
+      },
+    });
+    return response.data;
+  },
+
   async changePassword(payload: ChangePasswordRequest): Promise<ApiResponse<null>> {
     const response = await http.put<ApiResponse<null>>("/v1/users/me/password", payload);
     return response.data;

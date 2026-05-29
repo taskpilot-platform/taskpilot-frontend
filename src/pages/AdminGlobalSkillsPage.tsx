@@ -225,7 +225,7 @@ export default function AdminGlobalSkillsPage() {
                 onChange={(e) => setKeyword(e.target.value)}
                 className="max-w-sm"
               />
-              <Button type="submit" variant="secondary" className="gap-2" disabled={isLoading}>
+              <Button type="submit" variant="secondary" className="gap-2 shrink-0" disabled={isLoading}>
                 <Search className="h-4 w-4" />
                 {t("admin.skills.search_btn")}
               </Button>
