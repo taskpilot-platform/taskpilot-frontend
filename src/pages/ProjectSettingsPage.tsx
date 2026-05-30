@@ -136,7 +136,9 @@ export default function ProjectSettingsPage() {
   };
 
   const handleRemoveMember = async (userId: number) => {
-    if (!window.confirm(`Are you sure you want to remove User ${userId}?`)) return;
+    const member = projectMembers.find(m => m.userId === userId);
+    const memberName = member?.fullName || `User ${userId}`;
+    if (!window.confirm(`Are you sure you want to remove ${memberName} from this project?`)) return;
     try {
       await projectService.removeMember(currentProjectId, userId);
       toast.success("Member removed");
@@ -321,38 +323,93 @@ export default function ProjectSettingsPage() {
         {/* Members Settings */}
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2"><Users className="w-5 h-5 text-blue-500" /> Members</CardTitle>
+            <CardTitle className="flex items-center gap-2"><Users className="w-5 h-5 text-blue-500" /> Members ({projectMembers.length})</CardTitle>
             <CardDescription>Manage who has access to this project and their roles.</CardDescription>
           </CardHeader>
-          <CardContent>
-            <div className="divide-y border rounded-md">
-              {projectMembers.map(m => (
-                <div key={m.userId} className="flex items-center justify-between p-4 bg-card hover:bg-muted/30">
-                  <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-full bg-gradient-to-br from-blue-500/20 to-blue-500/5 flex items-center justify-center text-sm font-bold text-blue-600 border border-blue-500/20">
-                      U{m.userId}
-                    </div>
-                    <div>
-                      <p className="font-medium">User {m.userId} {m.userId === myUserId && <span className="text-muted-foreground font-normal">(You)</span>}</p>
-                      <p className="text-xs text-muted-foreground">Joined {m.joinedAt ? new Date(m.joinedAt).toLocaleDateString() : 'Unknown'}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <Select value={m.role} onValueChange={(val) => handleUpdateRole(m.userId, val)} disabled={isArchived}>
-                      <SelectTrigger className="w-[120px] h-8 text-xs">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="MANAGER">Manager</SelectItem>
-                        <SelectItem value="MEMBER">Member</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:text-red-600 hover:bg-red-50" disabled={isArchived} onClick={() => handleRemoveMember(m.userId)}>
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  </div>
+          <CardContent className="space-y-4">
+            {/* Invite Code */}
+            {!isArchived && (
+              <div className="flex items-center gap-3 p-3 bg-blue-500/5 border border-blue-500/20 rounded-lg">
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-blue-700 dark:text-blue-400">Invite Code</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Share this code so others can join the project</p>
                 </div>
-              ))}
+                <div className="flex items-center gap-2">
+                  <code className="bg-muted px-3 py-1.5 rounded text-sm font-mono font-semibold">PRJ-{currentProjectId}</code>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      navigator.clipboard.writeText(`PRJ-${currentProjectId}`);
+                      toast.success("Invite code copied!");
+                    }}
+                  >
+                    Copy
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* Member List */}
+            <div className="divide-y border rounded-md">
+              {projectMembers.map(m => {
+                const displayName = m.fullName || `User ${m.userId}`;
+                const initials = m.fullName
+                  ? m.fullName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
+                  : `U${m.userId}`;
+                const isCurrentUser = m.userId === myUserId;
+
+                return (
+                  <div key={m.userId} className="flex items-center justify-between p-4 bg-card hover:bg-muted/30 transition-colors">
+                    <div className="flex items-center gap-3">
+                      <div className="h-10 w-10 rounded-full bg-gradient-to-br from-blue-500/20 to-blue-500/5 flex items-center justify-center text-sm font-bold text-blue-600 border border-blue-500/20">
+                        {initials}
+                      </div>
+                      <div>
+                        <p className="font-medium">
+                          {displayName}
+                          {isCurrentUser && <span className="text-muted-foreground font-normal ml-1">(You)</span>}
+                        </p>
+                        {m.email && <p className="text-xs text-muted-foreground">{m.email}</p>}
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          Joined {m.joinedAt ? new Date(m.joinedAt).toLocaleDateString() : 'Unknown'}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <Select
+                        value={m.role}
+                        onValueChange={(val) => handleUpdateRole(m.userId, val)}
+                        disabled={isArchived || isCurrentUser}
+                      >
+                        <SelectTrigger className="w-[120px] h-8 text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="MANAGER">Manager</SelectItem>
+                          <SelectItem value="MEMBER">Member</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      {!isCurrentUser && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-500/10"
+                          disabled={isArchived}
+                          onClick={() => handleRemoveMember(m.userId)}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+              {projectMembers.length === 0 && (
+                <div className="p-8 text-center text-muted-foreground text-sm">
+                  No members found.
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>

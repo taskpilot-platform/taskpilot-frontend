@@ -14,7 +14,6 @@ import {
 } from "lucide-react";
 import { toast } from "react-toastify";
 
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -26,7 +25,6 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { getApiErrorMessage } from "@/lib/http";
 import { UserAvatar } from "@/components/ui/user-avatar";
-import { useAuthStore } from "@/stores/auth.store";
 import { authStorage } from "@/lib/storage";
 import { cn } from "@/lib/utils";
 import { taskService } from "@/services/task.service";
@@ -139,18 +137,7 @@ function buildCommentTree(comments: TaskCommentDto[]) {
   return roots;
 }
 
-function getInitials(name: string) {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) {
-    return "?";
-  }
 
-  return parts
-    .slice(0, 2)
-    .map((part) => part[0])
-    .join("")
-    .toUpperCase();
-}
 
 function formatTimestamp(value: string | null) {
   if (!value) {
