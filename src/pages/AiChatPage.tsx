@@ -565,7 +565,7 @@ export default function AiChatPage() {
     clearTypewriter();
   };
 
-  const finalizeSessionStream = async (targetSession: ChatSession, clientMessageId: string) => {
+  const finalizeSessionStream = async (targetSession: ChatSession) => {
     if (!isMountedRef.current) return;
     clearPendingRequest(targetSession.id);
     stopPolling();
@@ -575,7 +575,7 @@ export default function AiChatPage() {
     loadSessions();
   };
 
-  const startTypewriter = (targetSession: ChatSession, clientMessageId: string) => {
+  const startTypewriter = (targetSession: ChatSession) => {
     if (typewriterTimerRef.current) return;
 
     typewriterTimerRef.current = window.setInterval(() => {
@@ -585,7 +585,7 @@ export default function AiChatPage() {
           if (streamCompletedRef.current) {
             window.clearInterval(typewriterTimerRef.current!);
             typewriterTimerRef.current = null;
-            void finalizeSessionStream(targetSession, clientMessageId);
+            void finalizeSessionStream(targetSession);
           }
           return current;
         }
@@ -847,7 +847,7 @@ export default function AiChatPage() {
             responseBuffer += tokenChunk;
             if (isMountedRef.current) {
               targetStreamTextRef.current = responseBuffer;
-              startTypewriter(targetSession, clientMessageId);
+              startTypewriter(targetSession);
             }
           } else if (ev.event === "phase") {
             if (!isMountedRef.current) {
@@ -911,7 +911,7 @@ export default function AiChatPage() {
       if (isMountedRef.current && activeSessionIdRef.current === targetSession.id) {
         // If typewriter already caught up, finalize immediately
         if (targetStreamTextRef.current.length === 0 || currentStreamMsg.length >= targetStreamTextRef.current.length) {
-          await finalizeSessionStream(targetSession, clientMessageId);
+          await finalizeSessionStream(targetSession);
         }
       }
 

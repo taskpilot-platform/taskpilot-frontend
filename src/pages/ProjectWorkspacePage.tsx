@@ -88,6 +88,54 @@ const priorityScore: Record<TaskPriority, number> = {
   LOW: 1,
 };
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+const timelineDateFormatter = new Intl.DateTimeFormat("vi-VN", {
+  day: "2-digit",
+  month: "2-digit",
+  year: "numeric",
+});
+
+const timelineTickFormatter = new Intl.DateTimeFormat("vi-VN", {
+  day: "2-digit",
+  month: "2-digit",
+});
+
+const taskStatusLabel: Record<TaskStatus, string> = {
+  TODO: "To do",
+  IN_PROGRESS: "In progress",
+  REVIEW: "Review",
+  DONE: "Done",
+};
+
+const timelineTaskTone: Record<TaskStatus, string> = {
+  TODO: "border-slate-300 bg-slate-100 text-slate-700 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-300",
+  IN_PROGRESS: "border-sky-300 bg-sky-100 text-sky-700 dark:border-sky-700 dark:bg-sky-950/50 dark:text-sky-300",
+  REVIEW: "border-amber-300 bg-amber-100 text-amber-700 dark:border-amber-700 dark:bg-amber-950/50 dark:text-amber-300",
+  DONE: "border-emerald-300 bg-emerald-100 text-emerald-700 dark:border-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300",
+};
+
+function parseTimelineDate(value?: string | null) {
+  if (!value) return null;
+  const time = new Date(value).getTime();
+  return Number.isNaN(time) ? null : time;
+}
+
+function formatTimelineDate(value?: string | null) {
+  const time = parseTimelineDate(value);
+  return time === null ? "No date" : timelineDateFormatter.format(new Date(time));
+}
+
+function formatTimelineRange(start?: string | null, end?: string | null) {
+  const hasStart = parseTimelineDate(start) !== null;
+  const hasEnd = parseTimelineDate(end) !== null;
+
+  if (hasStart && hasEnd) return `${formatTimelineDate(start)} - ${formatTimelineDate(end)}`;
+  if (hasStart) return `From ${formatTimelineDate(start)}`;
+  if (hasEnd) return `Until ${formatTimelineDate(end)}`;
+  return "No dates";
+}
+
 const formSchema = z.object({
   title: z.string().min(1, "Title is required").max(100, "Title is too long"),
   description: z.string().optional(),
@@ -576,9 +624,9 @@ export default function ProjectWorkspacePage() {
   const timelineBounds = useMemo(() => {
     const dates: number[] = [];
     const addDate = (value?: string | null) => {
-      if (value) {
-        const time = new Date(value).getTime();
-        if (!isNaN(time)) dates.push(time);
+      const time = parseTimelineDate(value);
+      if (time !== null) {
+        dates.push(time);
       }
     };
     addDate(timelineData?.project.startDate);
@@ -596,62 +644,112 @@ export default function ProjectWorkspacePage() {
       addDate(task.dueDate);
     });
     const now = Date.now();
-    const min = dates.length ? Math.min(...dates) : now;
-    const max = dates.length ? Math.max(...dates) : now + 1000 * 60 * 60 * 24 * 14;
-    return { min, max: Math.max(max, min + 1000 * 60 * 60 * 24) };
+    if (dates.length === 0) {
+      return { min: now - DAY_MS, max: now + DAY_MS * 14 };
+    }
+
+    const min = Math.min(...dates);
+    const max = Math.max(...dates);
+    return { min: min - DAY_MS, max: Math.max(max + DAY_MS, min + DAY_MS * 2) };
   }, [timelineData]);
 
+  const timelineTicks = useMemo(() => {
+    const steps = 4;
+    return Array.from({ length: steps + 1 }, (_, index) => {
+      const ratio = index / steps;
+      const time = timelineBounds.min + (timelineBounds.max - timelineBounds.min) * ratio;
+      return {
+        left: `${ratio * 100}%`,
+        label: timelineTickFormatter.format(new Date(time)),
+      };
+    });
+  }, [timelineBounds]);
+
   const getTimelinePosition = (start?: string | null, end?: string | null) => {
-    if (!start || !end) return null;
-    const startTime = new Date(start).getTime();
-    const endTime = new Date(end).getTime();
-    if (isNaN(startTime) || isNaN(endTime)) return null;
+    const startTime = parseTimelineDate(start);
+    const endTime = parseTimelineDate(end);
+    if (startTime === null || endTime === null) return null;
     const span = timelineBounds.max - timelineBounds.min;
-    if (!span || isNaN(span)) return null;
+    if (!span || Number.isNaN(span)) return null;
+    const safeEndTime = Math.max(endTime, startTime + DAY_MS);
     const left = Math.max(0, Math.min(100, ((startTime - timelineBounds.min) / span) * 100));
-    const width = Math.max(2, Math.min(100 - left, ((endTime - startTime) / span) * 100));
+    const width = Math.min(Math.max(1.5, 100 - left), Math.max(3, ((safeEndTime - startTime) / span) * 100));
     return { left: `${left}%`, width: `${width}%` };
   };
 
-  const buildTimelineLanes = (items: TimelineTaskDto[]) => {
+  const splitTimelineTasks = (items: TimelineTaskDto[]) => {
     const isValidDate = (d?: string | null) => {
-      if (!d) return false;
-      const t = new Date(d).getTime();
-      return !isNaN(t);
+      return parseTimelineDate(d) !== null;
     };
 
-    const dated = items.filter(task => isValidDate(task.startDate) && isValidDate(task.dueDate))
+    const scheduled = items.filter(task => isValidDate(task.startDate) && isValidDate(task.dueDate))
       .sort((a, b) => new Date(a.startDate!).getTime() - new Date(b.startDate!).getTime());
-    const lanes: TimelineTaskDto[][] = [];
-    dated.forEach(task => {
-      const start = new Date(task.startDate!).getTime();
-      const lane = lanes.find(existing => {
-        const last = existing[existing.length - 1];
-        return last.dueDate && new Date(last.dueDate).getTime() < start;
-      });
-      if (lane) lane.push(task);
-      else lanes.push([task]);
-    });
+
     return {
-      lanes,
+      scheduled,
       noDates: items.filter(task => !isValidDate(task.startDate) || !isValidDate(task.dueDate))
     };
   };
 
-  const renderTaskTimelineBar = (task: TimelineTaskDto) => {
+  const renderTimelineScale = () => (
+    <div className="grid gap-2 px-2 text-[11px] text-muted-foreground md:grid-cols-[minmax(180px,260px)_1fr]">
+      <div className="hidden font-medium uppercase tracking-wider md:block">Task</div>
+      <div className="relative h-8">
+        {timelineTicks.map((tick, index) => (
+          <div
+            key={tick.left}
+            className={`absolute top-0 flex flex-col gap-1 ${
+              index === 0
+                ? "translate-x-0 items-start"
+                : index === timelineTicks.length - 1
+                  ? "-translate-x-full items-end"
+                  : "-translate-x-1/2 items-center"
+            }`}
+            style={{ left: tick.left }}
+          >
+            <span className="whitespace-nowrap text-[10px] sm:text-[11px]">{tick.label}</span>
+            <span className="h-3 w-px bg-border" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
+  const renderTaskTimelineRow = (task: TimelineTaskDto) => {
     const position = getTimelinePosition(task.startDate, task.dueDate);
     if (!position) return null;
     const overdue = task.dueDate && task.status !== "DONE" && new Date(task.dueDate).getTime() < Date.now();
+    const toneClass = overdue
+      ? "border-red-300 bg-red-100 text-red-700 dark:border-red-800 dark:bg-red-950/50 dark:text-red-300"
+      : timelineTaskTone[task.status];
+
     return (
       <button
         key={task.id}
         type="button"
-        className={`absolute top-1 h-8 min-w-max rounded-md border text-left text-xs shadow-sm overflow-visible whitespace-nowrap flex items-center justify-start z-10 ${overdue ? "border-red-500 bg-red-500/10 text-red-700 dark:text-red-300" : "border-primary/30 bg-primary/10 text-primary"}`}
-        style={position}
+        className="group grid w-full gap-2 rounded-md border border-transparent p-2 text-left transition-colors hover:border-border hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:grid-cols-[minmax(180px,260px)_1fr] md:items-center"
         onClick={() => openTaskDetail(task.id)}
-        title={`${task.title} (${task.status})`}
+        title={`${task.title} - ${formatTimelineRange(task.startDate, task.dueDate)}`}
       >
-        <span className="px-2 drop-shadow-sm font-semibold">TP-{task.id} {task.title}</span>
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="font-mono text-[11px] text-muted-foreground">TP-{task.id}</span>
+            <Badge variant="outline" className="h-5 rounded px-1.5 text-[10px] font-medium">
+              {taskStatusLabel[task.status]}
+            </Badge>
+          </div>
+          <p className="mt-1 truncate text-sm font-medium text-foreground">{task.title}</p>
+          <p className="mt-0.5 text-xs text-muted-foreground">{formatTimelineRange(task.startDate, task.dueDate)}</p>
+        </div>
+        <div className="relative h-9 overflow-hidden rounded-md border border-border/60 bg-muted/20">
+          {timelineTicks.map((tick) => (
+            <span key={tick.left} className="absolute inset-y-0 w-px bg-border/70" style={{ left: tick.left }} />
+          ))}
+          <span
+            className={`absolute top-1/2 h-5 -translate-y-1/2 rounded border shadow-sm ${toneClass}`}
+            style={position}
+          />
+        </div>
       </button>
     );
   };
@@ -1203,23 +1301,23 @@ export default function ProjectWorkspacePage() {
                           <CalendarDays className="h-5 w-5 text-primary" /> Timeline
                         </CardTitle>
                         <CardDescription className="mt-1">
-                          Read-only schedule view using your browser timezone.
+                          Tasks arranged by start date and due date.
                         </CardDescription>
                       </div>
                       <div className="text-sm text-muted-foreground">
-                        {timelineData?.project.startDate || "No start"} &rarr; {timelineData?.project.endDate || "No end"}
+                        {formatTimelineRange(timelineData?.project.startDate, timelineData?.project.endDate)}
                       </div>
                     </div>
                   </CardHeader>
                   <CardContent className="p-4 space-y-5">
                     <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                      <span className="inline-flex items-center gap-1"><span className="h-2 w-5 rounded bg-primary/30" /> Scheduled</span>
+                      <span className="inline-flex items-center gap-1"><span className="h-2 w-5 rounded bg-sky-300/70" /> Active</span>
+                      <span className="inline-flex items-center gap-1"><span className="h-2 w-5 rounded bg-emerald-300/70" /> Done</span>
                       <span className="inline-flex items-center gap-1"><span className="h-2 w-5 rounded bg-red-500/30" /> Overdue</span>
-                      <span>No dependencies or editing in this view.</span>
                     </div>
                     {timelineData?.sprints.map(sprint => {
                       const sprintPosition = getTimelinePosition(sprint.startDate, sprint.endDate);
-                      const { lanes, noDates } = buildTimelineLanes(sprint.tasks);
+                      const { scheduled, noDates } = splitTimelineTasks(sprint.tasks);
                       return (
                         <section key={sprint.id} className="rounded-lg border bg-background/70 p-4">
                           <div className="flex items-center justify-between gap-3">
@@ -1227,19 +1325,25 @@ export default function ProjectWorkspacePage() {
                               <h3 className="font-semibold">{sprint.name}</h3>
                               <Badge variant={sprint.status === "ACTIVE" ? "default" : "secondary"}>{sprint.status}</Badge>
                             </div>
-                            <span className="text-xs text-muted-foreground">{sprint.startDate || "No start"} &rarr; {sprint.endDate || "No end"}</span>
+                            <span className="text-xs text-muted-foreground">{formatTimelineRange(sprint.startDate, sprint.endDate)}</span>
                           </div>
-                          <div className="relative mt-3 h-10 rounded-md bg-muted/30">
+                          <div className="mt-4 space-y-2">
+                            {renderTimelineScale()}
                             {sprintPosition && (
-                              <div className="absolute top-2 h-6 rounded bg-foreground/10 border border-border" style={sprintPosition} />
-                            )}
-                          </div>
-                          <div className="mt-2 space-y-2">
-                            {lanes.map((lane, index) => (
-                              <div key={index} className="relative h-10 rounded-md bg-muted/20">
-                                {lane.map(renderTaskTimelineBar)}
+                              <div className="grid gap-2 px-2 md:grid-cols-[minmax(180px,260px)_1fr] md:items-center">
+                                <div className="text-xs font-medium text-muted-foreground">Sprint dates</div>
+                                <div className="relative h-7 overflow-hidden rounded-md border border-border/60 bg-muted/20">
+                                  {timelineTicks.map((tick) => (
+                                    <span key={tick.left} className="absolute inset-y-0 w-px bg-border/70" style={{ left: tick.left }} />
+                                  ))}
+                                  <span className="absolute top-1/2 h-4 -translate-y-1/2 rounded border border-border bg-foreground/10" style={sprintPosition} />
+                                </div>
                               </div>
-                            ))}
+                            )}
+                            {scheduled.map(renderTaskTimelineRow)}
+                            {scheduled.length === 0 && (
+                              <p className="px-2 py-3 text-sm text-muted-foreground">No tasks with both start and due dates.</p>
+                            )}
                           </div>
                           {noDates.length > 0 && (
                             <div className="mt-3 flex flex-wrap gap-2">
@@ -1255,7 +1359,7 @@ export default function ProjectWorkspacePage() {
                       );
                     })}
                     {timelineData && (() => {
-                      const { lanes, noDates } = buildTimelineLanes(timelineData.unscheduledTasks);
+                      const { scheduled, noDates } = splitTimelineTasks(timelineData.unscheduledTasks);
                       return (
                         <section className="rounded-lg border bg-background/70 p-4">
                           <div className="flex items-center justify-between">
@@ -1263,12 +1367,9 @@ export default function ProjectWorkspacePage() {
                             <Badge variant="outline">{timelineData.unscheduledTasks.length} tasks</Badge>
                           </div>
                           <div className="mt-3 space-y-2">
-                            {lanes.map((lane, index) => (
-                              <div key={index} className="relative h-10 rounded-md bg-muted/20">
-                                {lane.map(renderTaskTimelineBar)}
-                              </div>
-                            ))}
-                            {lanes.length === 0 && <p className="text-sm text-muted-foreground">No scheduled backlog tasks.</p>}
+                            {scheduled.length > 0 && renderTimelineScale()}
+                            {scheduled.map(renderTaskTimelineRow)}
+                            {scheduled.length === 0 && <p className="text-sm text-muted-foreground">No scheduled backlog tasks.</p>}
                           </div>
                           {noDates.length > 0 && (
                             <div className="mt-3 flex flex-wrap gap-2">
