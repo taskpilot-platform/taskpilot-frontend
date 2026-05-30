@@ -59,6 +59,7 @@ import { taskService } from "@/services/task.service";
 import { sprintService } from "@/services/sprint.service";
 import { profileService } from "@/services/profile.service";
 import { projectStorage } from "@/lib/storage";
+import { getTaskTone, TASK_TONE_CLASS } from "@/lib/task-tone";
 import { TaskDetailSheet } from "@/components/tasks/TaskDetailSheet";
 import type { MyProject, Project, ProjectMember, ProjectSummary } from "@/types/project";
 import type { TaskDetailDto, TaskDto, TaskPriority, TaskStatus } from "@/types/task";
@@ -106,13 +107,6 @@ const taskStatusLabel: Record<TaskStatus, string> = {
   IN_PROGRESS: "In progress",
   REVIEW: "Review",
   DONE: "Done",
-};
-
-const timelineTaskTone: Record<TaskStatus, string> = {
-  TODO: "border-slate-300 bg-slate-100 text-slate-700 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-300",
-  IN_PROGRESS: "border-sky-300 bg-sky-100 text-sky-700 dark:border-sky-700 dark:bg-sky-950/50 dark:text-sky-300",
-  REVIEW: "border-amber-300 bg-amber-100 text-amber-700 dark:border-amber-700 dark:bg-amber-950/50 dark:text-amber-300",
-  DONE: "border-emerald-300 bg-emerald-100 text-emerald-700 dark:border-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300",
 };
 
 function parseTimelineDate(value?: string | null) {
@@ -749,10 +743,8 @@ export default function ProjectWorkspacePage() {
   const renderTaskTimelineRow = (task: TimelineTaskDto) => {
     const position = getTimelinePosition(task.startDate, task.dueDate);
     if (!position) return null;
-    const overdue = task.dueDate && task.status !== "DONE" && new Date(task.dueDate).getTime() < Date.now();
-    const toneClass = overdue
-      ? "border-red-300 bg-red-100 text-red-700 dark:border-red-800 dark:bg-red-950/50 dark:text-red-300"
-      : timelineTaskTone[task.status];
+    const taskTone = getTaskTone(task.status, task.dueDate);
+    const toneClass = TASK_TONE_CLASS.bar[taskTone];
 
     return (
       <button
@@ -1342,9 +1334,9 @@ export default function ProjectWorkspacePage() {
                   </CardHeader>
                   <CardContent className="p-4 space-y-5">
                     <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                      <span className="inline-flex items-center gap-1"><span className="h-2 w-5 rounded bg-sky-300/70" /> Active</span>
-                      <span className="inline-flex items-center gap-1"><span className="h-2 w-5 rounded bg-emerald-300/70" /> Done</span>
-                      <span className="inline-flex items-center gap-1"><span className="h-2 w-5 rounded bg-red-500/30" /> Overdue</span>
+                      <span className="inline-flex items-center gap-1"><span className={`h-2 w-5 rounded ${TASK_TONE_CLASS.legend.active}`} /> Active</span>
+                      <span className="inline-flex items-center gap-1"><span className={`h-2 w-5 rounded ${TASK_TONE_CLASS.legend.done}`} /> Done</span>
+                      <span className="inline-flex items-center gap-1"><span className={`h-2 w-5 rounded ${TASK_TONE_CLASS.legend.overdue}`} /> Overdue</span>
                     </div>
                     {timelineData?.sprints.map(sprint => {
                       const sprintPosition = getTimelinePosition(sprint.startDate, sprint.endDate);

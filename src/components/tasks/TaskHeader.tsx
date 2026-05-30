@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Trash2, ExternalLink } from "lucide-react";
 import type { TaskStatus } from "@/types/task";
 import { useParams } from "react-router-dom";
+import { getTaskTone, TASK_TONE_CLASS } from "@/lib/task-tone";
 
 interface Props {
   taskId: number;
@@ -14,6 +15,9 @@ interface Props {
 
 export function TaskHeader({ taskId, status, reporterName, onDelete, hideFullPageBtn }: Props) {
   const { projectId } = useParams();
+  const tone = getTaskTone(status);
+  const badgeToneClass = TASK_TONE_CLASS.badge[tone === "overdue" ? "active" : tone];
+  const dotToneClass = TASK_TONE_CLASS.dot[tone === "overdue" ? "active" : tone];
   
   return (
     <div className="flex items-center justify-between pb-4 border-b border-border/40 mb-6 mt-4">
@@ -21,11 +25,8 @@ export function TaskHeader({ taskId, status, reporterName, onDelete, hideFullPag
         <span className="text-sm font-mono bg-muted/50 text-muted-foreground px-2 py-1 rounded border border-border/50 shadow-sm">
           TP-{taskId}
         </span>
-        <Badge 
-          variant={status === "DONE" ? "default" : status === "IN_PROGRESS" ? "secondary" : "outline"} 
-          className={`text-xs uppercase tracking-wider font-medium ${status === "TODO" ? "bg-muted/30 text-muted-foreground border-border/50" : ""}`}
-        >
-          <span className={`mr-1.5 h-1.5 w-1.5 rounded-full inline-block ${status === "DONE" ? "bg-emerald-400" : status === "IN_PROGRESS" ? "bg-amber-500" : status === "REVIEW" ? "bg-blue-500" : "bg-muted-foreground"}`} />
+        <Badge variant="outline" className={`text-xs uppercase tracking-wider font-medium ${badgeToneClass}`}>
+          <span className={`mr-1.5 h-1.5 w-1.5 rounded-full inline-block ${dotToneClass}`} />
           {status.replace("_", " ")}
         </Badge>
       </div>
