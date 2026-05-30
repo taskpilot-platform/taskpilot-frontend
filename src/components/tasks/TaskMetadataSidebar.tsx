@@ -1,4 +1,6 @@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { toast } from "react-toastify";
+import { useTranslation } from "react-i18next";
 import type { TaskPriority, TaskStatus, LabelDto, SkillDto } from "@/types/task";
 import type { ProjectMember } from "@/types/project";
 import { UserAvatar } from "@/components/ui/user-avatar";
@@ -20,6 +22,13 @@ interface Props {
 }
 
 export function TaskMetadataSidebar({ projectId, assigneeId, status, priority, startDate, dueDate, projectMembers, labels, requiredSkills, isManager, onUpdate }: Props) {
+  const { t } = useTranslation();
+
+  const isValidTaskDateRange = (nextStartDate?: string, nextDueDate?: string) => {
+    const startValue = nextStartDate ? nextStartDate.split("T")[0] : "";
+    const dueValue = nextDueDate ? nextDueDate.split("T")[0] : "";
+    return !startValue || !dueValue || startValue < dueValue;
+  };
   
   const handleAssigneeChange = async (val: string) => {
     const newAssignee = val === "unassigned" ? undefined : Number(val);
@@ -48,6 +57,11 @@ export function TaskMetadataSidebar({ projectId, assigneeId, status, priority, s
 
   const handleStartDateChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value ? `${e.target.value}T00:00:00Z` : undefined;
+    if (!isValidTaskDateRange(val, dueDate)) {
+      toast.error(t("tasks.date_range_error"));
+      return;
+    }
+
     try {
       await onUpdate({ startDate: val });
     } catch (error) {
@@ -57,6 +71,11 @@ export function TaskMetadataSidebar({ projectId, assigneeId, status, priority, s
 
   const handleDueDateChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value ? `${e.target.value}T23:59:59Z` : undefined;
+    if (!isValidTaskDateRange(startDate, val)) {
+      toast.error(t("tasks.date_range_error"));
+      return;
+    }
+
     try {
       await onUpdate({ dueDate: val });
     } catch (error) {

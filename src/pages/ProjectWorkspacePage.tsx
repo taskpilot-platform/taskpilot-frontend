@@ -136,6 +136,16 @@ function formatTimelineRange(start?: string | null, end?: string | null) {
   return "No dates";
 }
 
+function getDatePart(value?: string | null) {
+  return value ? value.split("T")[0] : "";
+}
+
+function isValidTaskDateRange(start?: string | null, due?: string | null) {
+  const startDate = getDatePart(start);
+  const dueDate = getDatePart(due);
+  return !startDate || !dueDate || startDate < dueDate;
+}
+
 const formSchema = z.object({
   title: z.string().min(1, "Title is required").max(100, "Title is too long"),
   description: z.string().optional(),
@@ -417,6 +427,14 @@ export default function ProjectWorkspacePage() {
   };
 
   const onSubmitCreate = async (values: z.infer<typeof formSchema>) => {
+    if (!isValidTaskDateRange(values.startDate, values.dueDate)) {
+      const message = t("tasks.date_range_error");
+      form.setError("startDate", { message });
+      form.setError("dueDate", { message });
+      toast.error(message);
+      return;
+    }
+
     try {
       const selectedSprintId = values.sprintId && values.sprintId !== "none"
         ? Number(values.sprintId)
@@ -486,6 +504,19 @@ export default function ProjectWorkspacePage() {
 
   const onUpdateTask = async (payload: { title?: string; description?: string; assigneeId?: number; status?: TaskStatus; priority?: TaskPriority; startDate?: string; dueDate?: string }) => {
     if (!selectedTaskDetail) return;
+    const nextStartDate = Object.prototype.hasOwnProperty.call(payload, "startDate")
+      ? payload.startDate
+      : selectedTaskDetail.task.startDate;
+    const nextDueDate = Object.prototype.hasOwnProperty.call(payload, "dueDate")
+      ? payload.dueDate
+      : selectedTaskDetail.task.dueDate;
+
+    if (!isValidTaskDateRange(nextStartDate, nextDueDate)) {
+      const message = t("tasks.date_range_error");
+      toast.error(message);
+      throw new Error(message);
+    }
+
     try {
       await taskService.updateTask(selectedTaskDetail.task.id, payload);
       toast.success("Task updated successfully");

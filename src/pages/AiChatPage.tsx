@@ -316,7 +316,7 @@ function ToolEventCard({
   );
 }
 
-const parseThinkingToSteps = (thinking: string) => {
+const parseThinkingToSteps = (thinking: string, stepTitlePrefix: string) => {
   if (thinking.includes("Step 1:")) {
     const rawSteps = thinking.split(/(?=Step \d+:)/g).filter(s => s.trim().length > 0);
     const steps: Array<{ type: 'thought' | 'tool', content: string, title?: string, toolData?: unknown }> = [];
@@ -328,8 +328,8 @@ const parseThinkingToSteps = (thinking: string) => {
 
       steps.push({
         type: 'thought',
-        content: content || title || 'Processing...',
-        title: title || `Step ${idx + 1}`
+        content: content || title || stepTitlePrefix,
+        title: title || `${stepTitlePrefix} ${idx + 1}`
       });
     });
 
@@ -345,7 +345,7 @@ const parseThinkingToSteps = (thinking: string) => {
   return paragraphs.map((content, idx) => ({
     type: 'thought',
     content: content.trim(),
-    title: `Tiến trình ${idx + 1}`
+    title: `${stepTitlePrefix} ${idx + 1}`
   }));
 };
 
@@ -378,7 +378,7 @@ function ThinkingAccordion({
     }
   }, [isThinkingComplete, collapseWhenComplete]);
 
-  const steps = parseThinkingToSteps(thinkingText);
+  const steps = parseThinkingToSteps(thinkingText, t("copilot.thinking_step_title"));
 
   if (!thinkingText && tools.length === 0) {
     return null;
@@ -397,7 +397,7 @@ function ThinkingAccordion({
           type="button"
           className="ml-auto text-[11px] font-extrabold border border-black/20 dark:border-white/20 rounded-lg px-2.5 py-1 bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 text-neutral-800 dark:text-neutral-200 shadow-sm transition-all active:scale-95 flex items-center gap-1 select-none"
         >
-          {isOpen ? "Thu gọn tiến trình" : "Xem tiến trình suy nghĩ"}
+          {isOpen ? t("copilot.thinking_collapse_btn") : t("copilot.thinking_expand_btn")}
         </button>
       </div>
 
@@ -1408,21 +1408,15 @@ export default function AiChatPage() {
 
       // Default processing steps if LLM didn't return custom think tags
       const defaultThinkingText = parsed.thinkingText || (
-        `Step 1: Phân tích ngữ nghĩa câu hỏi & Nhận diện ý định nghiệp vụ (Semantic Analysis & Intent Recognition)\n` +
-        `- Phát hiện yêu cầu cốt lõi: Phân tích lập kế hoạch và lộ trình triển khai chi tiết cho hệ thống quản lý tác vụ TaskPilot.\n` +
-        `- Trích xuất từ khóa trọng tâm: "suy nghĩ kỹ", "các bước triển khai", "TaskPilot Project", "roadmap".\n` +
-        `- Xác định mục tiêu đầu ra: Xây dựng cấu trúc lộ trình công việc (WBS) gồm đầy đủ các pha triển khai dự án thực tế.\n` +
-        `Step 2: Truy xuất tri thức thực thể & Liên kết cấu trúc cơ sở dữ liệu (Context & Entity Retrieval)\n` +
-        `- Phân tích cấu trúc cơ sở dữ liệu TaskPilot bao gồm các bảng: Dự án (Project), Công việc (Task), Phân bổ nhân sự (Users) và Quản lý kỹ năng (Skills).\n` +
-        `- Xác định các mối quan hệ nghiệp vụ để định nghĩa các vai trò nhân sự chính (Sponsor, Project Manager, Scrum Master, Developer, AI Agent).\n` +
-        `- Liên kết các pha phát triển tiêu chuẩn: Khởi động (Initiation), Lập kế hoạch (Planning), Thực thi (Execution), và Giám sát dự án (Monitoring).\n` +
-        `Step 3: Định tuyến mô hình & Lập luận Logic chuỗi thời gian (Model Routing & Cognitive Reasoning)\n` +
-        `- Định tuyến yêu cầu đến mô hình tối ưu hóa xử lý bảng biểu phức tạp và dữ liệu dạng bảng có cấu trúc.\n` +
-        `- Lập luận logic để phân tích và ước lượng thời gian thực hiện (Duration) phù hợp cho từng giai đoạn.\n` +
-        `- Xác định giá trị chiến lược (Rationale & Strategic Benefit) cho từng pha, đặc biệt là vai trò của việc tích hợp AI để tối ưu hóa hiệu suất nhóm.\n` +
-        `Step 4: Tổng hợp dữ liệu & Trình bày định dạng bảng biểu (Response Formatting & Markdown Generation)\n` +
-        `- Biên dịch dữ liệu lộ trình sang định dạng bảng biểu Markdown chuyên nghiệp gồm 6 cột thông tin chi tiết.\n` +
-        `- Tích hợp container kéo thanh cuộn ngang mượt mà cho bảng biểu trên giao diện kính mờ (Glassmorphism), tránh tràn khung và vỡ dòng chữ.`
+        `${t("copilot.thinking_default_step_1")}\n` +
+        `- ${t("copilot.thinking_default_step_1_item_1")}\n` +
+        `- ${t("copilot.thinking_default_step_1_item_2")}\n` +
+        `${t("copilot.thinking_default_step_2")}\n` +
+        `- ${t("copilot.thinking_default_step_2_item_1")}\n` +
+        `- ${t("copilot.thinking_default_step_2_item_2")}\n` +
+        `${t("copilot.thinking_default_step_3")}\n` +
+        `- ${t("copilot.thinking_default_step_3_item_1")}\n` +
+        `- ${t("copilot.thinking_default_step_3_item_2")}`
       );
 
       // Use expanded thinking if available and thinking is complete
@@ -1494,19 +1488,19 @@ export default function AiChatPage() {
   const phaseLabel = (phase: ChatStreamPhase | null) => {
     switch (phase) {
       case "QUEUED":
-        return "Queued";
+        return t("copilot.phase_queued");
       case "ROUTING":
-        return "Routing model";
+        return t("copilot.phase_routing");
       case "THINKING":
-        return "Thinking";
+        return t("copilot.phase_thinking");
       case "GENERATING":
-        return "Generating";
+        return t("copilot.phase_generating");
       case "FINALIZED":
-        return "Finalized";
+        return t("copilot.phase_finalized");
       case "FAILED":
-        return "Failed";
+        return t("copilot.phase_failed");
       default:
-        return "Processing";
+        return t("copilot.phase_processing");
     }
   };
 
@@ -1708,7 +1702,7 @@ export default function AiChatPage() {
                   <span>TaskPilot AI</span>
                 </div>
                 <div className="text-neutral-900 dark:text-neutral-100">
-                  {renderAiMessage(currentStreamMsg || (isThinking ? "<think>Step 1: Analyzing request...</think>" : ""), toolEvents, expandedThinking, true)}
+                  {renderAiMessage(currentStreamMsg || (isThinking ? `<think>Step 1: ${t("copilot.thinking_analyzing_request")}</think>` : ""), toolEvents, expandedThinking, true)}
                 </div>
               </div>
             </div>
