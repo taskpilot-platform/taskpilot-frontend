@@ -46,6 +46,9 @@ export interface Project {
 export interface ProjectMember {
   projectId: number;
   userId: number;
+  fullName: string | null;
+  email: string | null;
+  avatarUrl: string | null;
   role: MemberRole;
   joinedAt: string | null;
 }

@@ -16,7 +16,6 @@ import {
   Activity,
   CheckCircle2,
   CircleDashed,
-  UserPlus,
   FileText,
   Settings,
   Archive,
@@ -213,6 +212,11 @@ export default function ProjectWorkspacePage() {
   const [isSprintDialogOpen, setIsSprintDialogOpen] = useState(false);
   const [isTaskDetailOpen, setIsTaskDetailOpen] = useState(false);
   const [selectedTaskDetail, setSelectedTaskDetail] = useState<TaskDetailDto | null>(null);
+
+  // Member Detail state
+  const [selectedMemberForDetail, setSelectedMemberForDetail] = useState<ProjectMember | null>(null);
+  const [memberTasks, setMemberTasks] = useState<TaskDto[]>([]);
+  const [isLoadingMemberTasks, setIsLoadingMemberTasks] = useState(false);
 
   // Backlog state
   const [showSubtasks, setShowSubtasks] = useState(false);
@@ -615,10 +619,23 @@ export default function ProjectWorkspacePage() {
     }
   };
 
+  const openMemberDetail = async (member: ProjectMember) => {
+    setSelectedMemberForDetail(member);
+    setIsLoadingMemberTasks(true);
+    try {
+      const res = await taskService.getTasksByProject(currentProjectId);
+      setMemberTasks(res.data.filter(t => t.assigneeId === member.userId));
+    } catch (err) {
+      toast.error(getApiErrorMessage(err));
+    } finally {
+      setIsLoadingMemberTasks(false);
+    }
+  };
+
   const getAssigneeName = (assigneeId?: number) => {
     if (!assigneeId) return "Unassigned";
     const member = projectMembers.find(m => m.userId === assigneeId);
-    return member ? `User ${member.userId}` : "Unknown";
+    return member ? (member.fullName || `User ${member.userId}`) : "Unknown";
   };
 
   const toggleTaskExpansion = (taskId: number) => {
@@ -936,8 +953,8 @@ export default function ProjectWorkspacePage() {
                           <FormControl><SelectTrigger><SelectValue placeholder="Select assignee" /></SelectTrigger></FormControl>
                           <SelectContent>
                             <SelectItem value="unassigned">Unassigned</SelectItem>
-                            {projectMembers.map((m) => (
-                              <SelectItem key={m.userId} value={m.userId.toString()}>User {m.userId}</SelectItem>
+                            {projectMembers.map(m => (
+                              <SelectItem key={m.userId} value={m.userId.toString()}>{m.fullName || `User ${m.userId}`}</SelectItem>
                             ))}
                           </SelectContent>
                         </Select><FormMessage />
@@ -1273,24 +1290,42 @@ export default function ProjectWorkspacePage() {
                     {/* Team Members */}
                     <Card className="shadow-sm border-muted/60">
                       <CardHeader className="pb-3 border-b border-border/40 bg-muted/10 flex flex-row items-center justify-between">
-                        <CardTitle className="text-sm font-semibold flex items-center gap-2"><Users className="h-4 w-4 text-blue-500" /> Team Members</CardTitle>
-                        {isManager && <Button variant="ghost" size="icon" className="h-6 w-6"><UserPlus className="h-4 w-4 text-muted-foreground hover:text-primary" /></Button>}
+                        <CardTitle className="text-sm font-semibold flex items-center gap-2"><Users className="h-4 w-4 text-blue-500" /> Team Members ({projectMembers.length})</CardTitle>
+                        {isManager && (
+                          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => navigate(`/projects/${currentProjectId}/settings`)}>
+                            <Settings className="h-4 w-4 text-muted-foreground hover:text-primary" />
+                          </Button>
+                        )}
                       </CardHeader>
                       <CardContent className="p-0">
                         <div className="divide-y divide-border/40 max-h-[300px] overflow-y-auto">
-                          {projectMembers.map(m => (
-                            <div key={m.userId} className="flex items-center justify-between p-4 hover:bg-muted/20 transition-colors">
-                              <div className="flex items-center gap-3">
-                                <div className="h-9 w-9 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center text-xs font-bold text-primary border border-primary/20">
-                                  U{m.userId}
-                                </div>
-                                <div>
-                                  <p className="text-sm font-medium leading-none">User {m.userId} {m.userId === myUserId && <span className="text-muted-foreground font-normal">(You)</span>}</p>
-                                  <Badge variant={m.role === "MANAGER" ? "default" : "secondary"} className="mt-1.5 text-[9px] h-4 px-1.5">{m.role}</Badge>
+                          {projectMembers.map(m => {
+                            const displayName = m.fullName || `User ${m.userId}`;
+                            const initials = m.fullName
+                              ? m.fullName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
+                              : `U${m.userId}`;
+                            return (
+                              <div 
+                                key={m.userId} 
+                                className="flex items-center justify-between p-4 hover:bg-muted/30 transition-colors cursor-pointer"
+                                onClick={() => openMemberDetail(m)}
+                              >
+                                <div className="flex items-center gap-3">
+                                  <div className="h-9 w-9 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center text-xs font-bold text-primary border border-primary/20">
+                                    {initials}
+                                  </div>
+                                  <div>
+                                    <p className="text-sm font-medium leading-none">
+                                      {displayName}
+                                      {m.userId === myUserId && <span className="text-muted-foreground font-normal ml-1">(You)</span>}
+                                    </p>
+                                    {m.email && <p className="text-xs text-muted-foreground mt-1">{m.email}</p>}
+                                    <Badge variant={m.role === "MANAGER" ? "default" : "secondary"} className="mt-1.5 text-[9px] h-4 px-1.5">{m.role}</Badge>
+                                  </div>
                                 </div>
                               </div>
-                            </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       </CardContent>
                     </Card>
@@ -1558,6 +1593,70 @@ export default function ProjectWorkspacePage() {
         currentUserId={myUserId}
         isReadOnly={isArchived}
       />
+
+      {/* MEMBER DETAIL DIALOG */}
+      <Dialog open={!!selectedMemberForDetail} onOpenChange={(open) => !open && setSelectedMemberForDetail(null)}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Member Details</DialogTitle>
+          </DialogHeader>
+          {selectedMemberForDetail && (
+            <div className="space-y-6">
+              <div className="flex items-center gap-4">
+                <div className="h-16 w-16 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center text-xl font-bold text-primary border border-primary/20">
+                  {selectedMemberForDetail.fullName
+                    ? selectedMemberForDetail.fullName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
+                    : `U${selectedMemberForDetail.userId}`}
+                </div>
+                <div>
+                  <h3 className="text-xl font-semibold">
+                    {selectedMemberForDetail.fullName || `User ${selectedMemberForDetail.userId}`}
+                    {selectedMemberForDetail.userId === myUserId && <span className="text-muted-foreground font-normal ml-2 text-sm">(You)</span>}
+                  </h3>
+                  {selectedMemberForDetail.email && <p className="text-sm text-muted-foreground">{selectedMemberForDetail.email}</p>}
+                  <Badge variant={selectedMemberForDetail.role === "MANAGER" ? "default" : "secondary"} className="mt-2 text-[10px]">{selectedMemberForDetail.role}</Badge>
+                </div>
+              </div>
+
+              <div>
+                <h4 className="text-sm font-semibold mb-3 flex items-center justify-between">
+                  Assigned Tasks
+                  <Badge variant="outline" className="text-xs">{memberTasks.length}</Badge>
+                </h4>
+                {isLoadingMemberTasks ? (
+                  <div className="flex justify-center p-4"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
+                ) : (
+                  <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
+                    {memberTasks.length === 0 ? (
+                      <p className="text-sm text-muted-foreground text-center p-4">No tasks assigned in this project.</p>
+                    ) : (
+                      memberTasks.map(task => (
+                        <div 
+                          key={task.id} 
+                          className="p-3 border rounded-md hover:bg-muted/50 cursor-pointer transition-colors"
+                          onClick={() => {
+                            setSelectedMemberForDetail(null);
+                            openTaskDetail(task.id);
+                          }}
+                        >
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-xs font-mono text-muted-foreground">TSK-{task.id}</span>
+                            <div className="flex gap-1.5">
+                              <Badge variant="outline" className="text-[10px]">{task.status.replace("_", " ")}</Badge>
+                              <Badge variant="outline" className={`text-[10px] ${priorityBadgeClass[task.priority]}`}>{task.priority}</Badge>
+                            </div>
+                          </div>
+                          <p className="text-sm font-medium line-clamp-1">{task.title}</p>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -8,7 +8,9 @@ import { useTranslation } from "react-i18next";
 
 import { useAuthStore } from "@/stores/auth.store";
 import { aiService, type ChatSession, type ChatMessage } from "@/services/ai.service";
+import { skillService } from "@/services/skill.service";
 import type { ChatStreamPhase } from "@/types/chat-stream";
+import type { SkillDirectoryItem } from "@/types/user";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
@@ -19,6 +21,7 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080
 const MAX_PROMPT_CHARS = 1500;
 const STREAM_STATUS_NULL_RETRY_LIMIT = 5;
 const STREAM_STATUS_ERROR_RETRY_LIMIT = 8;
+const AI_STREAM_ERROR_TOAST_ID = "ai-stream-error";
 
 type ToolAccess = "read" | "write";
 
@@ -26,6 +29,16 @@ type ToolEvent = {
   name: string;
   arguments?: string;
   result?: string;
+  confirmation?: PendingActionConfirmation;
+};
+
+type PendingActionConfirmation = {
+  actionId: string;
+  toolName?: string;
+  summary?: string;
+  arguments?: Record<string, unknown>;
+  preview?: unknown;
+  expiresAt?: string;
 };
 
 type AssignmentRequirementRow = {
@@ -67,7 +80,7 @@ type DynamicFormSpec = {
   fields: DynamicFormField[];
 };
 
-const WRITE_TOOL_NAMES = new Set(["assignTaskToMember", "recommendAndAssignTask", "updateTaskStatus", "createTask", "createSprint", "startSprint", "completeSprint", "assignTaskToSprint"]);
+const WRITE_TOOL_NAMES = new Set(["assignTaskToMember", "recommendAndAssignTask", "updateTaskRequiredSkills", "updateTaskStatus", "createTask", "createSprint", "startSprint", "completeSprint", "assignTaskToSprint"]);
 
 function createAssignmentRow(taskId = "", id?: string): AssignmentRequirementRow {
   return {
@@ -129,7 +142,10 @@ function createAssignmentDraft(formKey: string, request: AssignmentRequest): Ass
 }
 
 function stripDynamicFormBlocks(content: string) {
-  return content.replace(/```taskpilot-form\s*[\s\S]*?```/gi, "").trim();
+  return content
+    .replace(/```taskpilot-form\s*[\s\S]*?```/gi, "")
+    .replace(/```taskpilot-confirm\s*[\s\S]*?```/gi, "")
+    .trim();
 }
 
 function extractDynamicFormSpec(content: string): DynamicFormSpec | null {
@@ -154,19 +170,68 @@ function parseConfirmationResult(value?: string) {
   try {
     const parsed = JSON.parse(value) as Record<string, unknown>;
     if (parsed.confirmationRequired === true && typeof parsed.actionId === "string") {
-      return parsed as {
-        actionId: string;
-        toolName?: string;
-        summary?: string;
-        arguments?: Record<string, unknown>;
-        preview?: unknown;
-        expiresAt?: string;
-      };
+      return parsed as PendingActionConfirmation;
     }
   } catch {
-    return null;
+    const actionMatch = value.match(/confirmationRequired\s*=\s*true[\s\S]*?actionId\s*=\s*([^,\]\s]+)/i);
+    if (!actionMatch) {
+      return null;
+    }
+    const toolMatch = value.match(/toolName\s*=\s*([^,\]\s]+)/i);
+    const summaryMatch = value.match(/summary\s*=\s*([\s\S]*?)(?:,\s*arguments=|,\s*preview=|,\s*expiresAt=|\])/i);
+    return {
+      actionId: actionMatch[1],
+      toolName: toolMatch?.[1],
+      summary: summaryMatch?.[1]?.trim(),
+    };
   }
   return null;
+}
+
+function extractConfirmationSpecs(content: string): PendingActionConfirmation[] {
+  const specs: PendingActionConfirmation[] = [];
+  const pattern = /```taskpilot-confirm\s*([\s\S]*?)```/gi;
+  let match: RegExpExecArray | null;
+
+  while ((match = pattern.exec(content)) !== null) {
+    try {
+      const parsed = JSON.parse(match[1].trim()) as Record<string, unknown>;
+      if (parsed.confirmationRequired === true && typeof parsed.actionId === "string") {
+        specs.push(parsed as PendingActionConfirmation);
+      }
+    } catch {
+      // Ignore malformed confirmation metadata.
+    }
+  }
+
+  return specs;
+}
+
+function isSkillFieldName(name: string) {
+  const normalized = name.toLowerCase();
+  return normalized === "skills" || normalized === "requiredskills" || normalized === "required_skills";
+}
+
+function taskIdFromFormIntent(intent?: string) {
+  if (!intent) return null;
+  const match = intent.match(/(?:task|assign_task|reassign_task)[_-]?(\d+)/i);
+  return match?.[1] ?? null;
+}
+
+function isTaskAssignmentForm(spec: DynamicFormSpec) {
+  const intent = spec.intent?.toLowerCase() ?? "";
+  const hasSkillField = spec.fields.some((field) => isSkillFieldName(field.name));
+  return hasSkillField && (intent.includes("assign") || intent.includes("reassign") || intent.includes("task"));
+}
+
+function stripThinkArtifacts(value?: string | null) {
+  if (!value) return "";
+  return value
+    .replace(/<\s*d?think\b[^>]*>[\s\S]*?<\s*\/\s*d?think\s*>/gi, " ")
+    .replace(/<\/?\s*d?think\b[^>]*>/gi, " ")
+    .replace(/```taskpilot-(?:form|confirm)\s*[\s\S]*?```/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function getToolAccess(name: string): ToolAccess {
@@ -237,7 +302,7 @@ function ToolEventCard({
   const formattedArgs = formatToolPayload(tool.arguments);
   const formattedResult = formatToolPayload(tool.result);
   const resultSummary = summarizeToolResult(tool.result);
-  const confirmation = parseConfirmationResult(tool.result);
+  const confirmation = tool.confirmation ?? parseConfirmationResult(tool.result);
 
   return (
     <div className={`rounded-xl border ${access === "write" ? "border-amber-400/60 bg-amber-50/80 text-black" : "border-blue-400/50 bg-blue-50/80 text-black"} ${compact ? "p-2" : "p-3"} backdrop-blur-md shadow-sm`}>
@@ -262,7 +327,7 @@ function ToolEventCard({
       {confirmation && !compact && (
         <div className="mt-4 rounded-2xl border-2 border-amber-400/50 bg-white/95 p-4 shadow-xl backdrop-blur-md animate-step-fade text-black">
           <div className="flex items-center gap-2 text-xs font-extrabold text-amber-800 uppercase tracking-widest">
-            <span className="inline-block px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 mr-1 animate-pulse">⚠️</span>
+            <span className="inline-block px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 mr-1 animate-pulse">!</span>
             Yêu cầu phê duyệt hành động
           </div>
           <div className="mt-2 text-sm font-bold text-black leading-relaxed">
@@ -478,11 +543,16 @@ export default function AiChatPage() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [assignmentDrafts, setAssignmentDrafts] = useState<Record<string, AssignmentDraft>>({});
   const [dynamicFormValues, setDynamicFormValues] = useState<Record<string, Record<string, string>>>({});
+  const [skillDirectory, setSkillDirectory] = useState<SkillDirectoryItem[]>([]);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const lastPromptRef = useRef("");
   const activeStreamControllerRef = useRef<AbortController | null>(null);
   const isMountedRef = useRef(true);
+  const isStreamingRef = useRef(false);
   const activeSessionIdRef = useRef<number | null>(null);
+  const streamingSessionIdRef = useRef<number | null>(null);
   const pollTimerRef = useRef<number | null>(null);
 
   const targetStreamTextRef = useRef("");
@@ -492,6 +562,7 @@ export default function AiChatPage() {
   useEffect(() => {
     isMountedRef.current = true;
     loadSessions();
+    loadSkillDirectory();
     return () => {
       isMountedRef.current = false;
       stopPolling();
@@ -554,6 +625,8 @@ export default function AiChatPage() {
   };
 
   const resetStreamingUi = () => {
+    isStreamingRef.current = false;
+    streamingSessionIdRef.current = null;
     setIsStreaming(false);
     setIsThinking(false);
     setCurrentStreamMsg("");
@@ -570,7 +643,9 @@ export default function AiChatPage() {
     clearPendingRequest(targetSession.id);
     stopPolling();
     setStreamPhase("FINALIZED");
-    await loadMessages(targetSession.id);
+    isStreamingRef.current = false;
+    streamingSessionIdRef.current = null;
+    await loadMessages(targetSession.id, true);
     resetStreamingUi();
     loadSessions();
   };
@@ -610,6 +685,8 @@ export default function AiChatPage() {
 
     setIsStreaming(true);
     setIsThinking(true);
+    isStreamingRef.current = true;
+    streamingSessionIdRef.current = sessionId;
     setStreamingSessionId(sessionId);
     startStatusPolling(sessionId, pendingId);
   };
@@ -650,7 +727,7 @@ export default function AiChatPage() {
           stopPolling();
           resetStreamingUi();
           if (activeSessionIdRef.current === sessionId) {
-            await loadMessages(sessionId);
+            await loadMessages(sessionId, true);
             await loadSessions();
           }
           return;
@@ -660,7 +737,10 @@ export default function AiChatPage() {
           clearPendingRequest(sessionId);
           stopPolling();
           resetStreamingUi();
-          toast.error(status.errorMessage || t("copilot.error_ai_connection"));
+          const hasVisibleResult = targetStreamTextRef.current.trim().length > 0 || currentStreamMsg.trim().length > 0;
+          if (!hasVisibleResult && activeSessionIdRef.current === sessionId) {
+            toast.error(status.errorMessage || t("copilot.error_ai_connection"), { toastId: AI_STREAM_ERROR_TOAST_ID });
+          }
         }
       } catch {
         errorCount += 1;
@@ -694,14 +774,30 @@ export default function AiChatPage() {
     }
   }
 
-  async function loadMessages(sessionId: number) {
+  async function loadSkillDirectory() {
+    try {
+      const response = await skillService.getSkillDirectory();
+      if (!isMountedRef.current) return;
+      setSkillDirectory(response.data);
+    } catch {
+      // Skill dropdowns gracefully fall back to text inputs when the directory is unavailable.
+    }
+  }
+
+  async function loadMessages(sessionId: number, force = false) {
     try {
       const data = await aiService.getMessages(sessionId, 0, 100);
       if (!isMountedRef.current) return;
 
       // Avoid overriding UI with a different session when user switches tabs quickly.
       if (activeSessionIdRef.current !== sessionId) return;
-      setMessages(data.content.reverse()); // Assume BE returns DESC, we show ASC
+      if (!force && isStreamingRef.current && streamingSessionIdRef.current === sessionId) {
+        return;
+      }
+      const orderedMessages = [...data.content].reverse(); // Assume BE returns DESC, we show ASC
+      setMessages(orderedMessages);
+      const latestUserMessage = [...orderedMessages].reverse().find((message) => message.sender === "USER");
+      lastPromptRef.current = latestUserMessage?.content ?? "";
     } catch {
       toast.error(t("copilot.error_load_messages"));
     }
@@ -771,6 +867,8 @@ export default function AiChatPage() {
     if (!targetSession) {
       try {
         targetSession = await aiService.createSession();
+        isStreamingRef.current = true;
+        streamingSessionIdRef.current = targetSession.id;
         setSessions([targetSession, ...sessions]);
         setActiveSession(targetSession);
       } catch {
@@ -786,9 +884,12 @@ export default function AiChatPage() {
       createdAt: new Date().toISOString()
     };
 
+    lastPromptRef.current = outgoingText;
     setMessages(prev => [...prev, userMessage]);
     const messageText = outgoingText;
     setInputVal("");
+    isStreamingRef.current = true;
+    streamingSessionIdRef.current = targetSession.id;
     setIsStreaming(true);
     setIsThinking(true);
     setStreamPhase("QUEUED");
@@ -807,6 +908,7 @@ export default function AiChatPage() {
     savePendingRequest(targetSession.id, clientMessageId);
     startStatusPolling(targetSession.id, clientMessageId);
     let responseBuffer = "";
+    let streamErrorMessage: string | null = null;
 
     try {
       await fetchEventSource(`${API_BASE_URL}/v1/ai/sessions/${targetSession.id}/stream`, {
@@ -865,13 +967,19 @@ export default function AiChatPage() {
             streamCompletedRef.current = true;
           } else if (ev.event === "tool") {
             try {
-              const parsed = JSON.parse(ev.data) as { name?: string; arguments?: string; result?: string };
+              const parsed = JSON.parse(ev.data) as {
+                name?: string;
+                arguments?: string;
+                result?: string;
+                confirmation?: PendingActionConfirmation;
+              };
               const toolName = parsed.name?.trim();
               if (toolName && isMountedRef.current) {
                 const toolEvent: ToolEvent = {
                   name: toolName,
                   arguments: parsed.arguments,
                   result: parsed.result,
+                  confirmation: parsed.confirmation,
                 };
                 setToolEvents(prev => [...prev, toolEvent]);
               }
@@ -888,10 +996,12 @@ export default function AiChatPage() {
               // Ignore malformed expanded thinking.
             }
           } else if (ev.event === "error") {
-            if (isMountedRef.current) {
-              toast.error(ev.data);
+            streamErrorMessage = ev.data || "SSE server error";
+            const hasResult = responseBuffer.trim().length > 0 || streamCompletedRef.current;
+            if (!hasResult && isMountedRef.current) {
+              toast.error(streamErrorMessage, { toastId: AI_STREAM_ERROR_TOAST_ID });
             }
-            throw new Error(ev.data || "SSE server error");
+            throw new Error(streamErrorMessage);
           }
         },
         onerror(err) {
@@ -921,12 +1031,19 @@ export default function AiChatPage() {
     } catch (err) {
       clearPendingRequest(targetSession.id);
       stopPolling();
+      const hasResult = responseBuffer.trim().length > 0 || streamCompletedRef.current;
+      if (hasResult && isMountedRef.current && activeSessionIdRef.current === targetSession.id) {
+        await loadMessages(targetSession.id, true);
+        await loadSessions();
+      }
       if (isMountedRef.current) {
         resetStreamingUi();
       }
       const isAbort = err instanceof DOMException && err.name === "AbortError";
-      if (!isAbort && isMountedRef.current) {
-        toast.error(getApiErrorMessage(err) || t("copilot.error_ai_connection"));
+      if (!isAbort && !hasResult && isMountedRef.current) {
+        toast.error(streamErrorMessage || getApiErrorMessage(err) || t("copilot.error_ai_connection"), {
+          toastId: AI_STREAM_ERROR_TOAST_ID,
+        });
       }
     } finally {
       if (activeStreamControllerRef.current === controller) {
@@ -945,6 +1062,22 @@ export default function AiChatPage() {
 
   const cancelPendingAction = (actionId: string) => {
     void sendMessage(`CANCEL_ACTION ${actionId} - tôi từ chối và muốn hủy bỏ thao tác này.`);
+  };
+
+  const restoreLastPrompt = () => {
+    const lastPrompt = lastPromptRef.current.trim();
+    if (!lastPrompt) {
+      return;
+    }
+    setInputVal(lastPrompt);
+    window.setTimeout(() => {
+      const input = inputRef.current;
+      if (!input) {
+        return;
+      }
+      input.focus();
+      input.setSelectionRange(lastPrompt.length, lastPrompt.length);
+    }, 0);
   };
 
   const getAssignmentDraft = (formKey: string, request: AssignmentRequest) => {
@@ -973,6 +1106,39 @@ export default function AiChatPage() {
       ...draft,
       rows: draft.rows.map((row) => (row.id === rowId ? { ...row, [field]: value } : row)),
     }));
+  };
+
+  const renderSkillSelect = (
+    value: string,
+    onChange: (value: string) => void,
+    placeholder = "Chọn skill",
+    className = "bg-background/70",
+  ) => {
+    if (skillDirectory.length === 0) {
+      return (
+        <Input
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          placeholder="Skills: React, Spring Boot"
+          className={className}
+        />
+      );
+    }
+
+    return (
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className={`h-9 w-full rounded-md border border-input px-3 text-sm text-foreground ${className}`}
+      >
+        <option value="">{placeholder}</option>
+        {skillDirectory.map((skill) => (
+          <option key={skill.id} value={skill.name}>
+            {skill.name}
+          </option>
+        ))}
+      </select>
+    );
   };
 
   const addAssignmentRow = (formKey: string, request: AssignmentRequest) => {
@@ -1113,12 +1279,11 @@ export default function AiChatPage() {
                 placeholder="Task ID"
                 className="bg-background/70"
               />
-              <Input
-                value={row.skills}
-                onChange={(event) => updateAssignmentRow(formKey, request, row.id, "skills", event.target.value)}
-                placeholder="Skills: React, Spring Boot"
-                className="bg-background/70"
-              />
+              {renderSkillSelect(
+                row.skills,
+                (value) => updateAssignmentRow(formKey, request, row.id, "skills", value),
+                "Chọn skill",
+              )}
               <Input
                 value={row.difficulty}
                 onChange={(event) => updateAssignmentRow(formKey, request, row.id, "difficulty", event.target.value)}
@@ -1173,16 +1338,29 @@ export default function AiChatPage() {
       return;
     }
 
+    const taskId = taskIdFromFormIntent(spec.intent);
+    const assignmentForm = isTaskAssignmentForm(spec);
     const fieldLines = spec.fields
       .map((field) => `- ${field.name}: ${values[field.name] ?? ""}`)
       .join("\n");
-    const prompt = [
+    const promptParts = [
       "Structured form response",
       `Intent: ${spec.intent || "additional_information"}`,
       "Use this information to continue the previous user request.",
+      taskId ? `Task ID: ${taskId}` : "",
       "Fields:",
       fieldLines,
-    ].join("\n");
+    ];
+    if (assignmentForm) {
+      promptParts.push(
+        "Important TaskPilot instruction:",
+        "- The provided skill value comes from the system skill directory.",
+        "- Persist the selected required skills to the task as part of the pending write action.",
+        "- If the previous request was to assign/reassign, call recommendAndAssignTask with taskId, skills, and difficulty so the confirmation saves skills and assigns together.",
+        "- Do not only use these skills as temporary chat context.",
+      );
+    }
+    const prompt = promptParts.filter(Boolean).join("\n");
 
     setDynamicFormValues((forms) => {
       const next = { ...forms };
@@ -1243,6 +1421,18 @@ export default function AiChatPage() {
                 </label>
               );
             }
+            if (isSkillFieldName(field.name)) {
+              return (
+                <label key={field.name} className="block">
+                  {fieldLabel}
+                  {renderSkillSelect(
+                    value,
+                    (nextValue) => updateDynamicFormValue(formKey, field.name, nextValue),
+                    field.placeholder || "Chọn skill từ hệ thống",
+                  )}
+                </label>
+              );
+            }
             if (field.type === "select") {
               const options = field.options ?? [];
               return (
@@ -1294,12 +1484,34 @@ export default function AiChatPage() {
     );
   };
 
+  const renderConfirmationCards = (confirmations: PendingActionConfirmation[]) => (
+    <div className="mt-3 grid gap-3">
+      {confirmations.map((confirmation) => (
+        <ToolEventCard
+          key={confirmation.actionId}
+          tool={{
+            name: confirmation.toolName || "pendingAction",
+            confirmation,
+            result: JSON.stringify({ confirmationRequired: true, ...confirmation }),
+          }}
+          onConfirmAction={confirmPendingAction}
+          onCancelAction={cancelPendingAction}
+        />
+      ))}
+    </div>
+  );
+
   const renderMessageExtras = (msg: ChatMessage, idx: number) => {
     if (msg.sender !== "ASSISTANT") {
       return null;
     }
 
     const formKey = `message-${msg.id || idx}`;
+    const confirmations = extractConfirmationSpecs(msg.content);
+    if (confirmations.length > 0) {
+      return renderConfirmationCards(confirmations);
+    }
+
     const dynamicForm = extractDynamicFormSpec(msg.content);
     if (dynamicForm) {
       return renderDynamicForm(formKey, dynamicForm);
@@ -1316,52 +1528,44 @@ export default function AiChatPage() {
 
 
   const extractThinkPayload = (content: string) => {
-    const openTag = "<think>";
-    const closeTag = "</think>";
+    const blockPattern = /<\s*d?think\b[^>]*>([\s\S]*?)<\s*\/\s*d?think\s*>/gi;
+    const tagPattern = /<\/?\s*d?think\b[^>]*>/gi;
+    const openTagPattern = /<\s*d?think\b[^>]*>/i;
 
-    const beforeFirstThinkParts: string[] = [];
-    const afterFirstThinkParts: string[] = [];
     const thinkBlocks: string[] = [];
+    let beforeThink = content;
+    let afterThink = "";
+    let firstStart = -1;
+    let lastEnd = -1;
+    let match: RegExpExecArray | null;
 
-    let cursor = 0;
-    let hasThinkTag = false;
-    let hasUnclosedThink = false;
-
-    while (cursor < content.length) {
-      const start = content.indexOf(openTag, cursor);
-
-      if (start === -1) {
-        if (hasThinkTag) {
-          afterFirstThinkParts.push(content.slice(cursor));
-        } else {
-          beforeFirstThinkParts.push(content.slice(cursor));
-        }
-        break;
+    while ((match = blockPattern.exec(content)) !== null) {
+      if (firstStart === -1) {
+        firstStart = match.index;
       }
+      lastEnd = match.index + match[0].length;
+      thinkBlocks.push(match[1]);
+    }
 
-      if (!hasThinkTag) {
-        beforeFirstThinkParts.push(content.slice(cursor, start));
-        hasThinkTag = true;
-      } else {
-        afterFirstThinkParts.push(content.slice(cursor, start));
+    const unclosedOpen = firstStart === -1 ? content.search(openTagPattern) : -1;
+    const hasThinkTag = firstStart !== -1 || unclosedOpen !== -1 || tagPattern.test(content);
+    const hasUnclosedThink = unclosedOpen !== -1;
+
+    if (firstStart !== -1) {
+      beforeThink = content.slice(0, firstStart);
+      afterThink = content.slice(lastEnd);
+    } else if (unclosedOpen !== -1) {
+      beforeThink = content.slice(0, unclosedOpen);
+      afterThink = "";
+      const openMatch = content.slice(unclosedOpen).match(openTagPattern);
+      if (openMatch) {
+        thinkBlocks.push(content.slice(unclosedOpen + openMatch[0].length));
       }
-
-      const end = content.indexOf(closeTag, start + openTag.length);
-      if (end === -1) {
-        hasUnclosedThink = true;
-        thinkBlocks.push(content.slice(start + openTag.length));
-        break;
-      }
-
-      thinkBlocks.push(content.slice(start + openTag.length, end));
-      cursor = end + closeTag.length;
     }
 
     const sanitizeAnswerText = (text: string) =>
-      text.replace(/<\/?think>/gi, "").trim();
+      text.replace(blockPattern, " ").replace(tagPattern, " ").trim();
 
-    const beforeThink = sanitizeAnswerText(beforeFirstThinkParts.join(""));
-    const afterThink = sanitizeAnswerText(afterFirstThinkParts.join(""));
     const thinkingText = thinkBlocks
       .map((block) => block.trim())
       .filter((block) => block.length > 0)
@@ -1370,8 +1574,8 @@ export default function AiChatPage() {
     return {
       hasThinkTag,
       hasUnclosedThink,
-      beforeThink,
-      afterThink,
+      beforeThink: sanitizeAnswerText(beforeThink),
+      afterThink: sanitizeAnswerText(afterThink),
       thinkingText,
     };
   };
@@ -1573,9 +1777,9 @@ export default function AiChatPage() {
                   <>
                     <div 
                       className="flex-1 truncate text-sm text-neutral-900 dark:text-neutral-100"
-                      title={s.title || t("copilot.new_chat")}
+                      title={stripThinkArtifacts(s.title) || t("copilot.new_chat")}
                     >
-                      {s.title || t("copilot.new_chat")}
+                      {stripThinkArtifacts(s.title) || t("copilot.new_chat")}
                     </div>
                     <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
                       <Button
@@ -1584,7 +1788,7 @@ export default function AiChatPage() {
                         className="h-6 w-6 text-neutral-500 dark:text-neutral-400 hover:text-primary hover:bg-primary/10"
                         onClick={() => {
                           setEditingSessionId(s.id);
-                          setEditingTitle(s.title || t("copilot.new_chat"));
+                          setEditingTitle(stripThinkArtifacts(s.title) || t("copilot.new_chat"));
                         }}
                         title="Đổi tên"
                       >
@@ -1617,28 +1821,6 @@ export default function AiChatPage() {
       <div className="flex-1 flex flex-col bg-transparent relative">
         {/* Messages */}
         <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4 relative z-10">
-          {isStreaming && activeSession?.id === streamingSessionId && (
-            <div className="rounded-xl border border-black/10 bg-white/80 px-3 py-2 backdrop-blur-md shadow-sm">
-              <div className="flex items-center justify-between text-xs text-black font-extrabold mb-1">
-                <span>{phaseLabel(streamPhase)}</span>
-                {streamModel && <span>{streamModel}</span>}
-              </div>
-              <div className="h-1.5 w-full rounded-full bg-black/10 overflow-hidden">
-                <div
-                  className="h-full bg-emerald-600 transition-all duration-300"
-                  style={{ width: `${phaseToProgress(streamPhase)}%` }}
-                />
-              </div>
-              {toolEvents.length > 0 && (
-                <div className="mt-3 grid gap-2 md:grid-cols-2">
-                  {toolEvents.map((tool, idx) => (
-                    <ToolEventCard key={`${tool.name}-${idx}`} tool={tool} onConfirmAction={confirmPendingAction} onCancelAction={cancelPendingAction} />
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
           {messages.length === 0 && !currentStreamMsg && (
             <div className="flex flex-col items-center justify-center h-full text-center space-y-4 p-4">
               <div className="bg-background/20 backdrop-blur-[40px] backdrop-saturate-150 p-8 rounded-3xl border border-border/30 shadow-xl flex flex-col items-center max-w-lg">
@@ -1713,14 +1895,38 @@ export default function AiChatPage() {
 
         {/* Input Area */}
         <div className="p-4 border-t border-border/40 bg-background/10 backdrop-blur-[40px] backdrop-saturate-150 relative z-10">
+          {isStreaming && activeSession?.id === streamingSessionId && (
+            <div className="mb-3 mx-auto max-w-4xl rounded-xl border border-black/10 bg-white/80 px-3 py-2 backdrop-blur-md shadow-sm dark:border-white/10 dark:bg-neutral-950/80">
+              <div className="mb-1 flex items-center gap-2 text-xs font-extrabold text-neutral-900 dark:text-neutral-100">
+                <span className="shrink-0">{phaseLabel(streamPhase)}</span>
+                {streamModel && (
+                  <span className="ml-auto min-w-0 truncate rounded-md border border-black/10 bg-black/5 px-2 py-0.5 text-[11px] font-bold dark:border-white/10 dark:bg-white/10">
+                    {streamModel}
+                  </span>
+                )}
+              </div>
+              <div className="h-1.5 w-full overflow-hidden rounded-full bg-black/10 dark:bg-white/10">
+                <div
+                  className="h-full bg-emerald-600 transition-all duration-300"
+                  style={{ width: `${phaseToProgress(streamPhase)}%` }}
+                />
+              </div>
+            </div>
+          )}
           <form
             onSubmit={(e) => { e.preventDefault(); void sendMessage(); }}
             className="relative flex max-w-4xl mx-auto"
           >
             <Textarea
+              ref={inputRef}
               value={inputVal}
               onChange={(e) => setInputVal(e.target.value)}
               onKeyDown={(e) => {
+                if (e.key === "ArrowUp" && !e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey && !inputVal.trim()) {
+                  e.preventDefault();
+                  restoreLastPrompt();
+                  return;
+                }
                 if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
                   e.preventDefault();
                   void sendMessage();
@@ -1735,7 +1941,7 @@ export default function AiChatPage() {
               disabled={!inputVal.trim()}
               className="absolute bottom-1.5 right-1.5 h-10 w-10 rounded-full bg-primary hover:bg-primary/90 flex items-center justify-center p-0"
             >
-              <Send className="w-4 h-4 ml-0.5" />
+              <Send className="h-4 w-4 translate-x-px" />
             </Button>
           </form>
           <div className="mt-2 text-right text-xs text-neutral-600 dark:text-neutral-300 font-semibold">
