@@ -137,8 +137,6 @@ function buildCommentTree(comments: TaskCommentDto[]) {
   return roots;
 }
 
-
-
 function formatTimestamp(value: string | null) {
   if (!value) {
     return "";
