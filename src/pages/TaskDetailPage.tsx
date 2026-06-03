@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "react-toastify";
 import { getApiErrorMessage } from "@/lib/http";
@@ -31,6 +31,11 @@ export default function TaskDetailPage() {
   const currentTaskId = Number(taskId);
   const focusedCommentIdParam = searchParams.get("commentId");
   const focusedCommentId = focusedCommentIdParam ? Number(focusedCommentIdParam) : null;
+
+  const reloadTaskDetail = useCallback(async () => {
+    const res = await taskService.getTaskById(currentTaskId);
+    setTaskDetail(res.data);
+  }, [currentTaskId]);
 
   useEffect(() => {
     const hasValidParams =
@@ -69,13 +74,44 @@ export default function TaskDetailPage() {
     void loadData();
   }, [currentProjectId, currentTaskId, navigate]);
 
+  useEffect(() => {
+    const maybeReload = (taskId?: number, projectId?: number) => {
+      const sameTask = taskId == null || taskId === currentTaskId;
+      const sameProject = projectId == null || projectId === currentProjectId;
+      if (sameTask && sameProject) {
+        void reloadTaskDetail();
+      }
+    };
+
+    const onTaskUpdated = (event: Event) => {
+      const detail = (event as CustomEvent<{ taskId?: number; projectId?: number }>).detail;
+      maybeReload(detail?.taskId, detail?.projectId);
+    };
+
+    const onStorage = (event: StorageEvent) => {
+      if (event.key !== "taskpilot_task_updated" || !event.newValue) return;
+      try {
+        const detail = JSON.parse(event.newValue) as { taskId?: number; projectId?: number };
+        maybeReload(detail.taskId, detail.projectId);
+      } catch {
+        // Ignore malformed refresh signal.
+      }
+    };
+
+    window.addEventListener("taskpilot:task-updated", onTaskUpdated);
+    window.addEventListener("storage", onStorage);
+    return () => {
+      window.removeEventListener("taskpilot:task-updated", onTaskUpdated);
+      window.removeEventListener("storage", onStorage);
+    };
+  }, [currentProjectId, currentTaskId, reloadTaskDetail]);
+
   const onUpdateTask = async (payload: { title?: string; description?: string; assigneeId?: number; status?: TaskStatus; priority?: TaskPriority; startDate?: string; dueDate?: string; labelIds?: number[]; requiredSkillIds?: number[] }) => {
     if (!taskDetail) return;
     try {
       await taskService.updateTask(taskDetail.task.id, payload);
       toast.success("Task updated successfully");
-      const res = await taskService.getTaskById(taskDetail.task.id);
-      setTaskDetail(res.data);
+      await reloadTaskDetail();
     } catch (error) {
       toast.error(getApiErrorMessage(error));
       throw error;

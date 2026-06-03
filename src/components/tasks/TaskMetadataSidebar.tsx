@@ -102,7 +102,8 @@ export function TaskMetadataSidebar({ projectId, assigneeId, status, priority, s
             {projectMembers.map((m) => (
               <SelectItem key={m.userId} value={m.userId.toString()}>
                 <div className="flex items-center gap-2">
-                   <UserAvatar name={`User ${m.userId}`} className="h-4 w-4" /> User {m.userId}
+                   <UserAvatar name={m.fullName || `User ${m.userId}`} className="h-4 w-4" />
+                   {m.fullName || `User ${m.userId}`}
                 </div>
               </SelectItem>
             ))}

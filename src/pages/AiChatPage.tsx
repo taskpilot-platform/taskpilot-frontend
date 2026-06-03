@@ -41,6 +41,14 @@ type PendingActionConfirmation = {
   expiresAt?: string;
 };
 
+type ConfirmedTaskMutation = {
+  actionId: string;
+  toolName?: string;
+  taskId?: number;
+  projectId?: number;
+  summary?: string;
+};
+
 type AssignmentRequirementRow = {
   id: string;
   taskId: string;
@@ -80,7 +88,7 @@ type DynamicFormSpec = {
   fields: DynamicFormField[];
 };
 
-const WRITE_TOOL_NAMES = new Set(["assignTaskToMember", "recommendAndAssignTask", "updateTaskRequiredSkills", "updateTaskStatus", "createTask", "createSprint", "startSprint", "completeSprint", "assignTaskToSprint"]);
+const WRITE_TOOL_NAMES = new Set(["assignTaskToMember", "assignTaskToMemberByName", "recommendAndAssignTask", "updateTaskRequiredSkills", "updateTaskStatus", "createTask", "createSprint", "startSprint", "completeSprint", "assignTaskToSprint"]);
 
 function createAssignmentRow(taskId = "", id?: string): AssignmentRequirementRow {
   return {
@@ -224,6 +232,37 @@ function isTaskAssignmentForm(spec: DynamicFormSpec) {
   return hasSkillField && (intent.includes("assign") || intent.includes("reassign") || intent.includes("task"));
 }
 
+function numberFromUnknown(value: unknown) {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim() && Number.isFinite(Number(value))) return Number(value);
+  return undefined;
+}
+
+function getRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+}
+
+function mutationFromConfirmation(confirmation: PendingActionConfirmation): ConfirmedTaskMutation {
+  const args = getRecord(confirmation.arguments);
+  const preview = getRecord(confirmation.preview);
+  return {
+    actionId: confirmation.actionId,
+    toolName: confirmation.toolName,
+    taskId: numberFromUnknown(args?.taskId) ?? numberFromUnknown(preview?.taskId),
+    projectId: numberFromUnknown(args?.projectId) ?? numberFromUnknown(preview?.projectId),
+    summary: confirmation.summary,
+  };
+}
+
+function notifyTaskMutation(mutation: ConfirmedTaskMutation) {
+  window.dispatchEvent(new CustomEvent("taskpilot:task-updated", { detail: mutation }));
+  try {
+    localStorage.setItem("taskpilot_task_updated", JSON.stringify({ ...mutation, at: Date.now() }));
+  } catch {
+    // Best-effort cross-tab refresh signal.
+  }
+}
+
 function stripThinkArtifacts(value?: string | null) {
   if (!value) return "";
   return value
@@ -294,7 +333,7 @@ function ToolEventCard({
 }: {
   tool: ToolEvent;
   compact?: boolean;
-  onConfirmAction?: (actionId: string) => void;
+  onConfirmAction?: (confirmation: PendingActionConfirmation) => void;
   onCancelAction?: (actionId: string) => void;
 }) {
   const access = getToolAccess(tool.name);
@@ -337,7 +376,7 @@ function ToolEventCard({
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
             {/* Option 1: Confirm / Approve */}
             <div
-              onClick={() => onConfirmAction?.(confirmation.actionId)}
+              onClick={() => onConfirmAction?.(confirmation)}
               className="relative group cursor-pointer overflow-hidden rounded-xl border-2 border-emerald-300 bg-emerald-50/50 hover:bg-emerald-100/60 p-3.5 transition-all duration-300 hover:shadow-md hover:-translate-y-0.5 active:scale-[0.98] flex gap-3 items-start select-none"
             >
               <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 border border-emerald-300 group-hover:scale-110 transition-transform">
@@ -428,7 +467,7 @@ function ThinkingAccordion({
   isThinkingComplete: boolean;
   collapseWhenComplete: boolean;
   t: (key: string) => string;
-  confirmPendingAction: (actionId: string) => void;
+  confirmPendingAction: (confirmation: PendingActionConfirmation) => void;
   cancelPendingAction: (actionId: string) => void;
 }) {
   const [isOpen, setIsOpen] = useState(!isThinkingComplete);
@@ -558,6 +597,7 @@ export default function AiChatPage() {
   const targetStreamTextRef = useRef("");
   const typewriterTimerRef = useRef<number | null>(null);
   const streamCompletedRef = useRef(false);
+  const pendingConfirmedMutationRef = useRef<ConfirmedTaskMutation | null>(null);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -638,6 +678,18 @@ export default function AiChatPage() {
     clearTypewriter();
   };
 
+  const handleConfirmedMutationFinalized = () => {
+    const confirmedMutation = pendingConfirmedMutationRef.current;
+    if (!confirmedMutation) return;
+    pendingConfirmedMutationRef.current = null;
+    if (confirmedMutation.toolName && WRITE_TOOL_NAMES.has(confirmedMutation.toolName)) {
+      toast.success("Thao tác đã được thực hiện thành công.");
+    }
+    if (confirmedMutation.taskId) {
+      notifyTaskMutation(confirmedMutation);
+    }
+  };
+
   const finalizeSessionStream = async (targetSession: ChatSession) => {
     if (!isMountedRef.current) return;
     clearPendingRequest(targetSession.id);
@@ -646,6 +698,7 @@ export default function AiChatPage() {
     isStreamingRef.current = false;
     streamingSessionIdRef.current = null;
     await loadMessages(targetSession.id, true);
+    handleConfirmedMutationFinalized();
     resetStreamingUi();
     loadSessions();
   };
@@ -730,6 +783,7 @@ export default function AiChatPage() {
             await loadMessages(sessionId, true);
             await loadSessions();
           }
+          handleConfirmedMutationFinalized();
           return;
         }
 
@@ -1056,8 +1110,9 @@ export default function AiChatPage() {
     }
   }
 
-  const confirmPendingAction = (actionId: string) => {
-    void sendMessage(`CONFIRM_ACTION ${actionId} - tôi xác nhận thực hiện thao tác ghi dữ liệu này.`);
+  const confirmPendingAction = (confirmation: PendingActionConfirmation) => {
+    pendingConfirmedMutationRef.current = mutationFromConfirmation(confirmation);
+    void sendMessage(`CONFIRM_ACTION ${confirmation.actionId} - tôi xác nhận thực hiện thao tác ghi dữ liệu này.`);
   };
 
   const cancelPendingAction = (actionId: string) => {
