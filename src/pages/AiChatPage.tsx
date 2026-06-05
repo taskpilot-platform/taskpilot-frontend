@@ -32,6 +32,90 @@ type ToolEvent = {
   confirmation?: PendingActionConfirmation;
 };
 
+type ChatComposerProps = {
+  placeholder: string;
+  disclaimer: string;
+  maxChars: number;
+  getLastPrompt: () => string;
+  onSubmit: (message: string) => void;
+};
+
+function ChatComposer({ placeholder, disclaimer, maxChars, getLastPrompt, onSubmit }: ChatComposerProps) {
+  const [value, setValue] = useState("");
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const trimmedValue = value.trim();
+
+  const submitCurrentValue = () => {
+    if (!trimmedValue) {
+      return;
+    }
+    const message = trimmedValue;
+    setValue("");
+    onSubmit(message);
+  };
+
+  const restoreLastPrompt = () => {
+    const lastPrompt = getLastPrompt().trim();
+    if (!lastPrompt) {
+      return;
+    }
+    setValue(lastPrompt);
+    window.setTimeout(() => {
+      const input = inputRef.current;
+      if (!input) {
+        return;
+      }
+      input.focus();
+      input.setSelectionRange(lastPrompt.length, lastPrompt.length);
+    }, 0);
+  };
+
+  return (
+    <>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          submitCurrentValue();
+        }}
+        className="relative flex max-w-4xl mx-auto"
+      >
+        <Textarea
+          ref={inputRef}
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "ArrowUp" && !e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey && !trimmedValue) {
+              e.preventDefault();
+              restoreLastPrompt();
+              return;
+            }
+            if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+              e.preventDefault();
+              submitCurrentValue();
+            }
+          }}
+          placeholder={placeholder}
+          className="min-h-[96px] flex-1 resize-none rounded-2xl border border-white/20 dark:border-white/10 pr-14 text-base bg-white/10 dark:bg-black/10 backdrop-blur-xl backdrop-saturate-150 text-black dark:text-white placeholder:text-black/60 dark:placeholder:text-white/60 focus:bg-white/20 dark:focus:bg-black/20 transition-all shadow-sm"
+        />
+        <Button
+          type="submit"
+          size="icon"
+          disabled={!trimmedValue}
+          className="absolute bottom-1.5 right-1.5 h-10 w-10 rounded-full bg-primary hover:bg-primary/90 flex items-center justify-center p-0"
+        >
+          <Send className="h-4 w-4 translate-x-px" />
+        </Button>
+      </form>
+      <div className="mt-2 text-right text-xs text-neutral-600 dark:text-neutral-300 font-semibold">
+        {value.length}/{maxChars}
+      </div>
+      <div className="text-center text-xs font-bold text-black dark:text-white mt-2 drop-shadow-sm">
+        {disclaimer}
+      </div>
+    </>
+  );
+}
+
 type PendingActionConfirmation = {
   actionId: string;
   toolName?: string;
@@ -570,7 +654,6 @@ export default function AiChatPage() {
   const [editingTitle, setEditingTitle] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
 
-  const [inputVal, setInputVal] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
   const [isThinking, setIsThinking] = useState(false);
   const [currentStreamMsg, setCurrentStreamMsg] = useState("");
@@ -585,7 +668,7 @@ export default function AiChatPage() {
   const [skillDirectory, setSkillDirectory] = useState<SkillDirectoryItem[]>([]);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const scrollRafRef = useRef<number | null>(null);
   const lastPromptRef = useRef("");
   const activeStreamControllerRef = useRef<AbortController | null>(null);
   const isMountedRef = useRef(true);
@@ -596,6 +679,7 @@ export default function AiChatPage() {
 
   const targetStreamTextRef = useRef("");
   const typewriterTimerRef = useRef<number | null>(null);
+  const lastTypewriterPaintRef = useRef(0);
   const streamCompletedRef = useRef(false);
   const pendingConfirmedMutationRef = useRef<ConfirmedTaskMutation | null>(null);
 
@@ -607,7 +691,10 @@ export default function AiChatPage() {
       isMountedRef.current = false;
       stopPolling();
       if (typewriterTimerRef.current) {
-        window.clearInterval(typewriterTimerRef.current);
+        window.cancelAnimationFrame(typewriterTimerRef.current);
+      }
+      if (scrollRafRef.current) {
+        window.cancelAnimationFrame(scrollRafRef.current);
       }
     };
   }, []);
@@ -657,10 +744,11 @@ export default function AiChatPage() {
 
   const clearTypewriter = () => {
     if (typewriterTimerRef.current) {
-      window.clearInterval(typewriterTimerRef.current);
+      window.cancelAnimationFrame(typewriterTimerRef.current);
       typewriterTimerRef.current = null;
     }
     targetStreamTextRef.current = "";
+    lastTypewriterPaintRef.current = 0;
     streamCompletedRef.current = false;
   };
 
@@ -706,28 +794,42 @@ export default function AiChatPage() {
   const startTypewriter = (targetSession: ChatSession) => {
     if (typewriterTimerRef.current) return;
 
-    typewriterTimerRef.current = window.setInterval(() => {
+    const tick = (timestamp: number) => {
+      typewriterTimerRef.current = null;
+      if (timestamp - lastTypewriterPaintRef.current < 33) {
+        typewriterTimerRef.current = window.requestAnimationFrame(tick);
+        return;
+      }
+      lastTypewriterPaintRef.current = timestamp;
       const target = targetStreamTextRef.current;
+      let shouldContinue = true;
       setCurrentStreamMsg((current) => {
         if (current.length >= target.length) {
           if (streamCompletedRef.current) {
-            window.clearInterval(typewriterTimerRef.current!);
             typewriterTimerRef.current = null;
             void finalizeSessionStream(targetSession);
+            shouldContinue = false;
           }
           return current;
         }
 
-        // Adaptive typewriter chunks for incredibly premium real-time streaming feeling
         const diff = target.length - current.length;
-        let chunkSize = 1;
-        if (diff > 50) chunkSize = 6;
-        else if (diff > 20) chunkSize = 3;
-        else if (diff > 10) chunkSize = 2;
+        let chunkSize = 3;
+        if (diff > 1000) chunkSize = 160;
+        else if (diff > 500) chunkSize = 100;
+        else if (diff > 200) chunkSize = 60;
+        else if (diff > 80) chunkSize = 28;
+        else if (diff > 30) chunkSize = 12;
+        else if (diff > 10) chunkSize = 6;
 
         return current + target.substring(current.length, current.length + chunkSize);
       });
-    }, 20); // Smooth 20ms interval for nice typewriter feeling
+      if (shouldContinue) {
+        typewriterTimerRef.current = window.requestAnimationFrame(tick);
+      }
+    };
+
+    typewriterTimerRef.current = window.requestAnimationFrame(tick);
   };
 
   const restorePendingRequest = (sessionId: number) => {
@@ -815,7 +917,13 @@ export default function AiChatPage() {
   };
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (scrollRafRef.current) {
+      window.cancelAnimationFrame(scrollRafRef.current);
+    }
+    scrollRafRef.current = window.requestAnimationFrame(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: isStreamingRef.current ? "auto" : "smooth" });
+      scrollRafRef.current = null;
+    });
   }, [messages, currentStreamMsg]);
 
   async function loadSessions() {
@@ -895,8 +1003,8 @@ export default function AiChatPage() {
     }
   }
 
-  async function sendMessage(messageOverride?: string) {
-    const outgoingText = (messageOverride ?? inputVal).trim();
+  async function sendMessage(messageOverride: string) {
+    const outgoingText = messageOverride.trim();
     if (!outgoingText) return;
     if (outgoingText.length > MAX_PROMPT_CHARS) {
       toast.error(
@@ -941,7 +1049,6 @@ export default function AiChatPage() {
     lastPromptRef.current = outgoingText;
     setMessages(prev => [...prev, userMessage]);
     const messageText = outgoingText;
-    setInputVal("");
     isStreamingRef.current = true;
     streamingSessionIdRef.current = targetSession.id;
     setIsStreaming(true);
@@ -1117,22 +1224,6 @@ export default function AiChatPage() {
 
   const cancelPendingAction = (actionId: string) => {
     void sendMessage(`CANCEL_ACTION ${actionId} - tôi từ chối và muốn hủy bỏ thao tác này.`);
-  };
-
-  const restoreLastPrompt = () => {
-    const lastPrompt = lastPromptRef.current.trim();
-    if (!lastPrompt) {
-      return;
-    }
-    setInputVal(lastPrompt);
-    window.setTimeout(() => {
-      const input = inputRef.current;
-      if (!input) {
-        return;
-      }
-      input.focus();
-      input.setSelectionRange(lastPrompt.length, lastPrompt.length);
-    }, 0);
   };
 
   const getAssignmentDraft = (formKey: string, request: AssignmentRequest) => {
@@ -1968,43 +2059,13 @@ export default function AiChatPage() {
               </div>
             </div>
           )}
-          <form
-            onSubmit={(e) => { e.preventDefault(); void sendMessage(); }}
-            className="relative flex max-w-4xl mx-auto"
-          >
-            <Textarea
-              ref={inputRef}
-              value={inputVal}
-              onChange={(e) => setInputVal(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "ArrowUp" && !e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey && !inputVal.trim()) {
-                  e.preventDefault();
-                  restoreLastPrompt();
-                  return;
-                }
-                if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
-                  e.preventDefault();
-                  void sendMessage();
-                }
-              }}
-              placeholder={t("copilot.input_placeholder") + " (Enter để gửi, Shift+Enter để xuống dòng)"}
-              className="min-h-[96px] flex-1 resize-none rounded-2xl border border-white/20 dark:border-white/10 pr-14 text-base bg-white/10 dark:bg-black/10 backdrop-blur-xl backdrop-saturate-150 text-black dark:text-white placeholder:text-black/60 dark:placeholder:text-white/60 focus:bg-white/20 dark:focus:bg-black/20 transition-all shadow-sm"
-            />
-            <Button
-              type="submit"
-              size="icon"
-              disabled={!inputVal.trim()}
-              className="absolute bottom-1.5 right-1.5 h-10 w-10 rounded-full bg-primary hover:bg-primary/90 flex items-center justify-center p-0"
-            >
-              <Send className="h-4 w-4 translate-x-px" />
-            </Button>
-          </form>
-          <div className="mt-2 text-right text-xs text-neutral-600 dark:text-neutral-300 font-semibold">
-            {inputVal.length}/{MAX_PROMPT_CHARS}
-          </div>
-          <div className="text-center text-xs font-bold text-black dark:text-white mt-2 drop-shadow-sm">
-            {t("copilot.disclaimer")}
-          </div>
+          <ChatComposer
+            placeholder={t("copilot.input_placeholder") + " (Enter để gửi, Shift+Enter để xuống dòng)"}
+            disclaimer={t("copilot.disclaimer")}
+            maxChars={MAX_PROMPT_CHARS}
+            getLastPrompt={() => lastPromptRef.current}
+            onSubmit={(message) => void sendMessage(message)}
+          />
         </div>
       </div>
     </div>
