@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { memo, useCallback, useState, useRef, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Send, Bot, User, Trash2, Plus, Loader2, ChevronRight, ChevronLeft, CheckCircle2, Search, BrainCircuit, Database, PencilLine, ListChecks, Wand2, X, Check } from "lucide-react";
@@ -40,7 +40,7 @@ type ChatComposerProps = {
   onSubmit: (message: string) => void;
 };
 
-function ChatComposer({ placeholder, disclaimer, maxChars, getLastPrompt, onSubmit }: ChatComposerProps) {
+const ChatComposer = memo(function ChatComposer({ placeholder, disclaimer, maxChars, getLastPrompt, onSubmit }: ChatComposerProps) {
   const [value, setValue] = useState("");
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const trimmedValue = value.trim();
@@ -114,7 +114,7 @@ function ChatComposer({ placeholder, disclaimer, maxChars, getLastPrompt, onSubm
       </div>
     </>
   );
-}
+});
 
 type PendingActionConfirmation = {
   actionId: string;
@@ -681,6 +681,7 @@ export default function AiChatPage() {
   const typewriterTimerRef = useRef<number | null>(null);
   const lastTypewriterPaintRef = useRef(0);
   const streamCompletedRef = useRef(false);
+  const sendMessageRef = useRef<(message: string) => void>(() => {});
   const pendingConfirmedMutationRef = useRef<ConfirmedTaskMutation | null>(null);
 
   useEffect(() => {
@@ -1216,6 +1217,16 @@ export default function AiChatPage() {
       }
     }
   }
+
+  sendMessageRef.current = (message: string) => {
+    void sendMessage(message);
+  };
+
+  const handleComposerSubmit = useCallback((message: string) => {
+    sendMessageRef.current(message);
+  }, []);
+
+  const getLastPrompt = useCallback(() => lastPromptRef.current, []);
 
   const confirmPendingAction = (confirmation: PendingActionConfirmation) => {
     pendingConfirmedMutationRef.current = mutationFromConfirmation(confirmation);
@@ -2063,8 +2074,8 @@ export default function AiChatPage() {
             placeholder={t("copilot.input_placeholder") + " (Enter để gửi, Shift+Enter để xuống dòng)"}
             disclaimer={t("copilot.disclaimer")}
             maxChars={MAX_PROMPT_CHARS}
-            getLastPrompt={() => lastPromptRef.current}
-            onSubmit={(message) => void sendMessage(message)}
+            getLastPrompt={getLastPrompt}
+            onSubmit={handleComposerSubmit}
           />
         </div>
       </div>
