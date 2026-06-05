@@ -544,7 +544,7 @@ function CreateTaskConfirmCard({
         )}
         {difficulty != null && (
           <div className="col-span-2">
-            <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">Dộ khó</div>
+            <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">Độ khó</div>
             <div className="flex items-center gap-2">
               <div className="flex gap-0.5">
                 {Array.from({ length: 10 }, (_, i) => (
