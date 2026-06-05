@@ -447,59 +447,160 @@ function ToolEventCard({
           {formattedResult}
         </pre>
       )}
-      {confirmation && !compact && (
-        <div className="mt-4 rounded-2xl border-2 border-amber-400/50 bg-white/95 p-4 shadow-xl backdrop-blur-md animate-step-fade text-black">
-          <div className="flex items-center gap-2 text-xs font-extrabold text-amber-800 uppercase tracking-widest">
-            <span className="inline-block px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 mr-1 animate-pulse">!</span>
-            Yêu cầu phê duyệt hành động
+      {confirmation && (
+        <div className="mt-3 rounded-xl border border-border/50 bg-background/80 backdrop-blur-md overflow-hidden shadow-md">
+          <div className="flex items-center gap-2 px-3 pt-3 pb-2">
+            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 text-[11px] font-black animate-pulse">!</span>
+            <span className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">Yêu cầu xác nhận</span>
           </div>
-          <div className="mt-2 text-sm font-bold text-black leading-relaxed">
-            {confirmation.summary || "Bạn có muốn đồng ý thực hiện thao tác ghi dữ liệu này không?"}
+          <div className="px-3 pb-3 text-sm font-semibold text-foreground leading-snug">
+            {confirmation.summary || "Bạn có muốn thực hiện thao tác ghi dữ liệu này không?"}
           </div>
-          
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            {/* Option 1: Confirm / Approve */}
-            <div
+          <div className="grid grid-cols-2 border-t border-border/30">
+            <button
+              type="button"
               onClick={() => onConfirmAction?.(confirmation)}
-              className="relative group cursor-pointer overflow-hidden rounded-xl border-2 border-emerald-300 bg-emerald-50/50 hover:bg-emerald-100/60 p-3.5 transition-all duration-300 hover:shadow-md hover:-translate-y-0.5 active:scale-[0.98] flex gap-3 items-start select-none"
+              className="flex items-center justify-center gap-1.5 py-2.5 text-sm font-bold text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 border-r border-border/30 transition-colors active:scale-95"
             >
-              <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 border border-emerald-300 group-hover:scale-110 transition-transform">
-                <CheckCircle2 className="h-4 w-4" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="text-sm font-extrabold text-black group-hover:text-emerald-800 transition-colors">
-                  Phê duyệt thực hiện
-                </div>
-                <div className="mt-0.5 text-xs text-black font-semibold leading-relaxed">
-                  Đồng ý ghi nhận và chạy hành động này vào cơ sở dữ liệu.
-                </div>
-              </div>
-              {/* Decorative background gradient */}
-              <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/0 to-emerald-500/5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
-            </div>
-
-            {/* Option 2: Cancel / Reject */}
-            <div
+              <Check className="h-3.5 w-3.5" />
+              Xác nhận
+            </button>
+            <button
+              type="button"
               onClick={() => onCancelAction?.(confirmation.actionId)}
-              className="relative group cursor-pointer overflow-hidden rounded-xl border-2 border-rose-300 bg-rose-50/50 hover:bg-rose-100/60 p-3.5 transition-all duration-300 hover:shadow-md hover:-translate-y-0.5 active:scale-[0.98] flex gap-3 items-start select-none"
+              className="flex items-center justify-center gap-1.5 py-2.5 text-sm font-bold text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 transition-colors active:scale-95"
             >
-              <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-rose-100 text-rose-700 border border-rose-300 group-hover:scale-110 transition-transform">
-                <X className="h-4 w-4" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="text-sm font-extrabold text-black group-hover:text-rose-800 transition-colors">
-                  Từ chối & Hủy bỏ
-                </div>
-                <div className="mt-0.5 text-xs text-black font-semibold leading-relaxed">
-                  Từ chối yêu cầu và loại bỏ hành động này khỏi hàng đợi.
-                </div>
-              </div>
-              {/* Decorative background gradient */}
-              <div className="absolute inset-0 bg-gradient-to-r from-rose-500/0 to-rose-500/5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
-            </div>
+              <X className="h-3.5 w-3.5" />
+              Hủy bỏ
+            </button>
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+const PRIORITY_CONFIG: Record<string, { label: string; cls: string }> = {
+  LOW: { label: "Thấp", cls: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300 border-slate-300/50 dark:border-slate-600/50" },
+  MEDIUM: { label: "Trung bình", cls: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 border-blue-300/50 dark:border-blue-600/50" },
+  HIGH: { label: "Cao", cls: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300 border-amber-300/50 dark:border-amber-600/50" },
+  URGENT: { label: "Khẩn cấp", cls: "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300 border-red-300/50 dark:border-red-600/50" },
+};
+
+function CreateTaskConfirmCard({
+  confirmation,
+  onConfirmAction,
+  onCancelAction,
+}: {
+  confirmation: PendingActionConfirmation;
+  onConfirmAction: (c: PendingActionConfirmation) => void;
+  onCancelAction: (id: string) => void;
+}) {
+  const args = (confirmation.arguments ?? {}) as Record<string, unknown>;
+  const title = args.title ? String(args.title) : "";
+  const priority = args.priority ? String(args.priority).toUpperCase() : "MEDIUM";
+  const description = args.description ? String(args.description) : null;
+  const difficulty = args.difficultyLevel != null ? Number(args.difficultyLevel) : null;
+  const startDate = args.startDate ? String(args.startDate) : null;
+  const dueDate = args.dueDate ? String(args.dueDate) : null;
+  const projectId = args.projectId != null ? String(args.projectId) : null;
+  const sprintId = args.sprintId != null ? String(args.sprintId) : null;
+  const assigneeId = args.assigneeId != null ? String(args.assigneeId) : null;
+
+  const pCfg = PRIORITY_CONFIG[priority] ?? { label: priority, cls: "bg-muted text-muted-foreground border-border" };
+
+  const formatDate = (d: string) => {
+    try { return new Date(d).toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" }); }
+    catch { return d; }
+  };
+
+  return (
+    <div className="rounded-2xl border border-border/50 bg-card/80 backdrop-blur-md shadow-lg overflow-hidden">
+      {/* Header */}
+      <div className="px-4 pt-4 pb-3 flex items-start gap-3">
+        <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-500/10 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-300/30 dark:border-emerald-500/30">
+          <ListChecks className="h-4 w-4" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Tạo task mới · chờ xác nhận</div>
+          <div className="text-[15px] font-bold text-foreground leading-tight mt-0.5 line-clamp-2">{title || "Chưa có tiêu đề"}</div>
+        </div>
+        <span className={`shrink-0 self-start text-[11px] font-bold px-2 py-0.5 rounded-lg border ${pCfg.cls}`}>{pCfg.label}</span>
+      </div>
+
+      {/* Fields grid */}
+      <div className="px-4 pb-3 grid grid-cols-2 gap-x-4 gap-y-3 text-sm border-t border-border/30 pt-3">
+        {projectId && (
+          <div>
+            <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-0.5">Dự án</div>
+            <div className="font-semibold text-foreground">Project #{projectId}</div>
+          </div>
+        )}
+        {sprintId && (
+          <div>
+            <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-0.5">Sprint</div>
+            <div className="font-semibold text-foreground">Sprint #{sprintId}</div>
+          </div>
+        )}
+        {difficulty != null && (
+          <div className="col-span-2">
+            <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">Dộ khó</div>
+            <div className="flex items-center gap-2">
+              <div className="flex gap-0.5">
+                {Array.from({ length: 10 }, (_, i) => (
+                  <div key={i} className={`h-2 w-3.5 rounded-sm transition-colors ${i < difficulty ? "bg-amber-500" : "bg-border/60"}`} />
+                ))}
+              </div>
+              <span className="text-xs font-bold text-foreground">{difficulty}/10</span>
+            </div>
+          </div>
+        )}
+        {startDate && (
+          <div>
+            <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-0.5">Bắt đầu</div>
+            <div className="font-semibold text-foreground">{formatDate(startDate)}</div>
+          </div>
+        )}
+        {dueDate && (
+          <div>
+            <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-0.5">Hạn chót</div>
+            <div className="font-semibold text-foreground">{formatDate(dueDate)}</div>
+          </div>
+        )}
+        {assigneeId && (
+          <div>
+            <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-0.5">Người nhận</div>
+            <div className="font-semibold text-foreground">User #{assigneeId}</div>
+          </div>
+        )}
+      </div>
+
+      {description && (
+        <div className="px-4 pb-3 border-t border-border/30 pt-2">
+          <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-0.5">Mô tả</div>
+          <p className="text-sm text-foreground/80 leading-relaxed line-clamp-3">{description}</p>
+        </div>
+      )}
+
+      {/* Action buttons */}
+      <div className="grid grid-cols-2 border-t border-border/40">
+        <button
+          type="button"
+          onClick={() => onConfirmAction(confirmation)}
+          className="flex items-center justify-center gap-2 py-3 text-sm font-bold text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 border-r border-border/40 transition-all duration-150 active:scale-[0.97]"
+        >
+          <Check className="h-4 w-4" />
+          Phê duyệt
+        </button>
+        <button
+          type="button"
+          onClick={() => onCancelAction(confirmation.actionId)}
+          className="flex items-center justify-center gap-2 py-3 text-sm font-bold text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 transition-all duration-150 active:scale-[0.97]"
+        >
+          <X className="h-4 w-4" />
+          Từ chối
+        </button>
+      </div>
     </div>
   );
 }
@@ -527,7 +628,7 @@ const parseThinkingToSteps = (thinking: string, stepTitlePrefix: string) => {
 
     return steps;
   }
-  
+
   // Otherwise split by paragraphs
   const paragraphs = thinking.split(/\n\n+/).filter(s => s.trim().length > 0);
   return paragraphs.map((content, idx) => ({
@@ -596,9 +697,8 @@ function ThinkingAccordion({
             return (
               <div
                 key={idx}
-                className={`relative pl-8 group transition-all duration-500 ease-in-out ${
-                  isStepComplete ? "animate-step-fade" : "opacity-100"
-                }`}
+                className={`relative pl-8 group transition-all duration-500 ease-in-out ${isStepComplete ? "animate-step-fade" : "opacity-100"
+                  }`}
                 style={
                   isStepComplete
                     ? { animationDelay: `${Math.min(idx * 0.15, 1.5)}s` }
@@ -1056,7 +1156,7 @@ export default function AiChatPage() {
     setStreamPhase("QUEUED");
     setStreamModel("");
     setStreamingSessionId(targetSession.id);
-    
+
     // Setup typewriter refs
     clearTypewriter();
     setCurrentStreamMsg("");
@@ -1219,11 +1319,11 @@ export default function AiChatPage() {
 
   const confirmPendingAction = (confirmation: PendingActionConfirmation) => {
     pendingConfirmedMutationRef.current = mutationFromConfirmation(confirmation);
-    void sendMessage(`CONFIRM_ACTION ${confirmation.actionId} - tôi xác nhận thực hiện thao tác ghi dữ liệu này.`);
+    void sendMessage(`CONFIRM_ACTION ${confirmation.actionId} xác nhận đồng ý thực hiện`);
   };
 
   const cancelPendingAction = (actionId: string) => {
-    void sendMessage(`CANCEL_ACTION ${actionId} - tôi từ chối và muốn hủy bỏ thao tác này.`);
+    void sendMessage(`CANCEL_ACTION ${actionId} hủy từ chối thao tác`);
   };
 
   const getAssignmentDraft = (formKey: string, request: AssignmentRequest) => {
@@ -1632,20 +1732,30 @@ export default function AiChatPage() {
 
   const renderConfirmationCards = (confirmations: PendingActionConfirmation[]) => (
     <div className="mt-3 grid gap-3">
-      {confirmations.map((confirmation) => (
-        <ToolEventCard
-          key={confirmation.actionId}
-          tool={{
-            name: confirmation.toolName || "pendingAction",
-            confirmation,
-            result: JSON.stringify({ confirmationRequired: true, ...confirmation }),
-          }}
-          onConfirmAction={confirmPendingAction}
-          onCancelAction={cancelPendingAction}
-        />
-      ))}
+      {confirmations.map((confirmation) =>
+        confirmation.toolName === "createTask" ? (
+          <CreateTaskConfirmCard
+            key={confirmation.actionId}
+            confirmation={confirmation}
+            onConfirmAction={confirmPendingAction}
+            onCancelAction={cancelPendingAction}
+          />
+        ) : (
+          <ToolEventCard
+            key={confirmation.actionId}
+            tool={{
+              name: confirmation.toolName || "pendingAction",
+              confirmation,
+              result: JSON.stringify({ confirmationRequired: true, ...confirmation }),
+            }}
+            onConfirmAction={confirmPendingAction}
+            onCancelAction={cancelPendingAction}
+          />
+        )
+      )}
     </div>
   );
+
 
   const renderMessageExtras = (msg: ChatMessage, idx: number) => {
     if (msg.sender !== "ASSISTANT") {
@@ -1880,11 +1990,10 @@ export default function AiChatPage() {
               <div
                 key={s.id}
                 onClick={() => !isEditing && setActiveSession(s)}
-                className={`p-3 px-4 cursor-pointer flex justify-between items-center group transition-colors ${
-                  activeSession?.id === s.id
+                className={`p-3 px-4 cursor-pointer flex justify-between items-center group transition-colors ${activeSession?.id === s.id
                     ? "bg-primary/15 text-primary dark:text-neutral-50 font-semibold"
                     : "hover:bg-white/20 dark:hover:bg-white/10 text-neutral-800 dark:text-neutral-200 font-medium"
-                }`}
+                  }`}
               >
                 {isEditing ? (
                   <div className="flex-1 flex items-center gap-1 min-w-0" onClick={(e) => e.stopPropagation()}>
@@ -1921,7 +2030,7 @@ export default function AiChatPage() {
                   </div>
                 ) : (
                   <>
-                    <div 
+                    <div
                       className="flex-1 truncate text-sm text-neutral-900 dark:text-neutral-100"
                       title={stripThinkArtifacts(s.title) || t("copilot.new_chat")}
                     >
