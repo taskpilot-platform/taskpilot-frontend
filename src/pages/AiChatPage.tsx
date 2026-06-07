@@ -22,6 +22,8 @@ const MAX_PROMPT_CHARS = 1500;
 const STREAM_STATUS_NULL_RETRY_LIMIT = 5;
 const STREAM_STATUS_ERROR_RETRY_LIMIT = 8;
 const AI_STREAM_ERROR_TOAST_ID = "ai-stream-error";
+const AI_LOAD_SESSIONS_ERROR_TOAST_ID = "ai-load-sessions-error";
+const AI_LOAD_MESSAGES_ERROR_TOAST_ID = "ai-load-messages-error";
 
 type ToolAccess = "read" | "write";
 
@@ -159,6 +161,8 @@ type DynamicFormField = {
   type?: "text" | "number" | "textarea" | "select" | "date" | "checkbox";
   required?: boolean;
   placeholder?: string;
+  value?: string | number | boolean | null;
+  defaultValue?: string | number | boolean | null;
   min?: number;
   max?: number;
   options?: Array<string | { label: string; value: string }>;
@@ -172,7 +176,7 @@ type DynamicFormSpec = {
   fields: DynamicFormField[];
 };
 
-const WRITE_TOOL_NAMES = new Set(["assignTaskToMember", "assignTaskToMemberByName", "recommendAndAssignTask", "updateTaskRequiredSkills", "updateTaskStatus", "createTask", "createSprint", "startSprint", "completeSprint", "assignTaskToSprint"]);
+const WRITE_TOOL_NAMES = new Set(["assignTaskToMember", "assignTaskToMemberByName", "recommendAndAssignTask", "updateTaskRequiredSkills", "updateTaskStatus", "patchTask", "patchProject", "patchSprint", "patchTaskComment", "createSystemSkill", "patchSystemSkill", "deleteSystemSkill", "addMySkill", "patchMySkill", "deleteMySkill", "markNotificationRead", "markAllNotificationsRead", "createTask", "createSprint", "startSprint", "completeSprint", "assignTaskToSprint"]);
 
 function createAssignmentRow(taskId = "", id?: string): AssignmentRequirementRow {
   return {
@@ -768,6 +772,8 @@ export default function AiChatPage() {
   const [skillDirectory, setSkillDirectory] = useState<SkillDirectoryItem[]>([]);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesViewportRef = useRef<HTMLDivElement>(null);
+  const shouldAutoScrollRef = useRef(true);
   const scrollRafRef = useRef<number | null>(null);
   const lastPromptRef = useRef("");
   const activeStreamControllerRef = useRef<AbortController | null>(null);
@@ -1017,7 +1023,22 @@ export default function AiChatPage() {
     }, 1500);
   };
 
+  const isNearMessageBottom = useCallback(() => {
+    const viewport = messagesViewportRef.current;
+    if (!viewport) {
+      return true;
+    }
+    return viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight < 160;
+  }, []);
+
+  const handleMessagesScroll = useCallback(() => {
+    shouldAutoScrollRef.current = isNearMessageBottom();
+  }, [isNearMessageBottom]);
+
   useEffect(() => {
+    if (!shouldAutoScrollRef.current && !isNearMessageBottom()) {
+      return;
+    }
     if (scrollRafRef.current) {
       window.cancelAnimationFrame(scrollRafRef.current);
     }
@@ -1025,15 +1046,18 @@ export default function AiChatPage() {
       messagesEndRef.current?.scrollIntoView({ behavior: isStreamingRef.current ? "auto" : "smooth" });
       scrollRafRef.current = null;
     });
-  }, [messages, currentStreamMsg]);
+  }, [isNearMessageBottom, messages, currentStreamMsg]);
 
   async function loadSessions() {
     try {
       const data = await aiService.getSessions(0, 50);
       if (!isMountedRef.current) return;
       setSessions(data.content);
-    } catch {
-      toast.error(t("copilot.error_load_sessions"));
+    } catch (error) {
+      console.error("[AiChat] Failed to load chat sessions", error);
+      toast.error(`${t("copilot.error_load_sessions")} ${getApiErrorMessage(error)}`, {
+        toastId: AI_LOAD_SESSIONS_ERROR_TOAST_ID,
+      });
     }
   }
 
@@ -1061,8 +1085,11 @@ export default function AiChatPage() {
       setMessages(orderedMessages);
       const latestUserMessage = [...orderedMessages].reverse().find((message) => message.sender === "USER");
       lastPromptRef.current = latestUserMessage?.content ?? "";
-    } catch {
-      toast.error(t("copilot.error_load_messages"));
+    } catch (error) {
+      console.error("[AiChat] Failed to load messages", { sessionId, error });
+      toast.error(`${t("copilot.error_load_messages")} ${getApiErrorMessage(error)}`, {
+        toastId: AI_LOAD_MESSAGES_ERROR_TOAST_ID,
+      });
     }
   }
 
@@ -1148,6 +1175,7 @@ export default function AiChatPage() {
     };
 
     lastPromptRef.current = outgoingText;
+    shouldAutoScrollRef.current = true;
     setMessages(prev => [...prev, userMessage]);
     const messageText = outgoingText;
     isStreamingRef.current = true;
@@ -1587,9 +1615,18 @@ export default function AiChatPage() {
     }));
   };
 
+  const getDynamicFieldDefault = (field: DynamicFormField) => {
+    const rawValue = field.value ?? field.defaultValue ?? "";
+    if (rawValue === null || rawValue === undefined) return "";
+    return String(rawValue);
+  };
+
+  const getDynamicFieldValue = (values: Record<string, string>, field: DynamicFormField) =>
+    values[field.name] ?? getDynamicFieldDefault(field);
+
   const submitDynamicForm = async (formKey: string, spec: DynamicFormSpec) => {
     const values = dynamicFormValues[formKey] ?? {};
-    const missing = spec.fields.find((field) => field.required && !values[field.name]?.trim());
+    const missing = spec.fields.find((field) => field.required && !getDynamicFieldValue(values, field).trim());
     if (missing) {
       toast.error(`Vui lòng nhập ${missing.label}.`);
       return;
@@ -1598,7 +1635,7 @@ export default function AiChatPage() {
     const taskId = taskIdFromFormIntent(spec.intent);
     const assignmentForm = isTaskAssignmentForm(spec);
     const fieldLines = spec.fields
-      .map((field) => `- ${field.name}: ${values[field.name] ?? ""}`)
+      .map((field) => `- ${field.name}: ${getDynamicFieldValue(values, field)}`)
       .join("\n");
     const promptParts = [
       "Structured form response",
@@ -1641,7 +1678,7 @@ export default function AiChatPage() {
 
         <div className="space-y-2">
           {spec.fields.map((field) => {
-            const value = values[field.name] ?? "";
+            const value = getDynamicFieldValue(values, field);
             const fieldLabel = (
               <div className="mb-1 flex items-center gap-1 text-xs font-medium text-foreground/80">
                 <span>{field.label}</span>
@@ -2086,7 +2123,11 @@ export default function AiChatPage() {
       {/* Main Chat Area */}
       <div className="flex-1 flex flex-col bg-transparent relative">
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4 relative z-10">
+        <div
+          ref={messagesViewportRef}
+          onScroll={handleMessagesScroll}
+          className="flex-1 overflow-y-auto p-4 flex flex-col gap-4 relative z-10"
+        >
           {messages.length === 0 && !currentStreamMsg && (
             <div className="flex flex-col items-center justify-center h-full text-center space-y-4 p-4">
               <div className="bg-background/20 backdrop-blur-[40px] backdrop-saturate-150 p-8 rounded-3xl border border-border/30 shadow-xl flex flex-col items-center max-w-lg">
