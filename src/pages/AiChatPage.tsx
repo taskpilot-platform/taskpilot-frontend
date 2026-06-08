@@ -8,6 +8,7 @@ import { useTranslation } from "react-i18next";
 
 import { useAuthStore } from "@/stores/auth.store";
 import { aiService, type ChatSession, type ChatMessage } from "@/services/ai.service";
+import { projectService } from "../services/project.service";
 import { skillService } from "@/services/skill.service";
 import type { ChatStreamPhase } from "@/types/chat-stream";
 import type { SkillDirectoryItem } from "@/types/user";
@@ -770,6 +771,9 @@ export default function AiChatPage() {
   const [assignmentDrafts, setAssignmentDrafts] = useState<Record<string, AssignmentDraft>>({});
   const [dynamicFormValues, setDynamicFormValues] = useState<Record<string, Record<string, string>>>({});
   const [skillDirectory, setSkillDirectory] = useState<SkillDirectoryItem[]>([]);
+  const [myProjects, setMyProjects] = useState<{ id: number; name: string }[]>([]);
+  const [sprintsByProject, setSprintsByProject] = useState<Record<number, { id: number; name: string }[]>>({});
+  const [membersByProject, setMembersByProject] = useState<Record<number, { id: number; name: string }[]>>({});
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesViewportRef = useRef<HTMLDivElement>(null);
@@ -794,6 +798,7 @@ export default function AiChatPage() {
     isMountedRef.current = true;
     loadSessions();
     loadSkillDirectory();
+    loadMyProjects();
     return () => {
       isMountedRef.current = false;
       stopPolling();
@@ -1060,6 +1065,39 @@ export default function AiChatPage() {
       });
     }
   }
+
+  async function loadMyProjects() {
+    try {
+      const response = await projectService.getMyProjects(0, 100);
+      if (!isMountedRef.current) return;
+      setMyProjects(response.data.content.map((p: any) => ({ id: p.id, name: p.name })));
+    } catch {}
+  }
+
+  const loadSprintsForProject = async (projectId: number) => {
+    if (sprintsByProject[projectId]) return;
+    try {
+      const { sprintService } = await import("../services/sprint.service");
+      const response = await sprintService.getSprintsByProject(projectId, 0, 100);
+      if (!isMountedRef.current) return;
+      setSprintsByProject(prev => ({
+        ...prev,
+        [projectId]: response.data.content.map((s: any) => ({ id: s.id, name: s.name }))
+      }));
+    } catch {}
+  };
+
+  const loadMembersForProject = async (projectId: number) => {
+    if (membersByProject[projectId]) return;
+    try {
+      const response = await projectService.getProjectMembers(projectId);
+      if (!isMountedRef.current) return;
+      setMembersByProject(prev => ({
+        ...prev,
+        [projectId]: response.data.map((m: any) => ({ id: m.user.id, name: m.user.fullName }))
+      }));
+    } catch {}
+  };
 
   async function loadSkillDirectory() {
     try {
@@ -1726,6 +1764,33 @@ export default function AiChatPage() {
                   )}
                 </label>
               );
+            }
+            if (field.name === "projectId" && field.type === "number") {
+              field.type = "select";
+              field.options = myProjects.map(p => ({ label: `${p.name} (ID: ${p.id})`, value: p.id }));
+              if (value) {
+                const projectId = parseInt(value, 10);
+                if (!isNaN(projectId)) {
+                  loadSprintsForProject(projectId);
+                  loadMembersForProject(projectId);
+                }
+              }
+            }
+            if (field.name.endsWith("Id") && field.name !== "projectId" && field.type === "number") {
+              field.type = "select";
+              const projectIdStr = values["projectId"];
+              if (projectIdStr) {
+                const projectId = parseInt(projectIdStr, 10);
+                if (field.name === "sprintId") {
+                  const sprints = sprintsByProject[projectId] || [];
+                  field.options = sprints.map(s => ({ label: `${s.name} (ID: ${s.id})`, value: s.id }));
+                } else if (field.name === "assigneeId") {
+                  const members = membersByProject[projectId] || [];
+                  field.options = members.map(m => ({ label: `${m.name} (ID: ${m.id})`, value: m.id }));
+                }
+              } else {
+                field.options = [];
+              }
             }
             if (field.type === "select") {
               const options = field.options ?? [];
