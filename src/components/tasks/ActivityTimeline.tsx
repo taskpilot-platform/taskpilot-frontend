@@ -13,9 +13,11 @@ import {
   X,
 } from "lucide-react";
 import { toast } from "react-toastify";
+import { useTranslation } from "react-i18next";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -624,6 +626,8 @@ export function ActivityTimeline({
   isActive = true,
   focusedCommentId,
 }: ActivityTimelineProps) {
+  const { t } = useTranslation();
+  const confirm = useConfirm();
   const commentRefs = useRef(new Map<number, HTMLDivElement>());
   const [comments, setComments] = useState<TaskCommentDto[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -819,7 +823,12 @@ export function ActivityTimeline({
   };
 
   const handleDeleteComment = async (commentId: number) => {
-    if (!window.confirm("Delete this comment?")) {
+    const isConfirm = await confirm({
+      title: t("comments.delete_title", { defaultValue: "Xóa bình luận" }),
+      message: t("comments.delete_confirm", { defaultValue: "Delete this comment?" }),
+      variant: "destructive",
+    });
+    if (!isConfirm) {
       return;
     }
 

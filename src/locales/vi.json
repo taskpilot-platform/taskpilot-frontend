@@ -205,8 +205,11 @@
 		"join_success": "Tham gia dự án thành công",
 		"update_error_empty": "Vui lòng chọn dự án cần cập nhật",
 		"update_success": "Cập nhật dự án thành công",
+		"leave_title": "Rời dự án",
 		"leave_confirm": "Bạn có chắc chắn muốn rời dự án này?",
-		"leave_success": "Đã rời dự án",
+		"leave_success": "Đã rời dự án thành công",
+		"leave_desc": "Rời khỏi dự án này. Bạn sẽ mất quyền truy cập vào tất cả các bảng, nhiệm vụ và lịch sử của dự án.",
+		"leave_error_last_manager": "Bạn không thể rời dự án vì bạn là Manager duy nhất còn lại. Vui lòng bổ nhiệm người khác làm Manager trước khi rời.",
 
 		"detail_title": "Chi tiết và cập nhật dự án",
 		"detail_desc_selected": "Đang chọn: {{name}} ({{role}})",

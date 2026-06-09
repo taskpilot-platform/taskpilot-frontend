@@ -11,6 +11,7 @@ import { ColorThemeProvider } from "./components/color-theme-provider.tsx";
 import { useAuthStore } from "@/stores/auth.store";
 import { initOneSignal } from "@/lib/onesignal";
 import { useEffect } from "react";
+import { ConfirmProvider } from "./components/ui/confirm-dialog.tsx";
 
 function AppBootstrap() {
   useEffect(() => {
@@ -30,8 +31,11 @@ createRoot(document.getElementById("root")!).render(
       <ColorThemeProvider defaultTheme="zinc">
         {/* ToastContainer nằm ngoài cùng để hiện ở mọi trang */}
         <ToastContainer />
-        {/* Router Provider quản lý việc chuyển trang */}
-        <AppBootstrap />
+        {/* ConfirmProvider cung cấp hộp thoại xác nhận tuỳ chỉnh */}
+        <ConfirmProvider>
+          {/* Router Provider quản lý việc chuyển trang */}
+          <AppBootstrap />
+        </ConfirmProvider>
       </ColorThemeProvider>
     </ThemeProvider>
   </StrictMode>,

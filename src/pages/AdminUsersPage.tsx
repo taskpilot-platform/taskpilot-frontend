@@ -30,6 +30,7 @@ import {
 } from "@/components/ui/table";
 import { getApiErrorMessage } from "@/lib/http";
 import { adminUserService } from "@/services/admin.service";
+import { profileService } from "@/services/profile.service";
 import type { AdminUserResponse } from "@/types/admin";
 
 export default function AdminUsersPage() {
@@ -47,6 +48,7 @@ export default function AdminUsersPage() {
   // User selection and mode state
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
   const [mode, setMode] = useState<"list" | "create" | "detail">("list");
+  const [myProfile, setMyProfile] = useState<any | null>(null);
 
   // Edit form state
   const [editRole, setEditRole] = useState<string>("USER");
@@ -92,6 +94,15 @@ export default function AdminUsersPage() {
 
   useEffect(() => {
     void loadUsersList(0, pageSize);
+    const loadMyProfile = async () => {
+      try {
+        const res = await profileService.getMe();
+        setMyProfile(res.data);
+      } catch (err) {
+        console.error("Failed to load my profile", err);
+      }
+    };
+    void loadMyProfile();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -268,8 +279,10 @@ export default function AdminUsersPage() {
                         </TableCell>
                       </TableRow>
                     ) : (
-                      users.map((user) => (
-                        <TableRow
+                      users
+                        .filter((u) => u.id !== myProfile?.id)
+                        .map((user) => (
+                          <TableRow
                           key={user.id}
                           className={selectedUserId === user.id ? "bg-accent/40 cursor-pointer" : "cursor-pointer"}
                           onClick={() => {
@@ -428,7 +441,8 @@ export default function AdminUsersPage() {
                             id="editRole"
                             value={editRole}
                             onChange={(event) => setEditRole(event.target.value)}
-                            className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                            disabled={selectedUserId === myProfile?.id}
+                            className="w-full rounded-md border bg-background px-3 py-2 text-sm disabled:opacity-75"
                           >
                             <option value="USER">USER</option>
                             <option value="ADMIN">ADMIN</option>
@@ -441,7 +455,8 @@ export default function AdminUsersPage() {
                             id="editStatus"
                             value={editStatus}
                             onChange={(event) => setEditStatus(event.target.value)}
-                            className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                            disabled={selectedUserId === myProfile?.id}
+                            className="w-full rounded-md border bg-background px-3 py-2 text-sm disabled:opacity-75"
                           >
                             <option value="AVAILABLE">AVAILABLE</option>
                             <option value="BUSY">BUSY</option>
@@ -457,11 +472,12 @@ export default function AdminUsersPage() {
                             min={0}
                             value={editWorkload}
                             onChange={(event) => setEditWorkload(Number(event.target.value))}
+                            disabled={selectedUserId === myProfile?.id}
                             required
                           />
                         </div>
 
-                        <Button type="submit" className="w-full gap-2" variant="outline" disabled={isMutating}>
+                        <Button type="submit" className="w-full gap-2" variant="outline" disabled={isMutating || selectedUserId === myProfile?.id}>
                           <ShieldAlert className="h-4 w-4" />
                           {t("admin.update_btn")}
                         </Button>
@@ -482,7 +498,7 @@ export default function AdminUsersPage() {
                           type="button"
                           className="w-full gap-2"
                           variant="destructive"
-                          disabled={isMutating || selectedUser.status === "DEACTIVATED"}
+                          disabled={isMutating || selectedUser.status === "DEACTIVATED" || selectedUserId === myProfile?.id}
                           onClick={() => void handleDeactivateUser()}
                         >
                           <Trash2 className="h-4 w-4" />

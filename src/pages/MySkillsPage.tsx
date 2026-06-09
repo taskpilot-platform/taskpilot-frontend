@@ -17,6 +17,7 @@ import { useTranslation } from "react-i18next";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -38,6 +39,7 @@ type SkillsTab = "overview" | "manage";
 
 export default function MySkillsPage() {
   const { t } = useTranslation();
+  const confirm = useConfirm();
   const [activeTab, setActiveTab] = useState<SkillsTab>("overview");
   const [mode, setMode] = useState<MySkillsMode>("list");
   const [selectedSkillId, setSelectedSkillId] = useState<number | null>(null);
@@ -214,7 +216,11 @@ export default function MySkillsPage() {
   };
 
   const handleDeleteSkill = async (skillId: number) => {
-    const shouldDelete = window.confirm(t("skills.delete_confirm", { defaultValue: "Are you sure you want to delete this skill?" }));
+    const shouldDelete = await confirm({
+      title: t("skills.delete_title", { defaultValue: "Xóa kỹ năng" }),
+      message: t("skills.delete_confirm", { defaultValue: "Are you sure you want to delete this skill?" }),
+      variant: "destructive",
+    });
     if (!shouldDelete) {
       return;
     }

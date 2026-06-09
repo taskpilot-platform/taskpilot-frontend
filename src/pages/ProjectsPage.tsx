@@ -4,7 +4,6 @@ import { useNavigate } from "react-router-dom";
 import {
   CalendarDays,
   Loader2,
-  LogOut,
   PlusCircle,
   RefreshCw,
   Search,
@@ -248,27 +247,6 @@ export default function ProjectsPage() {
     }
   };
 
-  const handleLeaveProject = async (projectId: number) => {
-    const confirmed = window.confirm(t("projects.leave_confirm"));
-    if (!confirmed) {
-      return;
-    }
-
-    setIsMutating(true);
-    try {
-      await projectService.leaveProject(projectId);
-      toast.success(t("projects.leave_success"));
-      if (selectedProjectId === projectId) {
-        setMode("list");
-      }
-      await loadMyProjects(currentPage, pageSize);
-    } catch (error) {
-      toast.error(getApiErrorMessage(error));
-    } finally {
-      setIsMutating(false);
-    }
-  };
-
   return (
     <div className="min-h-screen space-y-6 p-6 md:p-8 flex flex-col h-screen overflow-hidden">
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between shrink-0">
@@ -337,13 +315,12 @@ export default function ProjectsPage() {
                       <TableHead>{t("projects.col_role")}</TableHead>
                       <TableHead>{t("projects.col_status")}</TableHead>
                       <TableHead>{t("projects.col_joined")}</TableHead>
-                      <TableHead className="w-[100px] text-right">{t("projects.col_actions")}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {projects.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
+                        <TableCell colSpan={4} className="py-8 text-center text-muted-foreground">
                           {t("projects.empty")}
                         </TableCell>
                       </TableRow>
@@ -367,22 +344,6 @@ export default function ProjectsPage() {
                             <Badge variant="outline">{project.status}</Badge>
                           </TableCell>
                           <TableCell>{new Date(project.joinedAt).toLocaleDateString("vi-VN")}</TableCell>
-                          <TableCell className="text-right">
-                            <Button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                void handleLeaveProject(project.id);
-                              }}
-                              variant="outline"
-                              size="sm"
-                              className="gap-1 h-7 text-xs"
-                              disabled={isMutating}
-                            >
-                              <LogOut className="h-3 w-3" />
-                              Rời
-                            </Button>
-                          </TableCell>
                         </TableRow>
                       ))
                     )}

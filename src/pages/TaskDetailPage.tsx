@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "react-toastify";
+import { useTranslation } from "react-i18next";
 import { getApiErrorMessage } from "@/lib/http";
 import { taskService } from "@/services/task.service";
 import { projectService } from "@/services/project.service";
@@ -16,8 +17,11 @@ import { TaskMetadataSidebar } from "@/components/tasks/TaskMetadataSidebar";
 import { ActivityTimeline } from "@/components/tasks/ActivityTimeline";
 import { Loader2, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 
 export default function TaskDetailPage() {
+  const { t } = useTranslation();
+  const confirm = useConfirm();
   const { projectId, taskId } = useParams();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -120,7 +124,12 @@ export default function TaskDetailPage() {
 
   const onDeleteTask = async () => {
     if (!taskDetail) return;
-    if (!window.confirm("Are you sure you want to delete this task? This will also delete all subtasks.")) return;
+    const isConfirm = await confirm({
+      title: t("tasks.delete_title", { defaultValue: "Xóa công việc" }),
+      message: t("tasks.delete_confirm", { defaultValue: "Are you sure you want to delete this task? This will also delete all subtasks." }),
+      variant: "destructive",
+    });
+    if (!isConfirm) return;
     
     try {
       await taskService.deleteTask(taskDetail.task.id);

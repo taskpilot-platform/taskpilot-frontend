@@ -16,6 +16,7 @@ import { toast } from "react-toastify";
 import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -29,6 +30,7 @@ type ProfileTab = "profile" | "security";
 
 export default function ProfilePage() {
   const { t } = useTranslation();
+  const confirm = useConfirm();
   const [activeTab, setActiveTab] = useState<ProfileTab>("profile");
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -158,10 +160,11 @@ export default function ProfilePage() {
   };
 
   const handleDeleteAccount = async () => {
-    const shouldDelete = window.confirm(
-      t("profile.delete_confirm"),
-    );
-
+    const shouldDelete = await confirm({
+      title: t("profile.delete_title", { defaultValue: "Xóa tài khoản" }),
+      message: t("profile.delete_confirm", { defaultValue: "Are you sure you want to permanently delete your account? This action cannot be undone." }),
+      variant: "destructive",
+    });
     if (!shouldDelete) {
       return;
     }

@@ -16,6 +16,7 @@ import { toast } from "react-toastify";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -33,6 +34,7 @@ import type { AdminSkillResponse } from "@/types/admin";
 
 export default function AdminGlobalSkillsPage() {
   const { t } = useTranslation();
+  const confirm = useConfirm();
 
   const [skills, setSkills] = useState<AdminSkillResponse[]>([]);
   const [totalElements, setTotalElements] = useState(0);
@@ -156,7 +158,11 @@ export default function AdminGlobalSkillsPage() {
   };
 
   const handleDeactivate = async (id: number) => {
-    const isConfirm = window.confirm(t("admin.skills.delete_confirm", { defaultValue: "Are you sure you want to delete this skill?" }));
+    const isConfirm = await confirm({
+      title: t("admin.skills.delete_title", { defaultValue: "Xóa kỹ năng hệ thống" }),
+      message: t("admin.skills.delete_confirm", { defaultValue: "Are you sure you want to delete this skill?" }),
+      variant: "destructive",
+    });
     if (!isConfirm) return;
 
     setIsMutating(true);

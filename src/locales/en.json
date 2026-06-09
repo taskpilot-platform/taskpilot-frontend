@@ -205,8 +205,11 @@
 		"join_success": "Joined project successfully",
 		"update_error_empty": "Please select a project to update",
 		"update_success": "Project updated successfully",
+		"leave_title": "Leave Project",
 		"leave_confirm": "Are you sure you want to leave this project?",
 		"leave_success": "Left project successfully",
+		"leave_desc": "Leave this project. You will lose access to all its boards, tasks, and history.",
+		"leave_error_last_manager": "You cannot leave the project because you are the only remaining Manager. Please appoint someone else as Manager before leaving.",
 
 		"detail_title": "Project Details & Updates",
 		"detail_desc_selected": "Selected: {{name}} ({{role}})",

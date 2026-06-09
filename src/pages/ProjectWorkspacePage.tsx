@@ -25,7 +25,8 @@ import {
   MoreHorizontal,
   Play,
   SquareCheckBig,
-  Trash2
+  Trash2,
+  LogOut
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { toast } from "react-toastify";
@@ -43,6 +44,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -185,6 +187,7 @@ DateInput.displayName = "DateInput";
 
 export default function ProjectWorkspacePage() {
   const { t } = useTranslation();
+  const confirm = useConfirm();
   const { projectId, tabId, taskId } = useParams();
   const navigate = useNavigate();
   const activeTab: ViewMode = isViewMode(tabId) ? tabId : "board";
@@ -210,12 +213,15 @@ export default function ProjectWorkspacePage() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [createTaskSprintId, setCreateTaskSprintId] = useState<number | null>(null);
   const [isSprintDialogOpen, setIsSprintDialogOpen] = useState(false);
+  const [isEditSprintDialogOpen, setIsEditSprintDialogOpen] = useState(false);
+  const [selectedSprintToEdit, setSelectedSprintToEdit] = useState<SprintDto | null>(null);
   const [isTaskDetailOpen, setIsTaskDetailOpen] = useState(false);
   const [selectedTaskDetail, setSelectedTaskDetail] = useState<TaskDetailDto | null>(null);
 
   // Member Detail state
   const [selectedMemberForDetail, setSelectedMemberForDetail] = useState<ProjectMember | null>(null);
   const [memberTasks, setMemberTasks] = useState<TaskDto[]>([]);
+  const [isLeaving, setIsLeaving] = useState(false);
   const [isLoadingMemberTasks, setIsLoadingMemberTasks] = useState(false);
 
   // Backlog state
@@ -235,6 +241,10 @@ export default function ProjectWorkspacePage() {
   });
 
   const sprintForm = useForm({
+    defaultValues: { name: "", goal: "", startDate: "", endDate: "" },
+  });
+
+  const editSprintForm = useForm({
     defaultValues: { name: "", goal: "", startDate: "", endDate: "" },
   });
 
@@ -331,9 +341,8 @@ export default function ProjectWorkspacePage() {
     setMyProjects(myProjectsRes.data.content);
   };
 
-  const loadTabData = async (pid: number, tab: ViewMode, force = false) => {
+  const loadTabData = async (pid: number, tab: ViewMode, _force = false) => {
     if (tab === "board" || tab === "overview") {
-      if (!force && boardData) return;
       const boardRes = await sprintService.getBoard(pid);
       setBoardData(boardRes.data);
       mergeTasks(boardRes.data.tasks);
@@ -341,7 +350,6 @@ export default function ProjectWorkspacePage() {
     }
 
     if (tab === "backlog") {
-      if (!force && backlogData) return;
       const backlogRes = await sprintService.getBacklog(pid);
       setBacklogData(backlogRes.data);
       mergeTasks([
@@ -352,7 +360,6 @@ export default function ProjectWorkspacePage() {
     }
 
     if (tab === "timeline") {
-      if (!force && timelineData) return;
       const timelineRes = await sprintService.getTimeline(pid);
       setTimelineData(timelineRes.data);
     }
@@ -475,12 +482,46 @@ export default function ProjectWorkspacePage() {
     }
   };
 
+  const openEditSprint = (sprint: SprintDto) => {
+    setSelectedSprintToEdit(sprint);
+    editSprintForm.reset({
+      name: sprint.name || "",
+      goal: sprint.goal || "",
+      startDate: sprint.startDate || "",
+      endDate: sprint.endDate || "",
+    });
+    setIsEditSprintDialogOpen(true);
+  };
+
+  const onSubmitEditSprint = async (values: { name: string; goal: string; startDate: string; endDate: string }) => {
+    if (!selectedSprintToEdit) return;
+    try {
+      await sprintService.updateSprint(currentProjectId, selectedSprintToEdit.id, {
+        name: values.name,
+        goal: values.goal || undefined,
+        startDate: values.startDate || undefined,
+        endDate: values.endDate || undefined,
+      });
+      toast.success("Sprint updated successfully");
+      setIsEditSprintDialogOpen(false);
+      setSelectedSprintToEdit(null);
+      void loadData(currentProjectId);
+    } catch (error) {
+      toast.error(getApiErrorMessage(error));
+    }
+  };
+
   const handleSprintAction = async (action: "start" | "complete" | "delete", sprint: SprintDto) => {
     try {
       if (action === "start") await sprintService.startSprint(currentProjectId, sprint.id);
       if (action === "complete") await sprintService.completeSprint(currentProjectId, sprint.id);
       if (action === "delete") {
-        if (!window.confirm("Delete this planning sprint? Tasks will return to Backlog / Unscheduled.")) return;
+        const isConfirm = await confirm({
+          title: t("sprints.delete_title", { defaultValue: "Xóa Sprint" }),
+          message: t("sprints.delete_confirm", { defaultValue: "Delete this planning sprint? Tasks will return to Backlog / Unscheduled." }),
+          variant: "destructive",
+        });
+        if (!isConfirm) return;
         await sprintService.deleteSprint(currentProjectId, sprint.id);
       }
       toast.success("Sprint updated");
@@ -531,7 +572,12 @@ export default function ProjectWorkspacePage() {
 
   const handleDeleteTask = async () => {
     if (!selectedTaskDetail) return;
-    if (!window.confirm("Are you sure you want to delete this task? This will also delete all subtasks.")) return;
+    const isConfirm = await confirm({
+      title: t("tasks.delete_title", { defaultValue: "Xóa công việc" }),
+      message: t("tasks.delete_confirm", { defaultValue: "Are you sure you want to delete this task? This will also delete all subtasks." }),
+      variant: "destructive",
+    });
+    if (!isConfirm) return;
 
     try {
       await taskService.deleteTask(selectedTaskDetail.task.id);
@@ -540,6 +586,36 @@ export default function ProjectWorkspacePage() {
       void loadData(currentProjectId);
     } catch (error) {
       toast.error(getApiErrorMessage(error));
+    }
+  };
+
+  const handleLeaveProjectInWorkspace = async () => {
+    const activeManagers = projectMembers.filter(m => m.role === "MANAGER");
+    const isCurrentUserManager = myMemberInfo?.role === "MANAGER";
+
+    if (isCurrentUserManager && activeManagers.length <= 1) {
+      toast.error(t("projects.leave_error_last_manager", {
+        defaultValue: "Bạn không thể rời dự án vì bạn là Manager duy nhất còn lại. Vui lòng bổ nhiệm người khác làm Manager trước khi rời."
+      }));
+      return;
+    }
+
+    const confirmed = await confirm({
+      title: t("projects.leave_title", { defaultValue: "Rời dự án" }),
+      message: t("projects.leave_confirm", { defaultValue: "Are you sure you want to leave this project?" }),
+      variant: "warning",
+    });
+    if (!confirmed) return;
+
+    setIsLeaving(true);
+    try {
+      await projectService.leaveProject(currentProjectId);
+      toast.success(t("projects.leave_success", { defaultValue: "Left project successfully" }));
+      navigate("/projects");
+    } catch (error) {
+      toast.error(getApiErrorMessage(error));
+    } finally {
+      setIsLeaving(false);
     }
   };
 
@@ -1038,6 +1114,39 @@ export default function ProjectWorkspacePage() {
             </DialogContent>
           </Dialog>
 
+          <Dialog open={isEditSprintDialogOpen} onOpenChange={setIsEditSprintDialogOpen}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Edit Sprint</DialogTitle>
+                <DialogDescription>Modify sprint details.</DialogDescription>
+              </DialogHeader>
+              <form onSubmit={editSprintForm.handleSubmit(onSubmitEditSprint)} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="edit-sprint-name">Sprint name</Label>
+                  <Input id="edit-sprint-name" {...editSprintForm.register("name", { required: true })} placeholder="Sprint 1" />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-sprint-goal">Goal</Label>
+                  <Textarea id="edit-sprint-goal" {...editSprintForm.register("goal")} placeholder="Build the next focused increment" />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-sprint-start">Start date</Label>
+                    <DateInput id="edit-sprint-start" {...editSprintForm.register("startDate")} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-sprint-end">End date</Label>
+                    <DateInput id="edit-sprint-end" {...editSprintForm.register("endDate")} />
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button type="button" variant="outline" onClick={() => setIsEditSprintDialogOpen(false)}>Cancel</Button>
+                  <Button type="submit">Save Changes</Button>
+                </DialogFooter>
+              </form>
+            </DialogContent>
+          </Dialog>
+
           <Button type="button" variant="outline" className="gap-2 shadow-sm" onClick={() => void loadData(currentProjectId)}>
             <RefreshCw className={`h-4 w-4 ${isLoadingTasks ? 'animate-spin' : ''}`} />
           </Button>
@@ -1341,6 +1450,17 @@ export default function ProjectWorkspacePage() {
                           <Button className="w-full justify-start bg-background hover:bg-muted text-foreground border shadow-sm" variant="outline" onClick={() => navigate(`/projects/${currentProjectId}/board`)}>
                             <FolderKanban className="mr-2 h-4 w-4 text-primary" /> Open Board
                           </Button>
+                          {!isManager && (
+                            <Button 
+                              className="w-full justify-start text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/20 bg-background border shadow-sm" 
+                              variant="outline" 
+                              disabled={isLeaving}
+                              onClick={handleLeaveProjectInWorkspace}
+                            >
+                              <LogOut className="mr-2 h-4 w-4 text-red-500" />
+                              {t("projects.leave_title", { defaultValue: "Rời dự án" })}
+                            </Button>
+                          )}
                         </div>
                       </CardContent>
                     </Card>
@@ -1540,6 +1660,9 @@ export default function ProjectWorkspacePage() {
                                       </Button>
                                     </DropdownMenuTrigger>
                                     <DropdownMenuContent align="end">
+                                      <DropdownMenuItem onClick={() => openEditSprint(section.sprint)}>
+                                        <Edit2 className="mr-2 h-4 w-4" /> Edit Sprint
+                                      </DropdownMenuItem>
                                       {section.sprint.status === "PLANNING" && (
                                         <>
                                           <DropdownMenuItem onClick={() => handleSprintAction("start", section.sprint)}>

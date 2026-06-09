@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { toast } from "react-toastify";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -15,10 +16,12 @@ import {
   Trash2,
   Archive,
   RefreshCw,
-  Plus
+  Plus,
+  LogOut
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -44,6 +47,8 @@ const projectFormSchema = z.object({
 });
 
 export default function ProjectSettingsPage() {
+  const { t } = useTranslation();
+  const confirm = useConfirm();
   const { projectId } = useParams();
   const navigate = useNavigate();
   const currentProjectId = Number(projectId);
@@ -58,6 +63,7 @@ export default function ProjectSettingsPage() {
   const [newLabelName, setNewLabelName] = useState("");
   const [newLabelColor, setNewLabelColor] = useState("#6366F1");
   const [isCreatingLabel, setIsCreatingLabel] = useState(false);
+  const [isLeaving, setIsLeaving] = useState(false);
 
   const form = useForm<z.infer<typeof projectFormSchema>>({
     resolver: zodResolver(projectFormSchema),
@@ -125,6 +131,36 @@ export default function ProjectSettingsPage() {
     }
   };
 
+  const handleLeaveProject = async () => {
+    const activeManagers = projectMembers.filter(m => m.role === "MANAGER");
+    const isCurrentUserManager = projectMembers.find(m => m.userId === myUserId)?.role === "MANAGER";
+
+    if (isCurrentUserManager && activeManagers.length <= 1) {
+      toast.error(t("projects.leave_error_last_manager", {
+        defaultValue: "Bạn không thể rời dự án vì bạn là Manager duy nhất còn lại. Vui lòng bổ nhiệm người khác làm Manager trước khi rời."
+      }));
+      return;
+    }
+
+    const confirmed = await confirm({
+      title: t("projects.leave_title", { defaultValue: "Rời dự án" }),
+      message: t("projects.leave_confirm", { defaultValue: "Are you sure you want to leave this project?" }),
+      variant: "warning",
+    });
+    if (!confirmed) return;
+
+    setIsLeaving(true);
+    try {
+      await projectService.leaveProject(currentProjectId);
+      toast.success(t("projects.leave_success", { defaultValue: "Left project successfully" }));
+      navigate("/projects");
+    } catch (error) {
+      toast.error(getApiErrorMessage(error));
+    } finally {
+      setIsLeaving(false);
+    }
+  };
+
   const handleUpdateRole = async (userId: number, role: string) => {
     try {
       await projectService.updateMemberRole(currentProjectId, userId, role);
@@ -138,7 +174,12 @@ export default function ProjectSettingsPage() {
   const handleRemoveMember = async (userId: number) => {
     const member = projectMembers.find(m => m.userId === userId);
     const memberName = member?.fullName || `User ${userId}`;
-    if (!window.confirm(`Are you sure you want to remove ${memberName} from this project?`)) return;
+    const isConfirm = await confirm({
+      title: t("project.settings.remove_member_title", { defaultValue: "Xóa thành viên" }),
+      message: t("project.settings.remove_member_confirm", { defaultValue: `Are you sure you want to remove ${memberName} from this project?` }),
+      variant: "destructive",
+    });
+    if (!isConfirm) return;
     try {
       await projectService.removeMember(currentProjectId, userId);
       toast.success("Member removed");
@@ -168,7 +209,12 @@ export default function ProjectSettingsPage() {
   };
 
   const handleDeleteLabel = async (labelId: number) => {
-    if (!window.confirm("Delete this label?")) return;
+    const isConfirm = await confirm({
+      title: t("project.settings.delete_label_title", { defaultValue: "Xóa nhãn" }),
+      message: t("project.settings.delete_label_confirm", { defaultValue: "Delete this label?" }),
+      variant: "destructive",
+    });
+    if (!isConfirm) return;
     try {
       await labelService.deleteLabel(currentProjectId, labelId);
       toast.success("Label deleted");
@@ -179,7 +225,12 @@ export default function ProjectSettingsPage() {
   };
 
   const handleArchiveProject = async () => {
-    if (!window.confirm("Archive this project? It will become read-only.")) return;
+    const isConfirm = await confirm({
+      title: t("project.settings.archive_project_title", { defaultValue: "Lưu trữ dự án" }),
+      message: t("project.settings.archive_project_confirm", { defaultValue: "Archive this project? It will become read-only." }),
+      variant: "warning",
+    });
+    if (!isConfirm) return;
     try {
       await projectService.archiveProject(currentProjectId);
       toast.success("Project archived");
@@ -459,6 +510,17 @@ export default function ProjectSettingsPage() {
             <CardDescription>Destructive actions that cannot be easily undone.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            <div className="flex items-center justify-between p-4 border border-red-500/20 rounded-lg bg-red-500/5">
+              <div>
+                <h4 className="font-semibold text-sm text-red-600 dark:text-red-400">{t("projects.leave_title", { defaultValue: "Rời dự án" })}</h4>
+                <p className="text-sm text-muted-foreground">{t("projects.leave_desc", { defaultValue: "Leave this project. You will lose access to all its boards, tasks, and history." })}</p>
+              </div>
+              <Button variant="destructive" onClick={handleLeaveProject} disabled={isLeaving}>
+                {isLeaving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <LogOut className="w-4 h-4 mr-2" />}
+                {t("projects.leave_title", { defaultValue: "Rời dự án" })}
+              </Button>
+            </div>
+
             <div className="flex items-center justify-between p-4 border border-red-500/20 rounded-lg bg-red-500/5">
               <div>
                 <h4 className="font-semibold text-sm">Archive Project</h4>
