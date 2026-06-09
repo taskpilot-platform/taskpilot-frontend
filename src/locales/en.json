@@ -3,10 +3,12 @@
 		"dashboard": "Dashboard",
 		"projects": "Projects",
 		"notifications": "Notifications",
-		"tasks": "Task & Sprint",
-		"tasks_upcoming": "Tasks (Upcoming)",
-		"profile": "My Profile",
+		"tasks": "Tasks & Sprints",
+		"tasks_upcoming": "Upcoming Tasks",
+		"profile": "Profile",
 		"my_skills": "My Skills",
+		"comments": "Comments",
+		"copilot": "Copilot",
 		"logout": "Logout",
 		"logging_out": "Logging out...",
 		"logout_success": "Logged out successfully"
@@ -347,14 +349,15 @@
 		"delete_confirm": "Are you sure you want to delete this skill?"
 	},
 	"dashboard": {
-		"title": "Dashboard",
+		"title": "TaskPilot Dashboard",
 		"desc": "Overview of current tasks and projects status.",
+		"welcome_back": "Welcome back,",
 		"stats_projects": "Active Projects",
 		"stats_tasks": "My Tasks",
 		"stats_completed": "Completed Tasks",
 		"recent_projects": "Recent Projects",
 		"upcoming_tasks": "Upcoming Tasks",
-		"view_all": "View all",
+		"view_all": "View All",
 
 		"check_conn_btn": "Check Connection",
 
@@ -362,22 +365,27 @@
 		"loading": "Loading...",
 		"fullname": "Full Name",
 		"account_status": "Account Status",
-		"account_status_desc": "Data from endpoint /api/v1/users/me",
+		"account_status_desc": "Your current standing and role",
 		"workload": "Workload",
-		"workload_desc": "From profile.currentWorkload",
+		"workload_desc": "Tasks currently assigned to you",
 		"no_data": "No data",
-		"tasks_active": "{{count}} tasks in progress",
+		"tasks_active": "{{count}} active tasks",
 
 		"my_skills": "My Skills",
-		"my_skills_desc": "Endpoint: /api/v1/users/me/skills",
-		"my_skills_empty": "No skills added yet."
+		"my_skills_desc": "Your verified technical capabilities",
+		"my_skills_empty": "No skills added yet.",
+		"my_projects": "My Projects",
+		"my_projects_desc": "Projects you are actively contributing to",
+		"manage": "Manage"
 	},
 	"theme": {
 		"light": "Light",
 		"dark": "Dark",
 		"glass": "Glass",
 		"system": "System",
-		"primary_color": "Primary Color"
+		"primary_color": "Primary Color",
+		"display_mode": "Display Mode",
+		"select_glass_wallpaper": "Select Glass Wallpaper"
 	},
 	"copilot": {
 		"title": "Copilot",
@@ -417,5 +425,25 @@
 		"phase_finalized": "Finalized",
 		"phase_failed": "Failed",
 		"phase_processing": "Processing"
+	},
+	"comments": {
+		"title": "Comments",
+		"desc": "Search and review task comments across projects you can access.",
+		"total": "total",
+		"search_placeholder": "Search comments, tasks, projects, authors...",
+		"all_projects": "All projects",
+		"task_id": "Task ID",
+		"author_id": "Author ID",
+		"reset": "Reset",
+		"mentioned_me": "Mentioned me",
+		"info_text": "Results open the original task and focus the selected comment.",
+		"loading": "Loading comments...",
+		"empty_title": "No comments found",
+		"empty_desc": "Adjust the filters or search text to find comments across your projects.",
+		"load_more": "Load more",
+		"showing": "Showing {{count}} of {{total}} comments",
+		"reply": "Reply",
+		"deleted": "Deleted",
+		"deleted_content": "Deleted comment"
 	}
 }

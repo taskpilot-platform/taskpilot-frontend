@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import {
   AtSign,
   Filter,
@@ -67,6 +68,7 @@ interface CommentResultItemProps {
 }
 
 function CommentResultItem({ item, onOpen }: CommentResultItemProps) {
+  const { t } = useTranslation();
   return (
     <button
       type="button"
@@ -88,10 +90,10 @@ function CommentResultItem({ item, onOpen }: CommentResultItemProps) {
                 {item.parentCommentId && (
                   <Badge variant="secondary" className="gap-1">
                     <Reply className="h-3 w-3" />
-                    Reply
+                    {t("comments.reply", { defaultValue: "Reply" })}
                   </Badge>
                 )}
-                {item.deleted && <Badge variant="outline">Deleted</Badge>}
+                {item.deleted && <Badge variant="outline">{t("comments.deleted", { defaultValue: "Deleted" })}</Badge>}
               </div>
               <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
                 <span className="inline-flex items-center gap-1">
@@ -111,7 +113,7 @@ function CommentResultItem({ item, onOpen }: CommentResultItemProps) {
             item.deleted ? "italic text-muted-foreground" : "text-foreground/90"
           }`}
           >
-            {item.deleted ? "Deleted comment" : item.content}
+            {item.deleted ? t("comments.deleted_content", { defaultValue: "Deleted comment" }) : item.content}
           </p>
 
           {!item.deleted && item.mentions.length > 0 && (
@@ -131,6 +133,7 @@ function CommentResultItem({ item, onOpen }: CommentResultItemProps) {
 
 export default function CommentsPage() {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [projects, setProjects] = useState<MyProject[]>([]);
   const [comments, setComments] = useState<CommentSearchResult[]>([]);
   const [keyword, setKeyword] = useState("");
@@ -220,14 +223,14 @@ export default function CommentsPage() {
         <div className="space-y-1">
           <h1 className="flex items-center gap-2 text-3xl font-bold tracking-tight">
             <MessageSquare className="h-7 w-7 text-primary" />
-            Comments
+            {t("comments.title", { defaultValue: "Comments" })}
           </h1>
           <p className="text-muted-foreground">
-            Search and review task comments across projects you can access.
+            {t("comments.desc", { defaultValue: "Search and review task comments across projects you can access." })}
           </p>
         </div>
         <Badge variant="secondary" className="w-fit">
-          {totalElements} total
+          {totalElements} {t("comments.total", { defaultValue: "total" })}
         </Badge>
       </div>
 
@@ -238,7 +241,7 @@ export default function CommentsPage() {
             <Input
               value={keyword}
               onChange={(event) => setKeyword(event.target.value)}
-              placeholder="Search comments, tasks, projects, authors..."
+              placeholder={t("comments.search_placeholder", { defaultValue: "Search comments, tasks, projects, authors..." })}
               className="pl-9"
             />
           </div>
@@ -248,7 +251,7 @@ export default function CommentsPage() {
               <SelectValue placeholder="Project" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All projects</SelectItem>
+              <SelectItem value="all">{t("comments.all_projects", { defaultValue: "All projects" })}</SelectItem>
               {projects.map((project) => (
                 <SelectItem key={project.id} value={project.id.toString()}>
                   {project.name}
@@ -261,19 +264,19 @@ export default function CommentsPage() {
             value={taskIdInput}
             onChange={(event) => setTaskIdInput(event.target.value)}
             inputMode="numeric"
-            placeholder="Task ID"
+            placeholder={t("comments.task_id", { defaultValue: "Task ID" })}
           />
 
           <Input
             value={authorIdInput}
             onChange={(event) => setAuthorIdInput(event.target.value)}
             inputMode="numeric"
-            placeholder="Author ID"
+            placeholder={t("comments.author_id", { defaultValue: "Author ID" })}
           />
 
           <Button variant="outline" className="gap-2" onClick={resetFilters}>
             <X className="h-4 w-4" />
-            Reset
+            {t("comments.reset", { defaultValue: "Reset" })}
           </Button>
         </div>
 
@@ -286,12 +289,12 @@ export default function CommentsPage() {
             />
             <Label htmlFor="mentioned-me" className="flex cursor-pointer items-center gap-1.5 text-sm">
               <AtSign className="h-3.5 w-3.5" />
-              Mentioned me
+              {t("comments.mentioned_me", { defaultValue: "Mentioned me" })}
             </Label>
           </div>
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <Filter className="h-3.5 w-3.5" />
-            Results open the original task and focus the selected comment.
+            {t("comments.info_text", { defaultValue: "Results open the original task and focus the selected comment." })}
           </div>
         </div>
       </div>
@@ -299,14 +302,14 @@ export default function CommentsPage() {
       {isLoading ? (
         <div className="flex items-center justify-center gap-2 rounded-lg border bg-card p-10 text-sm text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" />
-          Loading comments...
+          {t("comments.loading", { defaultValue: "Loading comments..." })}
         </div>
       ) : comments.length === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-lg border border-dashed bg-card p-10 text-center">
           <MessageSquare className="mb-3 h-9 w-9 text-muted-foreground/40" />
-          <p className="font-medium">No comments found</p>
+          <p className="font-medium">{t("comments.empty_title", { defaultValue: "No comments found" })}</p>
           <p className="mt-1 max-w-md text-sm text-muted-foreground">
-            Adjust the filters or search text to find comments across your projects.
+            {t("comments.empty_desc", { defaultValue: "Adjust the filters or search text to find comments across your projects." })}
           </p>
         </div>
       ) : (
@@ -326,7 +329,7 @@ export default function CommentsPage() {
             disabled={isLoadingMore}
           >
             {isLoadingMore ? <Loader2 className="h-4 w-4 animate-spin" /> : <MessageSquare className="h-4 w-4" />}
-            Load more
+            {t("comments.load_more", { defaultValue: "Load more" })}
           </Button>
         </div>
       )}
@@ -334,7 +337,7 @@ export default function CommentsPage() {
       {!isLoading && comments.length > 0 && (
         <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
           <UserRound className="h-3.5 w-3.5" />
-          Showing {comments.length} of {totalElements} comments
+          {t("comments.showing", { count: comments.length, total: totalElements, defaultValue: "Showing {{count}} of {{total}} comments" })}
         </div>
       )}
     </div>

@@ -1299,9 +1299,9 @@ export default function ProjectWorkspacePage() {
                               {project?.startDate && (
                                 <div className="flex items-center gap-1.5 text-foreground bg-muted/30 px-2.5 py-1 rounded-md border border-border/40">
                                   <span className="text-muted-foreground">Timeline:</span>
-                                  <span className="font-medium">{new Date(project.startDate).toLocaleDateString()}</span>
+                                  <span className="font-medium">{new Date(project.startDate).toLocaleDateString("en-GB")}</span>
                                   <span className="text-muted-foreground mx-0.5">→</span>
-                                  <span className="font-medium">{project?.endDate ? new Date(project.endDate).toLocaleDateString() : 'Ongoing'}</span>
+                                  <span className="font-medium">{project?.endDate ? new Date(project.endDate).toLocaleDateString("en-GB") : 'Ongoing'}</span>
                                 </div>
                               )}
                             </div>
@@ -1322,17 +1322,47 @@ export default function ProjectWorkspacePage() {
                       </CardContent>
                     </Card>
 
-                    {/* Current Sprint Placeholder */}
+                    {/* Current Sprint */}
                     <Card className="shadow-sm border-muted/60">
                       <CardHeader className="pb-3 border-b border-border/40 bg-muted/10">
                         <CardTitle className="text-sm font-semibold flex items-center gap-2"><Clock className="h-4 w-4 text-primary" /> Current Sprint</CardTitle>
                       </CardHeader>
                       <CardContent className="p-6">
-                        <div className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-muted-foreground/20 rounded-xl bg-background/50">
-                          <CircleDashed className="h-10 w-10 text-muted-foreground mb-3 opacity-40 animate-spin-slow" />
-                          <p className="text-base font-medium">No Active Sprint</p>
-                          <p className="text-sm text-muted-foreground mt-1 max-w-xs text-center">Sprints feature is coming in the next update. Plan in Backlog for now.</p>
-                        </div>
+                        {boardData?.activeSprint ? (
+                          <div className="space-y-4">
+                            <div className="flex items-start justify-between">
+                              <div>
+                                <h4 className="text-lg font-bold text-foreground">{boardData.activeSprint.name}</h4>
+                                <div className="flex items-center gap-2 mt-1">
+                                  <Badge variant="default" className="bg-primary/20 text-primary hover:bg-primary/30 border-none">{boardData.activeSprint.status}</Badge>
+                                  <span className="text-xs text-muted-foreground">
+                                    {boardData.activeSprint.startDate ? new Date(boardData.activeSprint.startDate).toLocaleDateString("en-GB") : ""} - {boardData.activeSprint.endDate ? new Date(boardData.activeSprint.endDate).toLocaleDateString("en-GB") : ""}
+                                  </span>
+                                </div>
+                              </div>
+                              <Button variant="outline" size="sm" className="gap-2" onClick={() => navigate(`/projects/${currentProjectId}/board`)}>
+                                <FolderKanban className="h-3.5 w-3.5" /> Open Board
+                              </Button>
+                            </div>
+                            {boardData.activeSprint.goal && (
+                              <div className="bg-primary/5 border border-primary/10 rounded-lg p-4">
+                                <p className="text-xs text-primary font-semibold uppercase tracking-wider mb-1">Sprint Goal</p>
+                                <p className="text-sm text-foreground/90">{boardData.activeSprint.goal}</p>
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-muted-foreground/20 rounded-xl bg-background/50">
+                            <CircleDashed className="h-10 w-10 text-muted-foreground mb-3 opacity-40 animate-spin-slow" />
+                            <p className="text-base font-medium">No Active Sprint</p>
+                            <p className="text-sm text-muted-foreground mt-1 max-w-xs text-center">Start a sprint from the backlog to track progress here.</p>
+                            {isManager && (
+                              <Button variant="outline" className="mt-4 gap-2" onClick={() => navigate(`/projects/${currentProjectId}/backlog`)}>
+                                <ListChecks className="h-4 w-4" /> Go to Backlog
+                              </Button>
+                            )}
+                          </div>
+                        )}
                       </CardContent>
                     </Card>
 
@@ -1348,7 +1378,7 @@ export default function ProjectWorkspacePage() {
                             <div className="bg-muted/20 p-3 rounded-lg border border-border/50 shadow-sm flex-1">
                               <div className="flex items-center justify-between mb-1">
                                 <div className="font-medium text-sm">Project Workspace Initialized</div>
-                                <time className="text-xs text-muted-foreground font-mono">{project ? new Date(project.createdAt).toLocaleDateString() : ""}</time>
+                                <time className="text-xs text-muted-foreground font-mono">{project ? new Date(project.createdAt).toLocaleDateString("en-GB") : ""}</time>
                               </div>
                               <div className="text-xs text-muted-foreground">The project environment is ready for collaboration.</div>
                             </div>

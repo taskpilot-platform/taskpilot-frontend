@@ -345,10 +345,10 @@ export default function MainLayout() {
               `flex items-center gap-2 rounded-md ${isCollapsed ? 'justify-center px-0' : 'px-3'} py-2 transition-colors ${isActive ? "bg-accent font-medium" : "hover:bg-accent"
               }`
             }
-            title="Comments"
+            title={t("layout.comments", { defaultValue: "Comments" })}
           >
             <MessageSquare className="h-4 w-4 shrink-0" />
-            {!isCollapsed && <span>Comments</span>}
+            {!isCollapsed && <span>{t("layout.comments", { defaultValue: "Comments" })}</span>}
           </NavLink>
           <NavLink
             to="/copilot"
@@ -356,10 +356,10 @@ export default function MainLayout() {
               `flex items-center gap-2 rounded-md ${isCollapsed ? 'justify-center px-0' : 'px-3'} py-2 transition-colors ${isActive ? "bg-accent font-medium text-indigo-600" : "hover:bg-accent text-indigo-600/80"
               }`
             }
-            title="Copilot AI Chat"
+            title={t("layout.copilot", { defaultValue: "Copilot AI Chat" })}
           >
             <Bot className="h-4 w-4 shrink-0" />
-            {!isCollapsed && <span>Copilot</span>}
+            {!isCollapsed && <span>{t("layout.copilot", { defaultValue: "Copilot" })}</span>}
           </NavLink>
         </nav>
 

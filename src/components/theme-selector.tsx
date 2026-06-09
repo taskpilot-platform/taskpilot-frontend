@@ -22,7 +22,7 @@ export function ThemeSelector() {
     <div className="space-y-6">
       {/* ========== Chế độ Sáng / Tối ========== */}
       <div>
-        <p className="text-sm font-medium mb-2 text-muted-foreground">Chế độ hiển thị</p>
+        <p className="text-sm font-medium mb-2 text-muted-foreground">{t("theme.display_mode", { defaultValue: "Chế độ hiển thị" })}</p>
         <div className="flex gap-2 flex-wrap">
           <Button
             variant={theme === "light" ? "default" : "outline"}
@@ -87,7 +87,7 @@ export function ThemeSelector() {
         <div className="animate-in fade-in slide-in-from-top-2">
           <p className="text-sm font-medium mb-2 text-muted-foreground flex items-center gap-1.5">
             <ImageIcon className="h-4 w-4" />
-            Chọn hình nền Glass
+            {t("theme.select_glass_wallpaper", { defaultValue: "Chọn hình nền Glass" })}
           </p>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             {GLASS_WALLPAPERS.map((wp, idx) => (

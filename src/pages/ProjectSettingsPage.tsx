@@ -423,7 +423,7 @@ export default function ProjectSettingsPage() {
                         </p>
                         {m.email && <p className="text-xs text-muted-foreground">{m.email}</p>}
                         <p className="text-xs text-muted-foreground mt-0.5">
-                          Joined {m.joinedAt ? new Date(m.joinedAt).toLocaleDateString() : 'Unknown'}
+                          Joined {m.joinedAt ? new Date(m.joinedAt).toLocaleDateString("en-GB") : 'Unknown'}
                         </p>
                       </div>
                     </div>

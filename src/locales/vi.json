@@ -7,6 +7,8 @@
 		"tasks_upcoming": "Công việc (sắp có)",
 		"profile": "Hồ sơ cá nhân",
 		"my_skills": "Kỹ năng của tôi",
+		"comments": "Bình luận",
+		"copilot": "Copilot",
 		"logout": "Đăng xuất",
 		"logging_out": "Đang đăng xuất...",
 		"logout_success": "Đăng xuất thành công"
@@ -354,7 +356,8 @@
 	},
 	"dashboard": {
 		"title": "TaskPilot Dashboard",
-		"desc": "Giao diện đã đồng bộ với API auth/profile/skills của backend.",
+		"desc": "Tổng quan về các công việc hiện tại và trạng thái dự án.",
+		"welcome_back": "Chào mừng trở lại,",
 		"stats_projects": "Dự án đang tham gia",
 		"stats_tasks": "Công việc của tôi",
 		"stats_completed": "Công việc đã hoàn thành",
@@ -368,22 +371,27 @@
 		"loading": "Đang tải...",
 		"fullname": "Họ tên",
 		"account_status": "Trạng thái tài khoản",
-		"account_status_desc": "Dữ liệu từ endpoint /api/v1/users/me",
+		"account_status_desc": "Vai trò và trạng thái hiện tại của bạn",
 		"workload": "Khối lượng công việc",
-		"workload_desc": "Từ profile.currentWorkload",
+		"workload_desc": "Các công việc đang được giao cho bạn",
 		"no_data": "Chưa có dữ liệu",
 		"tasks_active": "{{count}} nhiệm vụ đang xử lý",
 
 		"my_skills": "Kỹ năng của tôi",
-		"my_skills_desc": "Endpoint: /api/v1/users/me/skills",
-		"my_skills_empty": "Chưa có kỹ năng nào."
+		"my_skills_desc": "Các kỹ năng chuyên môn đã được xác thực",
+		"my_skills_empty": "Chưa có kỹ năng nào.",
+		"my_projects": "Dự án của tôi",
+		"my_projects_desc": "Các dự án bạn đang tích cực đóng góp",
+		"manage": "Quản lý"
 	},
 	"theme": {
 		"light": "Sáng",
 		"dark": "Tối",
 		"glass": "Kính mờ",
 		"system": "Hệ thống",
-		"primary_color": "Màu chủ đạo"
+		"primary_color": "Màu chủ đạo",
+		"display_mode": "Chế độ hiển thị",
+		"select_glass_wallpaper": "Chọn hình nền Glass"
 	},
 	"copilot": {
 		"title": "Copilot",
@@ -423,5 +431,25 @@
 		"phase_finalized": "Hoàn tất",
 		"phase_failed": "Thất bại",
 		"phase_processing": "Đang xử lý"
+	},
+	"comments": {
+		"title": "Bình luận",
+		"desc": "Tìm kiếm và xem lại các bình luận công việc trên tất cả các dự án bạn có quyền truy cập.",
+		"total": "tổng cộng",
+		"search_placeholder": "Tìm kiếm bình luận, công việc, dự án, tác giả...",
+		"all_projects": "Tất cả dự án",
+		"task_id": "Mã công việc",
+		"author_id": "Mã tác giả",
+		"reset": "Mặc định",
+		"mentioned_me": "Nhắc đến tôi",
+		"info_text": "Kết quả sẽ mở công việc gốc và tập trung vào bình luận đã chọn.",
+		"loading": "Đang tải bình luận...",
+		"empty_title": "Không tìm thấy bình luận nào",
+		"empty_desc": "Điều chỉnh bộ lọc hoặc từ khóa để tìm kiếm bình luận trong các dự án của bạn.",
+		"load_more": "Tải thêm",
+		"showing": "Đang hiển thị {{count}} trong số {{total}} bình luận",
+		"reply": "Phản hồi",
+		"deleted": "Đã xóa",
+		"deleted_content": "Bình luận đã bị xóa"
 	}
 }
