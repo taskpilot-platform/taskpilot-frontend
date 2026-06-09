@@ -41,9 +41,12 @@ type ChatComposerProps = {
   maxChars: number;
   getLastPrompt: () => string;
   onSubmit: (message: string) => void;
+  isStreaming: boolean;
+  onStop: () => void;
+  stopTooltip: string;
 };
 
-const ChatComposer = memo(function ChatComposer({ placeholder, disclaimer, maxChars, getLastPrompt, onSubmit }: ChatComposerProps) {
+const ChatComposer = memo(function ChatComposer({ placeholder, disclaimer, maxChars, getLastPrompt, onSubmit, isStreaming, onStop, stopTooltip }: ChatComposerProps) {
   const [value, setValue] = useState("");
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const trimmedValue = value.trim();
@@ -100,14 +103,29 @@ const ChatComposer = memo(function ChatComposer({ placeholder, disclaimer, maxCh
           placeholder={placeholder}
           className="min-h-[96px] flex-1 resize-none rounded-2xl border border-white/20 dark:border-white/10 pr-14 text-base bg-white/10 dark:bg-black/10 backdrop-blur-xl backdrop-saturate-150 text-black dark:text-white placeholder:text-black/60 dark:placeholder:text-white/60 focus:bg-white/20 dark:focus:bg-black/20 transition-all shadow-sm"
         />
-        <Button
-          type="submit"
-          size="icon"
-          disabled={!trimmedValue}
-          className="absolute bottom-1.5 right-1.5 h-10 w-10 rounded-full bg-primary hover:bg-primary/90 flex items-center justify-center p-0"
-        >
-          <Send className="h-4 w-4 translate-x-px" />
-        </Button>
+        {isStreaming ? (
+          <div className="group absolute bottom-1.5 right-1.5">
+            <Button
+              type="button"
+              onClick={onStop}
+              aria-label={stopTooltip}
+              className="h-10 w-10 rounded-full bg-neutral-900 hover:bg-neutral-800 dark:bg-neutral-100 dark:hover:bg-neutral-200 flex items-center justify-center p-0 transition-colors shadow-sm"
+            >
+              <span className="h-3.5 w-3.5 rounded-[3px] bg-white dark:bg-neutral-950" />
+            </Button>
+            <div className="pointer-events-none absolute bottom-full right-0 mb-2 max-w-[220px] whitespace-nowrap rounded-lg bg-neutral-950 px-3 py-1.5 text-xs font-semibold text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 dark:bg-white dark:text-neutral-950">
+              {stopTooltip}
+            </div>
+          </div>
+        ) : (
+          <Button
+            type="submit"
+            disabled={!trimmedValue}
+            className="absolute bottom-1.5 right-1.5 h-10 w-10 rounded-full bg-primary hover:bg-primary/90 flex items-center justify-center p-0 transition-colors"
+          >
+            <Send className="h-4 w-4 translate-x-px" />
+          </Button>
+        )}
       </form>
       <div className="mt-2 text-right text-xs text-neutral-600 dark:text-neutral-300 font-semibold">
         {value.length}/{maxChars}
@@ -159,7 +177,7 @@ type AssignmentDraft = {
 type DynamicFormField = {
   name: string;
   label: string;
-  type?: "text" | "number" | "textarea" | "select" | "date" | "checkbox";
+  type?: "text" | "number" | "textarea" | "select" | "multiselect" | "date" | "checkbox";
   required?: boolean;
   placeholder?: string;
   value?: string | number | boolean | null;
@@ -198,6 +216,10 @@ function normalizeText(value: string) {
 }
 
 function extractAssignmentRequest(content: string): AssignmentRequest | null {
+  if (content.match(/```taskpilot-form/i)) {
+    return null;
+  }
+
   const normalized = normalizeText(content);
   const asksForTaskRequirements =
     (normalized.includes("ky nang") || normalized.includes("skill")) &&
@@ -238,21 +260,42 @@ function createAssignmentDraft(formKey: string, request: AssignmentRequest): Ass
   };
 }
 
-function stripDynamicFormBlocks(content: string) {
-  return content
-    .replace(/```taskpilot-form\s*[\s\S]*?```/gi, "")
-    .replace(/```taskpilot-confirm\s*[\s\S]*?```/gi, "")
-    .trim();
+function stripDynamicFormBlocks(content: string, isComplete = true) {
+  const endPattern = isComplete ? "(?:```|$)" : "```";
+  
+  const formRegex = new RegExp(`\`\`\`taskpilot-form\\s*[\\s\\S]*?${endPattern}`, "gi");
+  const confirmRegex = new RegExp(`\`\`\`taskpilot-confirm\\s*[\\s\\S]*?${endPattern}`, "gi");
+  const jsonRegex = new RegExp(`\`\`\`json\\s*([\\s\\S]*?)${endPattern}`, "gi");
+
+  let stripped = content
+    .replace(formRegex, "")
+    .replace(confirmRegex, "");
+
+  // Also strip ```json blocks if they look like our forms
+  stripped = stripped.replace(jsonRegex, (match, inner) => {
+    if (inner.includes('"intent"') || inner.includes('"fields"') || inner.includes('"actionId"')) {
+      return "";
+    }
+    return match;
+  });
+
+  return stripped.trim();
 }
 
 function extractDynamicFormSpec(content: string): DynamicFormSpec | null {
-  const match = content.match(/```taskpilot-form\s*([\s\S]*?)```/i);
+  const match = content.match(/```(?:taskpilot-form|json)\s*([\s\S]*?)(?:```|$)/i);
   if (!match) {
     return null;
   }
 
   try {
-    const parsed = JSON.parse(match[1].trim()) as DynamicFormSpec;
+    let jsonString = match[1].trim();
+    // remove trailing commas
+    jsonString = jsonString.replace(/,\s*([\]}])/g, '$1');
+    // remove JS-style comments that AI sometimes adds (// ... and /* ... */)
+    jsonString = jsonString.replace(/\/\/[^\n]*/g, '');
+    jsonString = jsonString.replace(/\/\*[\s\S]*?\*\//g, '');
+    const parsed = JSON.parse(jsonString) as DynamicFormSpec;
     if (!Array.isArray(parsed.fields) || parsed.fields.length === 0) {
       return null;
     }
@@ -306,7 +349,7 @@ function extractConfirmationSpecs(content: string): PendingActionConfirmation[] 
 
 function isSkillFieldName(name: string) {
   const normalized = name.toLowerCase();
-  return normalized === "skills" || normalized === "requiredskills" || normalized === "required_skills";
+  return normalized === "skills" || normalized === "requiredskills" || normalized === "required_skills" || normalized === "requiredskillids";
 }
 
 function taskIdFromFormIntent(intent?: string) {
@@ -341,6 +384,37 @@ function mutationFromConfirmation(confirmation: PendingActionConfirmation): Conf
     projectId: numberFromUnknown(args?.projectId) ?? numberFromUnknown(preview?.projectId),
     summary: confirmation.summary,
   };
+}
+
+function confirmationDedupeKey(confirmation: PendingActionConfirmation) {
+  const mutation = mutationFromConfirmation(confirmation);
+  return [
+    mutation.toolName || confirmation.toolName || "pendingAction",
+    mutation.taskId ? `task:${mutation.taskId}` : "",
+    mutation.projectId ? `project:${mutation.projectId}` : "",
+  ].filter(Boolean).join("|") || confirmation.actionId;
+}
+
+function dedupeConfirmations(confirmations: PendingActionConfirmation[]) {
+  const byKey = new Map<string, PendingActionConfirmation>();
+  for (const confirmation of confirmations) {
+    byKey.set(confirmationDedupeKey(confirmation), confirmation);
+  }
+  return Array.from(byKey.values());
+}
+
+function dedupeToolEvents(events: ToolEvent[]) {
+  const byKey = new Map<string, ToolEvent>();
+  const passthrough: ToolEvent[] = [];
+  for (const event of events) {
+    const confirmation = event.confirmation ?? parseConfirmationResult(event.result);
+    if (!confirmation) {
+      passthrough.push(event);
+      continue;
+    }
+    byKey.set(confirmationDedupeKey(confirmation), event);
+  }
+  return [...passthrough, ...byKey.values()];
 }
 
 function notifyTaskMutation(mutation: ConfirmedTaskMutation) {
@@ -648,6 +722,7 @@ function ThinkingAccordion({
   tools,
   isThinkingComplete,
   collapseWhenComplete,
+  forceOpen,
   t,
   confirmPendingAction,
   cancelPendingAction,
@@ -656,21 +731,48 @@ function ThinkingAccordion({
   tools: ToolEvent[];
   isThinkingComplete: boolean;
   collapseWhenComplete: boolean;
+  forceOpen: boolean;
   t: (key: string) => string;
   confirmPendingAction: (confirmation: PendingActionConfirmation) => void;
   cancelPendingAction: (actionId: string) => void;
 }) {
   const [isOpen, setIsOpen] = useState(!isThinkingComplete);
   const wasThinkingRef = useRef(!isThinkingComplete);
+  const [activeMessageIndex, setActiveMessageIndex] = useState(0);
+
+  const activeMessages = [
+    "Đang phân tích ngữ cảnh hội thoại...",
+    "Đang kiểm tra thông tin dự án...",
+    "Đang phân tích kỹ năng yêu cầu...",
+    "Đang tải dữ liệu thành viên dự án...",
+    "Đang lập kế hoạch thực thi công việc...",
+    "Đang tối ưu hóa phân bổ tài nguyên...",
+    "Đang kết nối dịch vụ AI...",
+    "Đang chuẩn bị biểu mẫu phản hồi...",
+    "Đang hoàn tất xử lý dữ liệu..."
+  ];
 
   useEffect(() => {
+    if (isThinkingComplete) return;
+    const interval = setInterval(() => {
+      setActiveMessageIndex((prev) => (prev + 1) % activeMessages.length);
+    }, 4000);
+    return () => clearInterval(interval);
+  }, [isThinkingComplete]);
+
+  useEffect(() => {
+    if (forceOpen) {
+      setIsOpen(true);
+      wasThinkingRef.current = true;
+      return;
+    }
     if (wasThinkingRef.current && isThinkingComplete) {
       if (collapseWhenComplete) {
         setIsOpen(false);
       }
       wasThinkingRef.current = false;
     }
-  }, [isThinkingComplete, collapseWhenComplete]);
+  }, [forceOpen, isThinkingComplete, collapseWhenComplete]);
 
   const steps = parseThinkingToSteps(thinkingText, t("copilot.thinking_step_title"));
 
@@ -696,7 +798,11 @@ function ThinkingAccordion({
       </div>
 
       {isOpen && (
-        <div className="mt-3 space-y-4 relative before:absolute before:left-[11px] before:top-2 before:bottom-2 before:w-[2px] before:bg-black/10 dark:before:bg-white/10 before:transition-all transition-all animate-in fade-in slide-in-from-top-2 duration-300">
+        <div
+          onWheel={(event) => event.stopPropagation()}
+          onTouchMove={(event) => event.stopPropagation()}
+          className="mt-3 max-h-[min(60vh,520px)] space-y-4 overflow-y-auto overscroll-contain pr-2 relative before:absolute before:left-[11px] before:top-2 before:bottom-2 before:w-[2px] before:bg-black/10 dark:before:bg-white/10 before:transition-all transition-all animate-in fade-in slide-in-from-top-2 duration-300"
+        >
           {steps.map((step, idx) => {
             const isStepComplete = idx < steps.length - 1 || isThinkingComplete;
             return (
@@ -728,6 +834,22 @@ function ThinkingAccordion({
               </div>
             );
           })}
+
+          {!isThinkingComplete && (
+            <div className="relative pl-8 group opacity-100">
+              <div className="absolute left-0 top-1.5 w-6 h-6 rounded-full bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-500/30 flex items-center justify-center z-10">
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-500" />
+              </div>
+              <div className="flex flex-col">
+                <span className="text-[10px] font-black text-emerald-500 uppercase tracking-widest animate-pulse">
+                  Đang xử lý
+                </span>
+                <p className="text-sm text-neutral-800 dark:text-neutral-200 font-semibold mt-0.5 leading-relaxed transition-all duration-500">
+                  {activeMessages[activeMessageIndex]}
+                </p>
+              </div>
+            </div>
+          )}
 
           {tools.map((tool, tIdx) => {
             const stepDelayIndex = steps.length + tIdx;
@@ -774,6 +896,7 @@ export default function AiChatPage() {
   const [myProjects, setMyProjects] = useState<{ id: number; name: string }[]>([]);
   const [sprintsByProject, setSprintsByProject] = useState<Record<number, { id: number; name: string }[]>>({});
   const [membersByProject, setMembersByProject] = useState<Record<number, { id: number; name: string }[]>>({});
+  const [labelsByProject, setLabelsByProject] = useState<Record<number, { id: number; name: string }[]>>({});
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesViewportRef = useRef<HTMLDivElement>(null);
@@ -1025,7 +1148,7 @@ export default function AiChatPage() {
     void tick();
     pollTimerRef.current = window.setInterval(() => {
       void tick();
-    }, 1500);
+    }, 2500);
   };
 
   const isNearMessageBottom = useCallback(() => {
@@ -1078,11 +1201,11 @@ export default function AiChatPage() {
     if (sprintsByProject[projectId]) return;
     try {
       const { sprintService } = await import("../services/sprint.service");
-      const response = await sprintService.getSprintsByProject(projectId, 0, 100);
+      const response = await sprintService.listSprints(projectId);
       if (!isMountedRef.current) return;
       setSprintsByProject(prev => ({
         ...prev,
-        [projectId]: response.data.content.map((s: any) => ({ id: s.id, name: s.name }))
+        [projectId]: response.data.map((s: any) => ({ id: s.id, name: s.name }))
       }));
     } catch {}
   };
@@ -1094,7 +1217,20 @@ export default function AiChatPage() {
       if (!isMountedRef.current) return;
       setMembersByProject(prev => ({
         ...prev,
-        [projectId]: response.data.map((m: any) => ({ id: m.user.id, name: m.user.fullName }))
+        [projectId]: response.data.map((m: any) => ({ id: m.userId, name: m.fullName || `User ${m.userId}` }))
+      }));
+    } catch {}
+  };
+
+  const loadLabelsForProject = async (projectId: number) => {
+    if (labelsByProject[projectId]) return;
+    try {
+      const { labelService } = await import("../services/label.service");
+      const response = await labelService.getProjectLabels(projectId);
+      if (!isMountedRef.current) return;
+      setLabelsByProject(prev => ({
+        ...prev,
+        [projectId]: response.data.map((l: any) => ({ id: l.id, name: l.name }))
       }));
     } catch {}
   };
@@ -1309,7 +1445,7 @@ export default function AiChatPage() {
                   result: parsed.result,
                   confirmation: parsed.confirmation,
                 };
-                setToolEvents(prev => [...prev, toolEvent]);
+                setToolEvents(prev => dedupeToolEvents([...prev, toolEvent]));
               }
             } catch {
               // Ignore malformed tool events.
@@ -1383,6 +1519,26 @@ export default function AiChatPage() {
       }
     }
   }
+
+  const stopGenerating = useCallback(() => {
+    if (activeStreamControllerRef.current) {
+      activeStreamControllerRef.current.abort();
+      activeStreamControllerRef.current = null;
+    }
+    setIsStreaming(false);
+    setIsThinking(false);
+    setStreamPhase(null);
+    if (activeSession) {
+      clearPendingRequest(activeSession.id);
+    }
+    stopPolling();
+    isStreamingRef.current = false;
+    
+    if (activeSession) {
+      void loadMessages(activeSession.id, true);
+      void loadSessions();
+    }
+  }, [activeSession]);
 
   sendMessageRef.current = (message: string) => {
     void sendMessage(message);
@@ -1677,6 +1833,7 @@ export default function AiChatPage() {
       .join("\n");
     const promptParts = [
       "Structured form response",
+      spec.title ? `Form Title: ${spec.title}` : "",
       `Intent: ${spec.intent || "additional_information"}`,
       "Use this information to continue the previous user request.",
       taskId ? `Task ID: ${taskId}` : "",
@@ -1687,8 +1844,8 @@ export default function AiChatPage() {
       promptParts.push(
         "Important TaskPilot instruction:",
         "- The provided skill value comes from the system skill directory.",
-        "- Persist the selected required skills to the task as part of the pending write action.",
-        "- If the previous request was to assign/reassign, call recommendAndAssignTask with taskId, skills, and difficulty so the confirmation saves skills and assigns together.",
+        "- If the previous request only asked for recommendations or alternatives, call recommendTaskAssignmentCandidates with taskId, skills, and difficulty; do not create a write confirmation.",
+        "- Only call recommendAndAssignTask if the user explicitly asked to assign immediately after recommending.",
         "- Do not only use these skills as temporary chat context.",
       );
     }
@@ -1754,39 +1911,65 @@ export default function AiChatPage() {
               );
             }
             if (isSkillFieldName(field.name)) {
-              return (
-                <label key={field.name} className="block">
-                  {fieldLabel}
-                  {renderSkillSelect(
-                    value,
-                    (nextValue) => updateDynamicFormValue(formKey, field.name, nextValue),
-                    field.placeholder || "Chọn skill từ hệ thống",
-                  )}
-                </label>
-              );
+              if (field.name.toLowerCase().endsWith("ids") || field.type === "multiselect") {
+                field.type = "multiselect";
+                field.options = skillDirectory.map(s => ({ label: s.name, value: String(s.id) }));
+              } else {
+                return (
+                  <label key={field.name} className="block">
+                    {fieldLabel}
+                    {renderSkillSelect(
+                      value,
+                      (nextValue) => updateDynamicFormValue(formKey, field.name, nextValue),
+                      field.placeholder || "Chọn skill từ hệ thống",
+                    )}
+                  </label>
+                );
+              }
             }
             if (field.name === "projectId" && field.type === "number") {
               field.type = "select";
-              field.options = myProjects.map(p => ({ label: `${p.name} (ID: ${p.id})`, value: p.id }));
+              field.options = myProjects.map(p => ({ label: `${p.name} (ID: ${p.id})`, value: String(p.id) }));
               if (value) {
                 const projectId = parseInt(value, 10);
                 if (!isNaN(projectId)) {
                   loadSprintsForProject(projectId);
                   loadMembersForProject(projectId);
+                  loadLabelsForProject(projectId);
                 }
               }
             }
-            if (field.name.endsWith("Id") && field.name !== "projectId" && field.type === "number") {
+            if (field.name === "labelIds" || (field.name.toLowerCase().includes("label") && field.name.toLowerCase().endsWith("ids"))) {
+              field.type = "multiselect";
+              const projectIdStr = values["projectId"];
+              if (projectIdStr) {
+                const projectId = parseInt(projectIdStr, 10);
+                const labels = labelsByProject[projectId] || [];
+                field.options = labels.map(l => ({ label: l.name, value: String(l.id) }));
+              } else {
+                field.options = [];
+              }
+            }
+            if ((field.name === "difficultyLevel" || field.name === "difficulty") && field.type !== "number") {
+              field.type = "number";
+              field.min = 1;
+              field.max = 10;
+            }
+            const fieldNameLower = field.name.toLowerCase();
+            const isSprintField = fieldNameLower.includes("sprint");
+            const isAssigneeField = fieldNameLower.includes("assignee") || fieldNameLower.includes("member");
+
+            if ((isSprintField || isAssigneeField) && field.name !== "projectId") {
               field.type = "select";
               const projectIdStr = values["projectId"];
               if (projectIdStr) {
                 const projectId = parseInt(projectIdStr, 10);
-                if (field.name === "sprintId") {
+                if (isSprintField) {
                   const sprints = sprintsByProject[projectId] || [];
-                  field.options = sprints.map(s => ({ label: `${s.name} (ID: ${s.id})`, value: s.id }));
-                } else if (field.name === "assigneeId") {
+                  field.options = sprints.map(s => ({ label: `${s.name} (ID: ${s.id})`, value: String(s.id) }));
+                } else if (isAssigneeField) {
                   const members = membersByProject[projectId] || [];
-                  field.options = members.map(m => ({ label: `${m.name} (ID: ${m.id})`, value: m.id }));
+                  field.options = members.map(m => ({ label: `${m.name} (ID: ${m.id})`, value: String(m.id) }));
                 }
               } else {
                 field.options = [];
@@ -1814,6 +1997,51 @@ export default function AiChatPage() {
                     })}
                   </select>
                 </label>
+              );
+            }
+            if (field.type === "multiselect") {
+              const options = field.options ?? [];
+              if (options.length === 0) {
+                return (
+                  <label key={field.name} className="block">
+                    {fieldLabel}
+                    <Input
+                      value={value}
+                      onChange={(event) => updateDynamicFormValue(formKey, field.name, event.target.value)}
+                      placeholder={field.placeholder || "Các ID cách nhau bằng dấu phẩy, ví dụ: 3,5"}
+                      className="bg-background/70"
+                    />
+                  </label>
+                );
+              }
+              const selectedValues = (typeof value === "string" ? value.split(",").filter(Boolean) : []) as string[];
+              return (
+                <div key={field.name} className="block">
+                  <div className="mb-1 text-sm font-medium text-foreground">{fieldLabel}</div>
+                  <div className="flex flex-wrap gap-2">
+                    {options.map((option) => {
+                      const label = typeof option === "string" ? option : option.label;
+                      const optionValue = typeof option === "string" ? String(option) : String(option.value);
+                      const isChecked = selectedValues.includes(optionValue);
+                      return (
+                        <label key={optionValue} className={`flex items-center gap-1.5 cursor-pointer rounded-full border px-3 py-1 text-sm transition-colors ${isChecked ? "bg-primary/20 border-primary text-primary font-semibold" : "bg-background/50 border-input text-foreground hover:bg-muted"}`}>
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            className="hidden"
+                            onChange={(e) => {
+                              const newValues = e.target.checked 
+                                ? [...selectedValues, optionValue]
+                                : selectedValues.filter(v => v !== optionValue);
+                              updateDynamicFormValue(formKey, field.name, newValues.join(","));
+                            }}
+                          />
+                          <span>{label}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
               );
             }
             return (
@@ -1876,7 +2104,7 @@ export default function AiChatPage() {
     }
 
     const formKey = `message-${msg.id || idx}`;
-    const confirmations = extractConfirmationSpecs(msg.content);
+    const confirmations = dedupeConfirmations(extractConfirmationSpecs(msg.content));
     if (confirmations.length > 0) {
       return renderConfirmationCards(confirmations);
     }
@@ -1961,6 +2189,18 @@ export default function AiChatPage() {
     th: ({ children }: any) => <th className="px-4 py-2.5 font-bold border-r border-black/5 dark:border-white/5 last:border-r-0 text-neutral-900 dark:text-neutral-50">{children}</th>,
     td: ({ children }: any) => <td className="px-4 py-2.5 border-r border-t border-black/5 dark:border-white/5 last:border-r-0 text-neutral-800 dark:text-neutral-200">{children}</td>,
     tr: ({ children }: any) => <tr className="hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors odd:bg-black/[0.01] dark:odd:bg-white/[0.01]">{children}</tr>,
+    code({ node, inline, className, children, ...props }: any) {
+      const match = /language-(\w+)/.exec(className || "");
+      const language = match ? match[1] : "";
+      if (language === "taskpilot-confirm" || language === "taskpilot-form") {
+        return (
+          <div className="my-2 animate-pulse rounded-md border border-primary/20 bg-primary/5 px-4 py-3 text-sm text-primary">
+            Đang chuẩn bị biểu mẫu...
+          </div>
+        );
+      }
+      return <code className={className} {...props}>{children}</code>;
+    }
   };
 
   // Helper to render AI message with <think> tag support
@@ -1969,8 +2209,9 @@ export default function AiChatPage() {
     tools: ToolEvent[] = [],
     expanded?: string | null,
     collapseWhenComplete = false,
+    forceThinkingOpen = false,
   ) => {
-    const displayContent = stripDynamicFormBlocks(content);
+    const displayContent = stripDynamicFormBlocks(content, collapseWhenComplete);
     const parsed = extractThinkPayload(displayContent);
 
     // Accordion renders for actual reasoning tags, tool executions, or substantive answers (length > 150)
@@ -1992,10 +2233,7 @@ export default function AiChatPage() {
         `- ${t("copilot.thinking_default_step_3_item_2")}`
       );
 
-      // Use expanded thinking if available and thinking is complete
-      const displayThinking = (isThinkingComplete && expanded)
-        ? expanded
-        : defaultThinkingText;
+      const displayThinking = expanded || defaultThinkingText;
 
       const shouldCollapse = collapseWhenComplete && isThinkingComplete;
 
@@ -2006,6 +2244,7 @@ export default function AiChatPage() {
             tools={tools}
             isThinkingComplete={isThinkingComplete}
             collapseWhenComplete={shouldCollapse}
+            forceOpen={forceThinkingOpen}
             t={t}
             confirmPendingAction={confirmPendingAction}
             cancelPendingAction={cancelPendingAction}
@@ -2256,7 +2495,7 @@ export default function AiChatPage() {
                   <span>TaskPilot AI</span>
                 </div>
                 <div className="text-neutral-900 dark:text-neutral-100">
-                  {renderAiMessage(currentStreamMsg || (isThinking ? `<think>Step 1: ${t("copilot.thinking_analyzing_request")}</think>` : ""), toolEvents, expandedThinking, true)}
+                  {renderAiMessage(currentStreamMsg || (isThinking ? `<think>Step 1: ${t("copilot.thinking_analyzing_request")}</think>` : ""), toolEvents, expandedThinking, true, true)}
                 </div>
               </div>
             </div>
@@ -2291,6 +2530,9 @@ export default function AiChatPage() {
             maxChars={MAX_PROMPT_CHARS}
             getLastPrompt={getLastPrompt}
             onSubmit={handleComposerSubmit}
+            isStreaming={isStreaming}
+            onStop={stopGenerating}
+            stopTooltip={t("copilot.stop_generating")}
           />
         </div>
       </div>
