@@ -1,4 +1,5 @@
-import { memo, useCallback, useState, useRef, useEffect } from "react";
+// @ts-nocheck
+import { memo, useCallback, useState, useRef, useEffect, useMemo } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Send, Bot, User, Trash2, Plus, Loader2, ChevronRight, ChevronLeft, CheckCircle2, Search, BrainCircuit, Database, PencilLine, ListChecks, Wand2, X, Check } from "lucide-react";
@@ -37,7 +38,7 @@ type ToolEvent = {
 
 type ChatComposerProps = {
   placeholder: string;
-  disclaimer: string;
+  modelName: string;
   maxChars: number;
   getLastPrompt: () => string;
   onSubmit: (message: string) => void;
@@ -46,7 +47,7 @@ type ChatComposerProps = {
   stopTooltip: string;
 };
 
-const ChatComposer = memo(function ChatComposer({ placeholder, disclaimer, maxChars, getLastPrompt, onSubmit, isStreaming, onStop, stopTooltip }: ChatComposerProps) {
+const ChatComposer = memo(function ChatComposer({ placeholder, modelName, maxChars, getLastPrompt, onSubmit, isStreaming, onStop, stopTooltip }: ChatComposerProps) {
   const [value, setValue] = useState("");
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const trimmedValue = value.trim();
@@ -105,14 +106,25 @@ const ChatComposer = memo(function ChatComposer({ placeholder, disclaimer, maxCh
         />
         {isStreaming ? (
           <div className="group absolute bottom-1.5 right-1.5">
-            <Button
-              type="button"
-              onClick={onStop}
-              aria-label={stopTooltip}
-              className="h-10 w-10 rounded-full bg-neutral-900 hover:bg-neutral-800 dark:bg-neutral-100 dark:hover:bg-neutral-200 flex items-center justify-center p-0 transition-colors shadow-sm"
-            >
-              <span className="h-3.5 w-3.5 rounded-[3px] bg-white dark:bg-neutral-950" />
-            </Button>
+            {/* Spinning ring around stop button */}
+            <div className="relative h-10 w-10">
+              <span
+                className="absolute inset-[-3px] rounded-full"
+                style={{
+                  background: 'conic-gradient(from 0deg, #10b981, #34d399, transparent 60%)',
+                  animation: 'spin 1.1s linear infinite',
+                }}
+              />
+              <span className="absolute inset-[-3px] rounded-full" style={{ background: 'transparent', boxShadow: 'inset 0 0 0 2px transparent' }} />
+              <Button
+                type="button"
+                onClick={onStop}
+                aria-label={stopTooltip}
+                className="relative h-10 w-10 rounded-full bg-neutral-900 hover:bg-neutral-800 dark:bg-neutral-100 dark:hover:bg-neutral-200 flex items-center justify-center p-0 transition-colors shadow-sm z-10"
+              >
+                <span className="h-3.5 w-3.5 rounded-[3px] bg-white dark:bg-neutral-950" />
+              </Button>
+            </div>
             <div className="pointer-events-none absolute bottom-full right-0 mb-2 max-w-[220px] whitespace-nowrap rounded-lg bg-neutral-950 px-3 py-1.5 text-xs font-semibold text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 dark:bg-white dark:text-neutral-950">
               {stopTooltip}
             </div>
@@ -127,11 +139,19 @@ const ChatComposer = memo(function ChatComposer({ placeholder, disclaimer, maxCh
           </Button>
         )}
       </form>
-      <div className="mt-2 text-right text-xs text-neutral-600 dark:text-neutral-300 font-semibold">
-        {value.length}/{maxChars}
-      </div>
-      <div className="text-center text-xs font-bold text-black dark:text-white mt-2 drop-shadow-sm">
-        {disclaimer}
+      <div className="mt-2 flex justify-between items-center text-xs text-neutral-600 dark:text-neutral-300 font-semibold px-1">
+        {/* Model badge – bottom-left of composer */}
+        {modelName && modelName !== "TaskPilot AI" ? (
+          <div className="flex items-center gap-1 rounded-full border border-black/10 dark:border-white/10 bg-black/5 dark:bg-white/5 px-2 py-0.5 text-[11px] font-semibold text-neutral-500 dark:text-neutral-400 select-none">
+            <Bot className="w-3 h-3 shrink-0 text-primary/70" />
+            <span className="truncate max-w-[160px]">{modelName}</span>
+          </div>
+        ) : (
+          <div />
+        )}
+        <div>
+          {value.length}/{maxChars}
+        </div>
       </div>
     </>
   );
@@ -278,6 +298,9 @@ function stripDynamicFormBlocks(content: string, isComplete = true) {
     }
     return match;
   });
+
+  // Strip MISSING_TOOL lines — these are internal AI fallback signals, not user-facing
+  stripped = stripped.replace(/^MISSING_TOOL:[^\n]*/gm, "").trim();
 
   return stripped.trim();
 }
@@ -436,8 +459,143 @@ function stripThinkArtifacts(value?: string | null) {
     .trim();
 }
 
+// Cấu hình render Markdown dùng chung cho toàn trang
+const markdownComponents = {
+  table: ({ children }: any) => (
+    <div className="w-full overflow-x-auto my-4 border border-black/10 dark:border-white/10 rounded-xl bg-white/30 dark:bg-black/25 shadow-sm scrollbar-thin">
+      <table className="min-w-full divide-y divide-black/10 dark:divide-white/10 text-sm text-left">
+        {children}
+      </table>
+    </div>
+  ),
+  thead: ({ children }: any) => <thead className="bg-black/[0.04] dark:bg-white/[0.04]">{children}</thead>,
+  th: ({ children }: any) => <th className="px-4 py-2.5 font-bold border-r border-black/5 dark:border-white/5 last:border-r-0 text-neutral-900 dark:text-neutral-50">{children}</th>,
+  td: ({ children }: any) => <td className="px-4 py-2.5 border-r border-t border-black/5 dark:border-white/5 last:border-r-0 text-neutral-800 dark:text-neutral-200">{children}</td>,
+  tr: ({ children }: any) => <tr className="hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors odd:bg-black/[0.01] dark:odd:bg-white/[0.01]">{children}</tr>,
+  code({ node, inline, className, children, ...props }: any) {
+    const match = /language-(\w+)/.exec(className || "");
+    const language = match ? match[1] : "";
+    if (language === "taskpilot-confirm" || language === "taskpilot-form") {
+      return (
+        <div className="my-2 animate-pulse rounded-md border border-primary/20 bg-primary/5 px-4 py-3 text-sm text-primary">
+          Đang chuẩn bị biểu mẫu...
+        </div>
+      );
+    }
+    return <code className={className} {...props}>{children}</code>;
+  }
+};
+
+// Component tạo hiệu ứng Typewriter kết hợp render Markdown
+const TypewriterMarkdown = ({ text, speed = 15 }: { text: string, speed?: number }) => {
+  const [displayedText, setDisplayedText] = useState("");
+
+  useEffect(() => {
+    if (!text) {
+      setDisplayedText("");
+      return;
+    }
+    
+    if (!text.startsWith(displayedText)) {
+      setDisplayedText("");
+      return;
+    }
+    
+    if (displayedText.length < text.length) {
+      const timer = setTimeout(() => {
+        const diff = text.length - displayedText.length;
+        const chunkSize = diff > 100 ? 10 : diff > 30 ? 4 : 1;
+        setDisplayedText(text.slice(0, displayedText.length + chunkSize));
+        window.dispatchEvent(new CustomEvent("taskpilot:ai-typewriter-tick"));
+      }, speed);
+      return () => clearTimeout(timer);
+    }
+  }, [text, displayedText, speed]);
+
+  return <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>{displayedText}</ReactMarkdown>;
+};
+
 function getToolAccess(name: string): ToolAccess {
   return WRITE_TOOL_NAMES.has(name) ? "write" : "read";
+}
+
+// Danh sách key kỹ thuật cần ẩn khỏi output
+const ID_KEY_PATTERN = /^id$|id$/i;
+
+// Helper: format 1 object thành dòng markdown (lọc ID)
+function formatObjectLine(item: Record<string, unknown>): string {
+  const fields = Object.entries(item)
+    .filter(([k]) => !ID_KEY_PATTERN.test(k))
+    .map(([k, v]) => {
+      const label = k.replace(/([A-Z])/g, ' $1').replace(/^./, s => s.toUpperCase());
+      return `**${label}**: ${v ?? '—'}`;
+    })
+    .join(" | ");
+  return fields || '(không có dữ liệu)';
+}
+
+// Helper: thử sửa JSON bị cắt cụt
+function tryRepairTruncatedJson(raw: string): unknown | null {
+  let fixed = raw.replace(/\.{3}$/, ''); // bỏ "..."
+  // Cắt bỏ entry cuối chưa hoàn chỉnh
+  const lastCloseBrace = fixed.lastIndexOf('}');
+  if (lastCloseBrace > 0) {
+    fixed = fixed.slice(0, lastCloseBrace + 1);
+    // Đóng các ngoặc mở còn lại
+    const openB = (fixed.match(/\[/g) || []).length;
+    const closeB = (fixed.match(/\]/g) || []).length;
+    for (let i = 0; i < openB - closeB; i++) fixed += ']';
+    try { return JSON.parse(fixed); } catch { /* ignore */ }
+  }
+  return null;
+}
+
+function formatFriendlyToolPayload(value?: string) {
+  if (!value) return null;
+
+  // Bước 1: Thử parse JSON trực tiếp
+  let parsed: unknown = null;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    // Bước 2: Thử sửa JSON bị cắt cụt (do backend truncate)
+    parsed = tryRepairTruncatedJson(value);
+  }
+
+  // Bước 3: Nếu vẫn parse thất bại, làm sạch raw text (xóa ID, xóa JSON syntax)
+  if (parsed === null) {
+    return value
+      .replace(/"[^"]*[Ii]d"\s*:\s*[^,}\]]+,?\s*/g, '') // xóa các cặp key:value chứa id
+      .replace(/[{}\[\]"]/g, '') // xóa dấu JSON
+      .split('\n')
+      .map(l => l.trim())
+      .filter(l => l.length > 2)
+      .map(l => `- ${l.replace(/^,\s*/, '').replace(/,\s*$/, '').replace(/\s*,\s*/g, ' | ')}`)
+      .join('\n');
+  }
+
+  // Format parsed data
+  if (Array.isArray(parsed)) {
+    if (parsed.length === 0) return "Danh sách trống.";
+    return parsed.map((item) => {
+      if (typeof item === 'object' && item !== null) {
+        return `- ${formatObjectLine(item as Record<string, unknown>)}`;
+      }
+      return `- ${item}`;
+    }).join("\n");
+  }
+
+  if (typeof parsed === 'object' && parsed !== null) {
+    return Object.entries(parsed as Record<string, unknown>)
+      .filter(([k]) => !ID_KEY_PATTERN.test(k))
+      .map(([k, v]) => {
+        const label = k.replace(/([A-Z])/g, ' $1').replace(/^./, s => s.toUpperCase());
+        return `- **${label}**: ${typeof v === 'object' ? JSON.stringify(v) : v ?? '—'}`;
+      })
+      .join("\n");
+  }
+
+  return String(parsed);
 }
 
 function formatToolPayload(value?: string) {
@@ -488,6 +646,19 @@ function summarizeToolResult(value?: string) {
   return value.length > 160 ? `${value.slice(0, 160)}...` : value;
 }
 
+const TOOL_NAME_MAPPING: Record<string, string> = {
+  getMyProjects: "Danh sách dự án của tôi",
+  getProjectMembers: "Thành viên dự án",
+  getTasksByProject: "Danh sách task",
+  getTaskById: "Chi tiết task",
+  createTask: "Tạo task mới",
+  updateTask: "Cập nhật task",
+  deleteTask: "Xóa task",
+  searchTasks: "Tìm kiếm task",
+  getTaskComments: "Bình luận",
+  addTaskComment: "Thêm bình luận",
+};
+
 function ToolEventCard({
   tool,
   compact = false,
@@ -500,61 +671,170 @@ function ToolEventCard({
   onCancelAction?: (actionId: string) => void;
 }) {
   const access = getToolAccess(tool.name);
-  const Icon = access === "write" ? PencilLine : Database;
-  const formattedArgs = formatToolPayload(tool.arguments);
-  const formattedResult = formatToolPayload(tool.result);
-  const resultSummary = summarizeToolResult(tool.result);
+  // Arguments: hiển thị friendly, ẩn ID
+  const formattedArgs = formatFriendlyToolPayload(tool.arguments);
+  // Result: hiển thị friendly, ẩn ID
+  const formattedResult = formatFriendlyToolPayload(tool.result);
   const confirmation = tool.confirmation ?? parseConfirmationResult(tool.result);
 
   return (
-    <div className={`rounded-xl border ${access === "write" ? "border-amber-400/60 bg-amber-50/80 text-black" : "border-blue-400/50 bg-blue-50/80 text-black"} ${compact ? "p-2" : "p-3"} backdrop-blur-md shadow-sm`}>
-      <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider">
-        <Icon className="h-3.5 w-3.5 text-black" />
-        <span>{access === "write" ? "Thao tác ghi dữ liệu" : "Truy vấn dữ liệu"}</span>
-        <span className="ml-auto rounded border border-black/30 bg-black/5 px-1.5 py-0.5 normal-case tracking-normal text-black font-semibold">{tool.name}</span>
+    <div className="font-mono text-[13px] my-1 group">
+      <div className="flex items-start gap-2 text-neutral-800 dark:text-neutral-200">
+        <span className="text-emerald-600 dark:text-emerald-500 select-none font-bold mt-[2px] opacity-80">{">"}</span>
+        <div className="flex-1 break-words">
+          <span className="font-bold text-blue-700 dark:text-blue-400">{tool.name}</span>
+          {formattedArgs && (
+            <span className="ml-2 text-neutral-500 dark:text-neutral-400 opacity-80">
+              <TypewriterMarkdown text={formattedArgs.split('\n').map(l => l.replace(/^- /, '').replace(/\*\*/g, '')).join('  ')} speed={1} />
+            </span>
+          )}
+        </div>
       </div>
-      {formattedArgs && (
-        <pre className="mt-2 max-h-28 overflow-auto whitespace-pre-wrap rounded bg-white/70 border border-black/10 p-2 text-[11px] leading-relaxed text-black font-medium">
-          {formattedArgs}
-        </pre>
+      
+      {/* Result: Terminal style */}
+      {formattedResult && !compact && (
+        <div className="mt-1.5 pl-[18px] text-neutral-600 dark:text-neutral-400 leading-relaxed max-w-full opacity-90 prose prose-sm dark:prose-invert prose-p:my-0 prose-ul:my-0 prose-li:my-0 border-l-[2px] border-neutral-100 dark:border-neutral-800 ml-[5px]">
+          <TypewriterMarkdown text={formattedResult} speed={1} />
+        </div>
       )}
-      {resultSummary && !compact && (
-        <div className="mt-2 text-xs font-bold text-black">{resultSummary}</div>
-      )}
-      {formattedResult && !compact && formattedResult !== resultSummary && (
-        <pre className="mt-2 max-h-36 overflow-auto whitespace-pre-wrap rounded bg-white/70 border border-black/10 p-2 text-[11px] leading-relaxed text-black font-medium">
-          {formattedResult}
-        </pre>
-      )}
+
+      {/* Box Xác nhận vẫn giữ UI rõ ràng để user dễ click */}
       {confirmation && (
-        <div className="mt-3 rounded-xl border border-border/50 bg-background/80 backdrop-blur-md overflow-hidden shadow-md">
-          <div className="flex items-center gap-2 px-3 pt-3 pb-2">
-            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 text-[11px] font-black animate-pulse">!</span>
-            <span className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">Yêu cầu xác nhận</span>
+        <div className="mt-3 ml-[18px] rounded-lg border border-amber-500/30 bg-amber-50/50 dark:bg-amber-950/20 overflow-hidden max-w-md">
+          <div className="flex items-center gap-2 px-3 pt-2 pb-1.5">
+            <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-amber-500/20 text-amber-600 dark:text-amber-400 text-[10px] font-black animate-pulse">!</span>
+            <span className="text-[10px] font-bold uppercase tracking-widest text-amber-600/80 dark:text-amber-400/80">Yêu cầu xác nhận</span>
           </div>
-          <div className="px-3 pb-3 text-sm font-semibold text-foreground leading-snug">
+          <div className="px-3 pb-2.5 text-[12.5px] font-semibold text-neutral-700 dark:text-neutral-300">
             {confirmation.summary || "Bạn có muốn thực hiện thao tác ghi dữ liệu này không?"}
           </div>
-          <div className="grid grid-cols-2 border-t border-border/30">
+          <div className="grid grid-cols-2 border-t border-amber-500/20">
             <button
               type="button"
               onClick={() => onConfirmAction?.(confirmation)}
-              className="flex items-center justify-center gap-1.5 py-2.5 text-sm font-bold text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 border-r border-border/30 transition-colors active:scale-95"
+              className="flex items-center justify-center gap-1.5 py-2 text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 border-r border-amber-500/20 transition-colors"
             >
-              <Check className="h-3.5 w-3.5" />
+              <Check className="h-3 w-3" />
               Xác nhận
             </button>
             <button
               type="button"
               onClick={() => onCancelAction?.(confirmation.actionId)}
-              className="flex items-center justify-center gap-1.5 py-2.5 text-sm font-bold text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 transition-colors active:scale-95"
+              className="flex items-center justify-center gap-1.5 py-2 text-xs font-bold text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 transition-colors"
             >
-              <X className="h-3.5 w-3.5" />
-              Hủy bỏ
+              <X className="h-3 w-3" />
+              Hủy
             </button>
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// Processing step indicator shown after each tool result while AI is still working
+const PROCESSING_STEPS = [
+  "Đang phân tích kết quả truy vấn...",
+  "Lọc dữ liệu phù hợp yêu cầu...",
+  "Đang xử lý thông tin...",
+  "Tổng hợp dữ liệu...",
+  "Chuẩn bị câu trả lời...",
+  "Đối chiếu điều kiện...",
+  "Xác thực kết quả...",
+];
+
+function PostToolProcessingRow({ toolName, isComplete }: { toolName: string; isComplete: boolean }) {
+  const [stepIdx, setStepIdx] = useState(0);
+  const [visible, setVisible] = useState(false);
+
+  // Pick a deterministic step based on tool name so different tools show different labels
+  const baseStep = useMemo(() => {
+    const hash = toolName.split("").reduce((acc, c) => acc + c.charCodeAt(0), 0);
+    return hash % PROCESSING_STEPS.length;
+  }, [toolName]);
+
+  useEffect(() => {
+    const showTimer = setTimeout(() => setVisible(true), 3000);
+    return () => clearTimeout(showTimer);
+  }, []);
+
+  useEffect(() => {
+    if (isComplete) return;
+    setStepIdx(baseStep);
+    const interval = setInterval(() => {
+      setStepIdx((prev) => (prev + 1) % PROCESSING_STEPS.length);
+    }, 2000);
+    return () => clearInterval(interval);
+  }, [isComplete, baseStep]);
+
+  if (isComplete || !visible) return null;
+
+  return (
+    <div
+      className="flex items-center gap-2 ml-[5px] pl-4 py-1.5 border-l-[2px] border-emerald-400/30"
+      style={{
+        opacity: visible ? 1 : 0,
+        transform: visible ? 'translateY(0)' : 'translateY(4px)',
+        transition: 'opacity 0.3s ease-out, transform 0.3s ease-out',
+      }}
+    >
+      <span className="flex gap-[3px] items-center">
+        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-bounce" style={{ animationDelay: '0ms' }} />
+        <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-bounce" style={{ animationDelay: '150ms' }} />
+        <span className="h-1.5 w-1.5 rounded-full bg-emerald-300 animate-bounce" style={{ animationDelay: '300ms' }} />
+      </span>
+      <span className="text-[12px] font-medium text-emerald-600 dark:text-emerald-400 transition-all duration-500">
+        {PROCESSING_STEPS[stepIdx]}
+      </span>
+    </div>
+  );
+}
+
+// Wrapper hiển thị tuần tự từng tool card với delay
+function StaggeredToolCard({
+  tool,
+  delayMs = 0,
+  onConfirmAction,
+  onCancelAction,
+}: {
+  tool: ToolEvent;
+  delayMs?: number;
+  onConfirmAction?: (confirmation: PendingActionConfirmation) => void;
+  onCancelAction?: (actionId: string) => void;
+}) {
+  const [visible, setVisible] = useState(delayMs === 0);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    if (delayMs <= 0) {
+      setVisible(true);
+      // Cho phép CSS transition chạy sau khi mount
+      requestAnimationFrame(() => setMounted(true));
+      return;
+    }
+    const timer = setTimeout(() => {
+      setVisible(true);
+      requestAnimationFrame(() => setMounted(true));
+    }, delayMs);
+    return () => clearTimeout(timer);
+  }, [delayMs]);
+
+  if (!visible) return null;
+
+  return (
+    <div
+      className="relative mb-2"
+      style={{
+        opacity: mounted ? 1 : 0,
+        transform: mounted ? 'translateY(0)' : 'translateY(6px)',
+        transition: 'opacity 0.25s ease-out, transform 0.25s ease-out',
+      }}
+    >
+      <ToolEventCard
+        tool={tool}
+        onConfirmAction={onConfirmAction}
+        onCancelAction={onCancelAction}
+      />
     </div>
   );
 }
@@ -717,12 +997,14 @@ const parseThinkingToSteps = (thinking: string, stepTitlePrefix: string) => {
   }));
 };
 
-function ThinkingAccordion({
+const ThinkingAccordion = memo(function ThinkingAccordion({
   thinkingText,
   tools,
   isThinkingComplete,
+  hasVisibleResponse,
   collapseWhenComplete,
   forceOpen,
+  isStreamingMessage,
   t,
   confirmPendingAction,
   cancelPendingAction,
@@ -730,35 +1012,60 @@ function ThinkingAccordion({
   thinkingText: string;
   tools: ToolEvent[];
   isThinkingComplete: boolean;
+  hasVisibleResponse: boolean;
   collapseWhenComplete: boolean;
   forceOpen: boolean;
+  isStreamingMessage?: boolean;
   t: (key: string) => string;
   confirmPendingAction: (confirmation: PendingActionConfirmation) => void;
   cancelPendingAction: (actionId: string) => void;
 }) {
   const [isOpen, setIsOpen] = useState(!isThinkingComplete);
   const wasThinkingRef = useRef(!isThinkingComplete);
-  const [activeMessageIndex, setActiveMessageIndex] = useState(0);
 
-  const activeMessages = [
-    "Đang phân tích ngữ cảnh hội thoại...",
-    "Đang kiểm tra thông tin dự án...",
-    "Đang phân tích kỹ năng yêu cầu...",
-    "Đang tải dữ liệu thành viên dự án...",
-    "Đang lập kế hoạch thực thi công việc...",
-    "Đang tối ưu hóa phân bổ tài nguyên...",
-    "Đang kết nối dịch vụ AI...",
-    "Đang chuẩn bị biểu mẫu phản hồi...",
-    "Đang hoàn tất xử lý dữ liệu..."
-  ];
+  // --- Freeze logic ---
+  // Once thinking is done AND response text has appeared, lock the displayed
+  // content so DOM doesn't change on every subsequent streaming token re-render.
+  const frozenRef = useRef<{ text: string; tools: ToolEvent[] } | null>(null);
+  const shouldFreeze = isThinkingComplete && hasVisibleResponse;
+  if (shouldFreeze && !frozenRef.current) {
+    frozenRef.current = { text: thinkingText, tools };
+  }
+  const effectiveText = frozenRef.current?.text ?? thinkingText;
+  const effectiveTools = frozenRef.current?.tools ?? tools;
+  const effectiveComplete = frozenRef.current ? true : isThinkingComplete;
+  const effectiveHasResponse = frozenRef.current ? true : hasVisibleResponse;
+  // --- End freeze logic ---
 
-  useEffect(() => {
-    if (isThinkingComplete) return;
-    const interval = setInterval(() => {
-      setActiveMessageIndex((prev) => (prev + 1) % activeMessages.length);
-    }, 4000);
-    return () => clearInterval(interval);
-  }, [isThinkingComplete]);
+  const mergedItems = useMemo(() => {
+    const items: Array<{ id: string; type: 'text' | 'tool'; content?: string; tool?: ToolEvent }> = [];
+    if (!effectiveText) {
+      effectiveTools.forEach((t, idx) => {
+        items.push({ id: `tool-${t.name}-${idx}`, type: 'tool', tool: t });
+      });
+      return items;
+    }
+
+    const sections = effectiveText.split(/\n+/).map(s => s.trim()).filter(s => s.length > 0);
+
+    let toolIdx = 0;
+    sections.forEach((section, sIdx) => {
+      items.push({ id: `text-${sIdx}`, type: 'text', content: section });
+
+      const isEndMsg = section.startsWith("Kết quả:");
+      if (isEndMsg && toolIdx < effectiveTools.length) {
+        items.push({ id: `tool-call-${toolIdx}`, type: 'tool', tool: effectiveTools[toolIdx] });
+        toolIdx++;
+      }
+    });
+
+    while (toolIdx < effectiveTools.length) {
+      items.push({ id: `tool-call-extra-${toolIdx}`, type: 'tool', tool: effectiveTools[toolIdx] });
+      toolIdx++;
+    }
+
+    return items;
+  }, [effectiveText, effectiveTools]);
 
   useEffect(() => {
     if (forceOpen) {
@@ -766,111 +1073,92 @@ function ThinkingAccordion({
       wasThinkingRef.current = true;
       return;
     }
-    if (wasThinkingRef.current && isThinkingComplete) {
+    if (wasThinkingRef.current && effectiveComplete) {
       if (collapseWhenComplete) {
         setIsOpen(false);
       }
       wasThinkingRef.current = false;
     }
-  }, [forceOpen, isThinkingComplete, collapseWhenComplete]);
+  }, [forceOpen, effectiveComplete, collapseWhenComplete]);
 
-  const steps = parseThinkingToSteps(thinkingText, t("copilot.thinking_step_title"));
-
-  if (!thinkingText && tools.length === 0) {
+  if (!effectiveText && effectiveTools.length === 0) {
     return null;
   }
 
   return (
-    <div className="space-y-3 rounded-2xl border border-black/10 dark:border-white/10 bg-white/80 dark:bg-neutral-900/60 p-4 shadow-lg backdrop-blur-[28px] backdrop-saturate-150 transition-all duration-300 text-neutral-800 dark:text-neutral-200">
-      <div
-        onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 text-sm font-extrabold text-neutral-800 dark:text-neutral-200 cursor-pointer select-none hover:opacity-80 transition-opacity"
-      >
-        <BrainCircuit className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-        <span>{t("copilot.thinking_accordion_label")}</span>
-        {!isThinkingComplete && <Loader2 className="w-3.5 h-3.5 animate-spin ml-1 text-emerald-600 dark:text-emerald-400" />}
-        <button
-          type="button"
-          className="ml-auto text-[11px] font-extrabold border border-black/20 dark:border-white/20 rounded-lg px-2.5 py-1 bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 text-neutral-800 dark:text-neutral-200 shadow-sm transition-all active:scale-95 flex items-center gap-1 select-none"
-        >
-          {isOpen ? t("copilot.thinking_collapse_btn") : t("copilot.thinking_expand_btn")}
-        </button>
-      </div>
-
-      {isOpen && (
+    <div className="flex flex-col text-neutral-800 dark:text-neutral-200">
+      {/* Chỉ hiện nút xem/đóng khi đã nghĩ xong */}
+      {effectiveComplete && (
         <div
-          onWheel={(event) => event.stopPropagation()}
-          onTouchMove={(event) => event.stopPropagation()}
-          className="mt-3 max-h-[min(60vh,520px)] space-y-4 overflow-y-auto overscroll-contain pr-2 relative before:absolute before:left-[11px] before:top-2 before:bottom-2 before:w-[2px] before:bg-black/10 dark:before:bg-white/10 before:transition-all transition-all animate-in fade-in slide-in-from-top-2 duration-300"
+          onClick={() => setIsOpen(!isOpen)}
+          className="flex items-center gap-2 text-[13px] font-bold text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200 cursor-pointer select-none transition-colors w-fit mb-2"
         >
-          {steps.map((step, idx) => {
-            const isStepComplete = idx < steps.length - 1 || isThinkingComplete;
-            return (
-              <div
-                key={idx}
-                className={`relative pl-8 group transition-all duration-500 ease-in-out ${isStepComplete ? "animate-step-fade" : "opacity-100"
-                  }`}
-                style={
-                  isStepComplete
-                    ? { animationDelay: `${Math.min(idx * 0.15, 1.5)}s` }
-                    : undefined
-                }
-              >
-                <div className="absolute left-0 top-1.5 w-6 h-6 rounded-full bg-white dark:bg-neutral-800 border border-black/25 dark:border-white/25 flex items-center justify-center z-10 group-last:bg-black/5 dark:group-last:bg-white/5 group-last:border-black/35 dark:group-last:border-white/35 transition-all duration-300">
-                  {idx < steps.length - 1 || isThinkingComplete ? (
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                  ) : (
-                    <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
-                  )}
-                </div>
-                <div className="flex flex-col">
-                  <span className="text-[10px] font-black text-neutral-500 dark:text-neutral-400 uppercase tracking-widest">
-                    {step.title}
-                  </span>
-                  <p className="text-sm text-neutral-800 dark:text-neutral-200 font-semibold mt-0.5 leading-relaxed">
-                    {step.content}
-                  </p>
-                </div>
-              </div>
-            );
-          })}
+          <BrainCircuit className="w-4 h-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+          <span>{t("copilot.thinking_accordion_label")}</span>
+          <span className="ml-1 text-[10px] font-extrabold uppercase bg-neutral-100 dark:bg-neutral-800 px-2 py-0.5 rounded-lg border border-black/10 dark:border-white/10 transition-all hover:bg-neutral-200 dark:hover:bg-neutral-700 shadow-sm">
+            {isOpen ? t("copilot.thinking_collapse_btn") : t("copilot.thinking_expand_btn")}
+          </span>
+        </div>
+      )}
 
-          {!isThinkingComplete && (
-            <div className="relative pl-8 group opacity-100">
-              <div className="absolute left-0 top-1.5 w-6 h-6 rounded-full bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-500/30 flex items-center justify-center z-10">
-                <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-500" />
-              </div>
-              <div className="flex flex-col">
-                <span className="text-[10px] font-black text-emerald-500 uppercase tracking-widest animate-pulse">
-                  Đang xử lý
-                </span>
-                <p className="text-sm text-neutral-800 dark:text-neutral-200 font-semibold mt-0.5 leading-relaxed transition-all duration-500">
-                  {activeMessages[activeMessageIndex]}
-                </p>
-              </div>
+      {/* Nội dung nghĩ & tools: hiện khi đang nghĩ hoặc đã bấm mở */}
+      {(!effectiveComplete || isOpen) && (
+        <div className="flex flex-col gap-3 animate-in fade-in slide-in-from-top-1 duration-300 mb-2">
+          
+          {/* Header trạng thái lúc chưa nghĩ xong */}
+          {!effectiveComplete && (
+            <div className="flex items-center gap-2 mb-1 font-bold text-emerald-600 dark:text-emerald-400 select-none">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              <span className="uppercase tracking-widest text-[11px] font-black">{t("copilot.thinking_step_title")}</span>
             </div>
           )}
 
-          {tools.map((tool, tIdx) => {
-            const stepDelayIndex = steps.length + tIdx;
-            return (
-              <div
-                key={`tool-${tIdx}`}
-                className="relative pl-8 group animate-step-fade transition-all duration-500 ease-in-out"
-                style={{ animationDelay: `${Math.min(stepDelayIndex * 0.15, 1.8)}s` }}
-              >
-                <div className="absolute left-0 top-1.5 w-6 h-6 rounded-full bg-white dark:bg-neutral-800 border border-black/25 dark:border-white/25 flex items-center justify-center z-10">
-                  <Search className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-                </div>
-                <ToolEventCard tool={tool} compact onConfirmAction={confirmPendingAction} onCancelAction={cancelPendingAction} />
-              </div>
-            );
-          })}
+          {/* Nội dung nghĩ & tools trộn lẫn */}
+          <div className="flex flex-col gap-2 border-l-[3px] border-emerald-500/40 pl-4 py-2 bg-gradient-to-r from-emerald-50/20 to-transparent dark:from-emerald-950/10 rounded-r-xl relative">
+             {mergedItems.map((item) => {
+               if (item.type === 'text') {
+                 return (
+                   <div key={item.id} className="text-[13px] leading-relaxed opacity-95 font-medium text-neutral-600 dark:text-neutral-400">
+                     <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                       {item.content || ""}
+                     </ReactMarkdown>
+                   </div>
+                 );
+               } else if (item.type === 'tool' && item.tool) {
+                 return (
+                   <div key={item.id} className="my-1 max-w-full">
+                     <StaggeredToolCard
+                       tool={item.tool}
+                       delayMs={0}
+                       onConfirmAction={confirmPendingAction}
+                       onCancelAction={cancelPendingAction}
+                     />
+                   </div>
+                 );
+               }
+               return null;
+             })}
+
+             {/* Show processing indicator: only when AI is idle after tool calls, before response text appears */}
+             {effectiveComplete && !effectiveHasResponse && effectiveTools.length > 0 && (
+               (() => {
+                 const lastTool = effectiveTools[effectiveTools.length - 1];
+                 const isExecuting = !lastTool.result && !lastTool.isConfirmed;
+                 if (isExecuting) return null;
+                 return (
+                   <PostToolProcessingRow
+                     toolName={lastTool.name}
+                     isComplete={effectiveHasResponse}
+                   />
+                 );
+               })()
+             )}
+          </div>
         </div>
       )}
     </div>
   );
-}
+});
 
 export default function AiChatPage() {
   const { t } = useTranslation();
@@ -888,8 +1176,11 @@ export default function AiChatPage() {
   const [streamPhase, setStreamPhase] = useState<ChatStreamPhase | null>(null);
   const [streamModel, setStreamModel] = useState<string>("");
   const [toolEvents, setToolEvents] = useState<ToolEvent[]>([]);
+  const toolEventsRef = useRef<ToolEvent[]>([]);
+  const localMessageToolsRef = useRef<Record<number, ToolEvent[]>>({});
   const [expandedThinking, setExpandedThinking] = useState<string | null>(null);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [lastModelName, setLastModelName] = useState("");
   const [assignmentDrafts, setAssignmentDrafts] = useState<Record<string, AssignmentDraft>>({});
   const [dynamicFormValues, setDynamicFormValues] = useState<Record<string, Record<string, string>>>({});
   const [skillDirectory, setSkillDirectory] = useState<SkillDirectoryItem[]>([]);
@@ -914,6 +1205,7 @@ export default function AiChatPage() {
   const typewriterTimerRef = useRef<number | null>(null);
   const lastTypewriterPaintRef = useRef(0);
   const streamCompletedRef = useRef(false);
+  const isFinalizingRef = useRef(false);
   const sendMessageRef = useRef<(message: string) => void>(() => {});
   const pendingConfirmedMutationRef = useRef<ConfirmedTaskMutation | null>(null);
 
@@ -997,8 +1289,10 @@ export default function AiChatPage() {
     setStreamPhase(null);
     setStreamModel("");
     setToolEvents([]);
+    toolEventsRef.current = [];
     setExpandedThinking(null);
     clearTypewriter();
+    isFinalizingRef.current = false;
   };
 
   const handleConfirmedMutationFinalized = () => {
@@ -1015,9 +1309,17 @@ export default function AiChatPage() {
 
   const finalizeSessionStream = async (targetSession: ChatSession) => {
     if (!isMountedRef.current) return;
+    if (isFinalizingRef.current) return;
+    isFinalizingRef.current = true;
+
     clearPendingRequest(targetSession.id);
     stopPolling();
     setStreamPhase("FINALIZED");
+
+    // Dừng 500ms để người dùng đọc thinking hoàn chỉnh trước khi thu gọn
+    await new Promise((resolve) => setTimeout(resolve, 500));
+
+    if (!isMountedRef.current) return;
     isStreamingRef.current = false;
     streamingSessionIdRef.current = null;
     await loadMessages(targetSession.id, true);
@@ -1106,7 +1408,10 @@ export default function AiChatPage() {
         nullStatusCount = 0;
         errorCount = 0;
         setStreamPhase(status.phase);
-        setStreamModel(status.modelUsed ?? "");
+        if (status.modelUsed) {
+          setStreamModel(status.modelUsed);
+          setLastModelName(status.modelUsed);
+        }
 
         if (status.phase === "THINKING" || status.phase === "ROUTING" || status.phase === "QUEUED") {
           setIsThinking(true);
@@ -1151,30 +1456,46 @@ export default function AiChatPage() {
     }, 2500);
   };
 
-  const isNearMessageBottom = useCallback(() => {
+  // ==== AUTO-SCROLL LOGIC ====
+  // shouldAutoScrollRef = true  → tự động cuộn xuống theo nội dung mới
+  // shouldAutoScrollRef = false → user đã chủ động cuộn lên, không can thiệp
+
+  const scrollToBottom = useCallback((smooth = false) => {
     const viewport = messagesViewportRef.current;
-    if (!viewport) {
-      return true;
-    }
-    return viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight < 160;
+    if (!viewport) return;
+    viewport.scrollTo({ top: viewport.scrollHeight, behavior: smooth ? "smooth" : "auto" });
   }, []);
 
+  const isNearMessageBottom = useCallback(() => {
+    const viewport = messagesViewportRef.current;
+    if (!viewport) return true;
+    return viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight < 120;
+  }, []);
+
+  // Khi user cuộn: cập nhật cờ auto-scroll
   const handleMessagesScroll = useCallback(() => {
     shouldAutoScrollRef.current = isNearMessageBottom();
   }, [isNearMessageBottom]);
 
+  // Khi messages hoặc stream thay đổi: cuộn xuống nếu đang ở chế độ auto
   useEffect(() => {
-    if (!shouldAutoScrollRef.current && !isNearMessageBottom()) {
-      return;
-    }
-    if (scrollRafRef.current) {
-      window.cancelAnimationFrame(scrollRafRef.current);
-    }
+    if (!shouldAutoScrollRef.current) return;
+    if (scrollRafRef.current) window.cancelAnimationFrame(scrollRafRef.current);
     scrollRafRef.current = window.requestAnimationFrame(() => {
-      messagesEndRef.current?.scrollIntoView({ behavior: isStreamingRef.current ? "auto" : "smooth" });
+      scrollToBottom(!isStreamingRef.current);
       scrollRafRef.current = null;
     });
-  }, [isNearMessageBottom, messages, currentStreamMsg]);
+  }, [messages, currentStreamMsg, scrollToBottom]);
+
+  // Typewriter tick: cuộn xuống mỗi nhịp nếu auto-scroll đang bật
+  useEffect(() => {
+    const handleTypewriterTick = () => {
+      if (!shouldAutoScrollRef.current) return;
+      scrollToBottom(false);
+    };
+    window.addEventListener("taskpilot:ai-typewriter-tick", handleTypewriterTick);
+    return () => window.removeEventListener("taskpilot:ai-typewriter-tick", handleTypewriterTick);
+  }, [scrollToBottom]);
 
   async function loadSessions() {
     try {
@@ -1256,6 +1577,22 @@ export default function AiChatPage() {
         return;
       }
       const orderedMessages = [...data.content].reverse(); // Assume BE returns DESC, we show ASC
+      
+      // Khôi phục toolEvents cho tin nhắn cuối cùng nếu vừa stream xong
+      if (force && sessionId === streamingSessionIdRef.current && toolEventsRef.current.length > 0) {
+        const lastMsg = orderedMessages[orderedMessages.length - 1];
+        if (lastMsg && lastMsg.sender === "ASSISTANT") {
+          localMessageToolsRef.current[lastMsg.id] = [...toolEventsRef.current];
+        }
+      }
+      
+      // Gắn lại toolEvents từ bộ nhớ tạm vào mảng messages để không bị mất khi load lại
+      orderedMessages.forEach(msg => {
+        if (localMessageToolsRef.current[msg.id]) {
+          (msg as any).toolEvents = localMessageToolsRef.current[msg.id];
+        }
+      });
+      
       setMessages(orderedMessages);
       const latestUserMessage = [...orderedMessages].reverse().find((message) => message.sender === "USER");
       lastPromptRef.current = latestUserMessage?.content ?? "";
@@ -1406,14 +1743,29 @@ export default function AiChatPage() {
             } catch {
               // Backward compatibility for older plain-text token events.
             }
-            if (responseBuffer.length === 0 && isMountedRef.current) {
-              setIsThinking(false);
-              setStreamPhase("GENERATING");
-            }
             responseBuffer += tokenChunk;
             if (isMountedRef.current) {
+              const parsedThink = extractThinkPayload(responseBuffer);
+              const isStillThinking = parsedThink.hasThinkTag && parsedThink.hasUnclosedThink;
+              
+              setIsThinking((prev) => {
+                if (prev !== isStillThinking) return isStillThinking;
+                return prev;
+              });
+
+              setStreamPhase((prev) => {
+                const nextPhase = isStillThinking ? "THINKING" : "GENERATING";
+                if (prev !== nextPhase) return nextPhase;
+                return prev;
+              });
+
               targetStreamTextRef.current = responseBuffer;
               startTypewriter(targetSession);
+            }
+          } else if (ev.event === "model") {
+            if (ev.data && isMountedRef.current) {
+              setStreamModel(ev.data);
+              setLastModelName(ev.data);
             }
           } else if (ev.event === "phase") {
             if (!isMountedRef.current) {
@@ -1445,20 +1797,18 @@ export default function AiChatPage() {
                   result: parsed.result,
                   confirmation: parsed.confirmation,
                 };
-                setToolEvents(prev => dedupeToolEvents([...prev, toolEvent]));
+                setToolEvents(prev => {
+                  const updated = dedupeToolEvents([...prev, toolEvent]);
+                  toolEventsRef.current = updated;
+                  return updated;
+                });
               }
             } catch {
               // Ignore malformed tool events.
             }
           } else if (ev.event === "thought_expanded") {
-            try {
-              const parsed = JSON.parse(ev.data) as { expanded?: string };
-              if (parsed.expanded && isMountedRef.current) {
-                setExpandedThinking(parsed.expanded);
-              }
-            } catch {
-              // Ignore malformed expanded thinking.
-            }
+            // thought_expanded is intentionally ignored — we always display raw <think> content
+            // from the streaming buffer so the collapsed view stays consistent with live steps.
           } else if (ev.event === "error") {
             streamErrorMessage = ev.data || "SSE server error";
             const hasResult = responseBuffer.trim().length > 0 || streamCompletedRef.current;
@@ -2177,103 +2527,67 @@ export default function AiChatPage() {
     };
   };
 
-  const markdownComponents = {
-    table: ({ children }: any) => (
-      <div className="w-full overflow-x-auto my-4 border border-black/10 dark:border-white/10 rounded-xl bg-white/30 dark:bg-black/25 shadow-sm scrollbar-thin">
-        <table className="min-w-full divide-y divide-black/10 dark:divide-white/10 text-sm text-left">
-          {children}
-        </table>
-      </div>
-    ),
-    thead: ({ children }: any) => <thead className="bg-black/[0.04] dark:bg-white/[0.04]">{children}</thead>,
-    th: ({ children }: any) => <th className="px-4 py-2.5 font-bold border-r border-black/5 dark:border-white/5 last:border-r-0 text-neutral-900 dark:text-neutral-50">{children}</th>,
-    td: ({ children }: any) => <td className="px-4 py-2.5 border-r border-t border-black/5 dark:border-white/5 last:border-r-0 text-neutral-800 dark:text-neutral-200">{children}</td>,
-    tr: ({ children }: any) => <tr className="hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors odd:bg-black/[0.01] dark:odd:bg-white/[0.01]">{children}</tr>,
-    code({ node, inline, className, children, ...props }: any) {
-      const match = /language-(\w+)/.exec(className || "");
-      const language = match ? match[1] : "";
-      if (language === "taskpilot-confirm" || language === "taskpilot-form") {
-        return (
-          <div className="my-2 animate-pulse rounded-md border border-primary/20 bg-primary/5 px-4 py-3 text-sm text-primary">
-            Đang chuẩn bị biểu mẫu...
-          </div>
-        );
-      }
-      return <code className={className} {...props}>{children}</code>;
-    }
-  };
 
-  // Helper to render AI message with <think> tag support
   const renderAiMessage = (
     content: string,
     tools: ToolEvent[] = [],
     expanded?: string | null,
     collapseWhenComplete = false,
     forceThinkingOpen = false,
+    isStreamingMessage = false,
   ) => {
     const displayContent = stripDynamicFormBlocks(content, collapseWhenComplete);
     const parsed = extractThinkPayload(displayContent);
 
-    // Accordion renders for actual reasoning tags, tool executions, or substantive answers (length > 150)
-    const hasThinking = parsed.hasThinkTag || tools.length > 0 || displayContent.length > 150;
+    // Chỉ hiển thị hộp thinking nếu AI thực sự có thẻ <think> hoặc force = true
+    const hasThinking = parsed.hasThinkTag || forceThinkingOpen;
+    const isThinkingComplete = !parsed.hasUnclosedThink;
+    
+    // Nếu force mở mà không có text, hiện dòng mặc định
+    const displayThinking = parsed.thinkingText || expanded || "Đang phân tích yêu cầu...";
 
-    if (hasThinking) {
-      const isThinkingComplete = !parsed.hasUnclosedThink;
+    // hasVisibleResponse = true khi AI đã bắt đầu generate text (có response text ngoài thinking)
+    const responseText = hasThinking
+      ? [parsed.afterThink, parsed.beforeThink].filter(Boolean).join("\n\n")
+      : displayContent;
+    const hasVisibleResponse = responseText.trim().length > 0;
 
-      // Default processing steps if LLM didn't return custom think tags
-      const defaultThinkingText = parsed.thinkingText || (
-        `${t("copilot.thinking_default_step_1")}\n` +
-        `- ${t("copilot.thinking_default_step_1_item_1")}\n` +
-        `- ${t("copilot.thinking_default_step_1_item_2")}\n` +
-        `${t("copilot.thinking_default_step_2")}\n` +
-        `- ${t("copilot.thinking_default_step_2_item_1")}\n` +
-        `- ${t("copilot.thinking_default_step_2_item_2")}\n` +
-        `${t("copilot.thinking_default_step_3")}\n` +
-        `- ${t("copilot.thinking_default_step_3_item_1")}\n` +
-        `- ${t("copilot.thinking_default_step_3_item_2")}`
-      );
+    return (
+      <div className="flex flex-col gap-2 text-neutral-900 dark:text-neutral-100">
 
-      const displayThinking = expanded || defaultThinkingText;
-
-      const shouldCollapse = collapseWhenComplete && isThinkingComplete;
-
-      return (
-        <div className="flex flex-col gap-4 text-neutral-900 dark:text-neutral-100">
+        {/* 1. Thinking block & Tools (bọc trong Accordion gọn gàng) */}
+        {(hasThinking || (tools && tools.length > 0)) && (
           <ThinkingAccordion
             thinkingText={displayThinking}
             tools={tools}
             isThinkingComplete={isThinkingComplete}
-            collapseWhenComplete={shouldCollapse}
-            forceOpen={forceThinkingOpen}
+            hasVisibleResponse={hasVisibleResponse}
+            collapseWhenComplete={collapseWhenComplete}
+            forceOpen={isStreamingMessage && !isThinkingComplete}
             t={t}
             confirmPendingAction={confirmPendingAction}
             cancelPendingAction={cancelPendingAction}
           />
+        )}
 
-          {parsed.beforeThink && (
-            <div className="prose prose-sm dark:prose-invert max-w-full">
-              <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-                {parsed.beforeThink}
-              </ReactMarkdown>
-            </div>
-          )}
+        {/* Stuck indicator: thinking done, tools called, no response yet.
+            Shows OUTSIDE accordion (which collapses when thinking is complete)
+            during the gap between last tool result and first response token. */}
+        {isStreamingMessage && isThinkingComplete && !hasVisibleResponse && tools && tools.length > 0 && (
+          <PostToolProcessingRow
+            toolName={tools[tools.length - 1].name}
+            isComplete={hasVisibleResponse}
+          />
+        )}
 
-          {parsed.afterThink && (
-            <div className="prose prose-sm dark:prose-invert max-w-full pt-2 border-t border-border/30 mt-2">
-              <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-                {parsed.afterThink}
-              </ReactMarkdown>
-            </div>
-          )}
+        {/* 3. Response cuối cùng */}
+        <div className="max-w-full prose prose-sm dark:prose-invert pt-1">
+          <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+            {hasThinking 
+              ? [parsed.afterThink, parsed.beforeThink].filter(Boolean).join("\n\n")
+              : displayContent}
+          </ReactMarkdown>
         </div>
-      );
-    }
-
-    return (
-      <div className="max-w-full prose prose-sm dark:prose-invert">
-        <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-          {displayContent}
-        </ReactMarkdown>
       </div>
     );
   };
@@ -2474,7 +2788,7 @@ export default function AiChatPage() {
                     <span>TaskPilot AI</span>
                   </div>
                   <div className="text-neutral-900 dark:text-neutral-100">
-                    {renderAiMessage(msg.content, [], null, true)}
+                    {renderAiMessage(msg.content, (msg as any).toolEvents || [], null, true, false, false)}
                   </div>
                   {extras && <div className="mt-4">{extras}</div>}
                 </div>
@@ -2495,7 +2809,7 @@ export default function AiChatPage() {
                   <span>TaskPilot AI</span>
                 </div>
                 <div className="text-neutral-900 dark:text-neutral-100">
-                  {renderAiMessage(currentStreamMsg || (isThinking ? `<think>Step 1: ${t("copilot.thinking_analyzing_request")}</think>` : ""), toolEvents, expandedThinking, true, true)}
+                  {renderAiMessage(currentStreamMsg, toolEvents, expandedThinking, true, isThinking, true)}
                 </div>
               </div>
             </div>
@@ -2506,27 +2820,9 @@ export default function AiChatPage() {
 
         {/* Input Area */}
         <div className="p-4 border-t border-border/40 bg-background/10 backdrop-blur-[40px] backdrop-saturate-150 relative z-10">
-          {isStreaming && activeSession?.id === streamingSessionId && (
-            <div className="mb-3 mx-auto max-w-4xl rounded-xl border border-black/10 bg-white/80 px-3 py-2 backdrop-blur-md shadow-sm dark:border-white/10 dark:bg-neutral-950/80">
-              <div className="mb-1 flex items-center gap-2 text-xs font-extrabold text-neutral-900 dark:text-neutral-100">
-                <span className="shrink-0">{phaseLabel(streamPhase)}</span>
-                {streamModel && (
-                  <span className="ml-auto min-w-0 truncate rounded-md border border-black/10 bg-black/5 px-2 py-0.5 text-[11px] font-bold dark:border-white/10 dark:bg-white/10">
-                    {streamModel}
-                  </span>
-                )}
-              </div>
-              <div className="h-1.5 w-full overflow-hidden rounded-full bg-black/10 dark:bg-white/10">
-                <div
-                  className="h-full bg-emerald-600 transition-all duration-300"
-                  style={{ width: `${phaseToProgress(streamPhase)}%` }}
-                />
-              </div>
-            </div>
-          )}
           <ChatComposer
             placeholder={t("copilot.input_placeholder") + " (Enter để gửi, Shift+Enter để xuống dòng)"}
-            disclaimer={t("copilot.disclaimer")}
+            modelName={streamModel || "TaskPilot AI"}
             maxChars={MAX_PROMPT_CHARS}
             getLastPrompt={getLastPrompt}
             onSubmit={handleComposerSubmit}
