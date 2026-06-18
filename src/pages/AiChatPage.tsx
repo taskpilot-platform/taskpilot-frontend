@@ -452,8 +452,8 @@ function notifyTaskMutation(mutation: ConfirmedTaskMutation) {
 function stripThinkArtifacts(value?: string | null) {
   if (!value) return "";
   return value
-    .replace(/<\s*d?think\b[^>]*>[\s\S]*?<\s*\/\s*d?think\s*>/gi, " ")
-    .replace(/<\/?\s*d?think\b[^>]*>/gi, " ")
+    .replace(/<\s*(?:d?think|thought)\b[^>]*>[\s\S]*?<\s*\/\s*(?:d?think|thought)\s*>/gi, " ")
+    .replace(/<\/?\s*(?:d?think|thought)\b[^>]*>/gi, " ")
     .replace(/```taskpilot-(?:form|confirm)\s*[\s\S]*?```/gi, " ")
     .replace(/\s+/g, " ")
     .trim();
@@ -2475,9 +2475,9 @@ export default function AiChatPage() {
 
 
   const extractThinkPayload = (content: string) => {
-    const blockPattern = /<\s*d?think\b[^>]*>([\s\S]*?)<\s*\/\s*d?think\s*>/gi;
-    const tagPattern = /<\/?\s*d?think\b[^>]*>/gi;
-    const openTagPattern = /<\s*d?think\b[^>]*>/i;
+    const blockPattern = /<\s*(?:d?think|thought)\b[^>]*>([\s\S]*?)<\s*\/\s*(?:d?think|thought)\s*>/gi;
+    const tagPattern = /<\/?\s*(?:d?think|thought)\b[^>]*>/gi;
+    const openTagPattern = /<\s*(?:d?think|thought)\b[^>]*>/i;
 
     const thinkBlocks: string[] = [];
     let beforeThink = content;
