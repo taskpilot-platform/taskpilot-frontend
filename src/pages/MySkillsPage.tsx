@@ -242,54 +242,56 @@ export default function MySkillsPage() {
   };
 
   return (
-    <div className="min-h-screen space-y-6 p-6 md:p-8">
+    <div className="min-h-screen space-y-6 p-4 sm:p-6 md:p-8">
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div className="space-y-1">
-          <h1 className="text-3xl font-bold tracking-tight">{t("skills.title")}</h1>
+          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t("skills.title")}</h1>
           <p className="text-muted-foreground">{t("skills.desc")}</p>
         </div>
 
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-2 rounded-lg border p-1">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-2 w-full md:w-auto">
+          <div className="flex items-center gap-2 rounded-lg border p-1 overflow-x-auto w-full sm:w-auto shrink-0 bg-background/50">
             <Button
               type="button"
               variant={activeTab === "overview" ? "default" : "ghost"}
-              className="gap-2"
+              className="flex-1 sm:flex-initial gap-2 text-xs h-8"
               onClick={() => setActiveTab("overview")}
             >
-              <ChartColumn className="h-4 w-4" />
+              <ChartColumn className="h-3.5 w-3.5" />
               {t("skills.tab_overview")}
             </Button>
             <Button
               type="button"
               variant={activeTab === "manage" ? "default" : "ghost"}
-              className="gap-2"
+              className="flex-1 sm:flex-initial gap-2 text-xs h-8"
               onClick={() => setActiveTab("manage")}
             >
-              <Wrench className="h-4 w-4" />
+              <Wrench className="h-3.5 w-3.5" />
               {t("skills.tab_manage")}
             </Button>
           </div>
 
-          <Button
-            type="button"
-            className="gap-2"
-            onClick={() => handleModeChange(mode === "create" ? "list" : "create")}
-            disabled={isMutating || isLoading || activeTab !== "manage"}
-          >
-            <PlusCircle className="h-4 w-4" />
-            {mode === "create" ? t("projects.cancel_btn") : t("skills.add_title")}
-          </Button>
-          <Button
-            type="button"
-            variant="secondary"
-            className="gap-2"
-            onClick={() => void loadPageData()}
-            disabled={isMutating || isLoading}
-          >
-            <RefreshCw className="h-4 w-4" />
-            {t("skills.reload_btn")}
-          </Button>
+          <div className="grid grid-cols-2 gap-2 w-full sm:flex sm:items-center sm:w-auto shrink-0">
+            <Button
+              type="button"
+              className="gap-2 text-xs h-8"
+              onClick={() => handleModeChange(mode === "create" ? "list" : "create")}
+              disabled={isMutating || isLoading || activeTab !== "manage"}
+            >
+              <PlusCircle className="h-3.5 w-3.5" />
+              {mode === "create" ? t("projects.cancel_btn") : t("skills.add_title")}
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              className="gap-2 text-xs h-8"
+              onClick={() => void loadPageData()}
+              disabled={isMutating || isLoading}
+            >
+              <RefreshCw className="h-3.5 w-3.5" />
+              {t("skills.reload_btn")}
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -381,7 +383,8 @@ export default function MySkillsPage() {
                 </Button>
               </form>
 
-              <Table>
+              <div className="overflow-x-auto">
+              <Table className="min-w-[600px]">
                 <TableHeader>
                   <TableRow>
                     <TableHead>ID</TableHead>
@@ -421,6 +424,7 @@ export default function MySkillsPage() {
                   )}
                 </TableBody>
               </Table>
+              </div>
 
               <div className="mt-4 flex items-center justify-between">
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">

@@ -198,10 +198,10 @@ export default function AdminUsersPage() {
   };
 
   return (
-    <div className="min-h-screen space-y-6 p-6 md:p-8">
+    <div className="min-h-screen space-y-6 p-4 sm:p-6 md:p-8">
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div className="space-y-1">
-          <h1 className="text-3xl font-bold tracking-tight">{t("admin.users_management")}</h1>
+          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t("admin.users_management")}</h1>
           <p className="text-muted-foreground">{t("admin.users_desc")}</p>
         </div>
 
@@ -261,7 +261,8 @@ export default function AdminUsersPage() {
               </div>
             ) : (
               <>
-                <Table>
+                <div className="overflow-x-auto">
+                <Table className="min-w-[600px]">
                   <TableHeader>
                     <TableRow>
                       <TableHead>{t("admin.col_id")}</TableHead>
@@ -311,6 +312,7 @@ export default function AdminUsersPage() {
                     )}
                   </TableBody>
                 </Table>
+                </div>
 
                 <div className="mt-4 flex items-center justify-between">
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">

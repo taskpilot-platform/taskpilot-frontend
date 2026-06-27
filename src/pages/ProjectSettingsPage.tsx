@@ -314,7 +314,7 @@ export default function ProjectSettingsPage() {
                 <FormField control={form.control} name="description" render={({ field }) => (
                   <FormItem><FormLabel>Description</FormLabel><FormControl><Textarea className="min-h-[100px]" {...field} disabled={isArchived} /></FormControl></FormItem>
                 )} />
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <FormField control={form.control} name="status" render={({ field }) => (
                     <FormItem><FormLabel>Status</FormLabel>
                       <Select onValueChange={field.onChange} value={field.value} disabled={isArchived}>
@@ -411,7 +411,7 @@ export default function ProjectSettingsPage() {
                 const isCurrentUser = m.userId === myUserId;
 
                 return (
-                  <div key={m.userId} className="flex items-center justify-between p-4 bg-card hover:bg-muted/30 transition-colors">
+                  <div key={m.userId} className="flex flex-col gap-3 p-4 bg-card hover:bg-muted/30 transition-colors sm:flex-row sm:items-center sm:justify-between">
                     <div className="flex items-center gap-3">
                       <div className="h-10 w-10 rounded-full bg-gradient-to-br from-blue-500/20 to-blue-500/5 flex items-center justify-center text-sm font-bold text-blue-600 border border-blue-500/20">
                         {initials}
@@ -510,7 +510,7 @@ export default function ProjectSettingsPage() {
             <CardDescription>Destructive actions that cannot be easily undone.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="flex items-center justify-between p-4 border border-red-500/20 rounded-lg bg-red-500/5">
+            <div className="flex flex-col gap-3 p-4 border border-red-500/20 rounded-lg bg-red-500/5 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h4 className="font-semibold text-sm text-red-600 dark:text-red-400">{t("projects.leave_title", { defaultValue: "Rời dự án" })}</h4>
                 <p className="text-sm text-muted-foreground">{t("projects.leave_desc", { defaultValue: "Leave this project. You will lose access to all its boards, tasks, and history." })}</p>
@@ -521,7 +521,7 @@ export default function ProjectSettingsPage() {
               </Button>
             </div>
 
-            <div className="flex items-center justify-between p-4 border border-red-500/20 rounded-lg bg-red-500/5">
+            <div className="flex flex-col gap-3 p-4 border border-red-500/20 rounded-lg bg-red-500/5 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h4 className="font-semibold text-sm">Archive Project</h4>
                 <p className="text-sm text-muted-foreground">Mark the project as archived. It will become read-only.</p>
@@ -532,7 +532,7 @@ export default function ProjectSettingsPage() {
               </Button>
             </div>
 
-            <div className="flex items-center justify-between p-4 border border-red-500/30 rounded-lg bg-red-500/10">
+            <div className="flex flex-col gap-3 p-4 border border-red-500/30 rounded-lg bg-red-500/10 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h4 className="font-semibold text-sm text-red-600 dark:text-red-400">Delete Project</h4>
                 <p className="text-sm text-muted-foreground">Permanently delete this project and all its data. This action is irreversible.</p>

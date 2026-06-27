@@ -162,10 +162,10 @@ export default function NotificationsPage() {
   };
 
   return (
-    <div className="min-h-screen space-y-6 p-6 md:p-8">
-      <div className="flex items-center justify-between gap-4">
+    <div className="min-h-screen space-y-6 p-4 sm:p-6 md:p-8">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="space-y-1">
-          <h1 className="text-3xl font-bold tracking-tight">{t("notifications.title")}</h1>
+          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t("notifications.title")}</h1>
           <p className="text-muted-foreground">{t("notifications.desc")}</p>
         </div>
         <Button
@@ -218,7 +218,7 @@ export default function NotificationsPage() {
                     item.isRead ? "bg-card" : "bg-accent/30"
                   } ${item.linkAction ? "cursor-pointer hover:border-primary/50 hover:bg-accent/20" : ""}`}
                 >
-                  <div className="mb-2 flex items-start justify-between gap-2">
+                  <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                     <div className="flex items-center gap-2">
                       <Bell className="mt-0.5 h-4 w-4 text-muted-foreground" />
                       <h3 className="font-medium">{item.title}</h3>

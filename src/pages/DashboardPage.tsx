@@ -76,7 +76,7 @@ export default function DashboardPage() {
   });
 
   return (
-    <div className="min-h-screen space-y-8 p-6 md:p-8 relative max-w-7xl mx-auto">
+    <div className="min-h-screen space-y-6 p-3 sm:p-6 md:p-8 relative max-w-7xl mx-auto">
       {isLoading && (
         <div className="fixed inset-0 z-[100] bg-background/50 backdrop-blur-xl flex flex-col items-center justify-center text-muted-foreground transition-all duration-300">
           <Loader2 className="mb-4 h-12 w-12 animate-spin text-primary" />
@@ -94,7 +94,7 @@ export default function DashboardPage() {
               {currentDate}
             </div>
             <div>
-              <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight text-foreground">
+              <h1 className="text-2xl sm:text-4xl md:text-5xl font-extrabold tracking-tight text-foreground">
                 {t("dashboard.welcome", { defaultValue: "Welcome back," })} <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-primary/60">{profile?.fullName?.split(' ')[0] || 'User'}!</span>
               </h1>
               <p className="text-lg text-muted-foreground mt-2 max-w-xl">

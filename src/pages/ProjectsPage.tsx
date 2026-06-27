@@ -248,14 +248,14 @@ export default function ProjectsPage() {
   };
 
   return (
-    <div className="min-h-screen space-y-6 p-6 md:p-8 flex flex-col h-screen overflow-hidden">
+    <div className="min-h-screen space-y-4 p-3 sm:p-6 md:p-8 flex flex-col xl:h-screen xl:overflow-hidden">
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between shrink-0">
         <div className="space-y-1">
-          <h1 className="text-3xl font-bold tracking-tight">{t("projects.title")}</h1>
+          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t("projects.title")}</h1>
           <p className="text-muted-foreground">{t("projects.desc")}</p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center shrink-0">
           <Button
             type="button"
             className="gap-2"
@@ -308,7 +308,7 @@ export default function ProjectsPage() {
             ) : (
               <>
                 <div className="flex-1 overflow-auto rounded-md border min-h-0">
-                <Table>
+                <Table className="min-w-[600px]">
                   <TableHeader>
                     <TableRow>
                       <TableHead>{t("projects.col_project")}</TableHead>
@@ -351,7 +351,7 @@ export default function ProjectsPage() {
                 </Table>
                 </div>
 
-                <div className="mt-4 flex items-center justify-between shrink-0">
+                <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between shrink-0">
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <span>{t("projects.show")}</span>
                     <select
@@ -449,7 +449,7 @@ export default function ProjectsPage() {
                         </select>
                       </div>
 
-                      <div className="grid grid-cols-2 gap-2">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                         <div className="space-y-1.5">
                           <Label htmlFor="startDate">{t("projects.start_date")}</Label>
                           <Input

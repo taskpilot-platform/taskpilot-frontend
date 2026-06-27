@@ -416,3 +416,31 @@ html.dark .Toastify__toast {
   width: 20px !important;
   height: 20px !important;
 }
+
+/* ===== Mobile Responsive Improvements ===== */
+@media (max-width: 767px) {
+  /* Increase touch target size for interactive elements */
+  button:not([class*="h-"]),
+  [role="button"]:not([class*="h-"]) {
+    min-height: 40px;
+  }
+
+  /* Prevent iOS zoom on input focus */
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+
+  /* Safe area padding for devices with notch/home indicator */
+  .mobile-safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  /* Smooth scrolling on mobile */
+  .overflow-auto,
+  .overflow-x-auto,
+  .overflow-y-auto {
+    -webkit-overflow-scrolling: touch;
+  }
+}

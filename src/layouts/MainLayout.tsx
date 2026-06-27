@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { fetchEventSource } from "@microsoft/fetch-event-source";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import logo from "@/assets/logo.svg";
@@ -129,6 +130,7 @@ export default function MainLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const { t, i18n } = useTranslation();
+  const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [userRole, setUserRole] = useState<string | null>(localStorage.getItem("userRole"));
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -247,8 +249,135 @@ export default function MainLayout() {
 
   return (
     <div className="flex h-screen bg-background text-foreground">
+      {/* Mobile Header */}
+      <div className="fixed inset-x-0 top-0 z-50 flex h-14 items-center justify-between border-b bg-card px-4 md:hidden">
+        <Sheet open={isMobileNavOpen} onOpenChange={setIsMobileNavOpen}>
+          <SheetTrigger asChild>
+            <Button variant="ghost" size="icon">
+              <Menu className="h-5 w-5" />
+            </Button>
+          </SheetTrigger>
+          <SheetContent side="left" className="w-64 p-0">
+            <div className="flex h-full flex-col bg-card py-4 px-4 text-card-foreground">
+              {/* Logo */}
+              <div className="mb-4 flex items-center gap-2">
+                <img src={logo} alt="TaskPilot logo" className="h-8 w-8" />
+                <h2 className="text-lg font-bold tracking-tight">
+                  <span className="text-[#103E6A]">task</span>
+                  <span className="text-[#0394B1]">pilot</span>
+                </h2>
+              </div>
+
+              {/* Navigation - same items as desktop but always expanded */}
+              <nav className="space-y-2 w-full flex-1">
+                {/* Language toggle */}
+                <Button variant="ghost" size="sm" onClick={toggleLanguage} className="mb-2 w-full justify-start gap-2">
+                  <img 
+                    src={i18n.language === "vi" ? "https://flagcdn.com/w40/vn.png" : "https://flagcdn.com/w40/gb.png"} 
+                    alt={i18n.language === "vi" ? "Tiếng Việt" : "English"}
+                    className="h-3.5 w-5 object-cover rounded-sm shadow-sm select-none"
+                  />
+                  <span>{i18n.language === "vi" ? "Tiếng Việt" : "English"}</span>
+                </Button>
+
+                {/* All NavLinks - use onClick to close sheet after navigation */}
+                <NavLink to="/" onClick={() => setIsMobileNavOpen(false)} className={({isActive}) => `flex items-center gap-2 rounded-md px-3 py-2 transition-colors ${isActive ? "bg-accent font-medium" : "hover:bg-accent"}`} title={t("layout.dashboard")}>
+                  <LayoutDashboard className="h-4 w-4 shrink-0" />
+                  <span>{t("layout.dashboard")}</span>
+                </NavLink>
+                
+                <NavLink to={projectStorage.getLastProjectId() ? `/projects/${projectStorage.getLastProjectId()}` : "/projects"} onClick={() => setIsMobileNavOpen(false)} className={({isActive}) => `flex items-center gap-2 rounded-md px-3 py-2 transition-colors ${isActive ? "bg-accent font-medium" : "hover:bg-accent"}`} title={t("layout.projects")}>
+                  <FolderKanban className="h-4 w-4 shrink-0" />
+                  <span>{t("layout.projects")}</span>
+                </NavLink>
+
+                <NavLink to="/notifications" onClick={() => setIsMobileNavOpen(false)} className={({isActive}) => `flex items-center gap-2 rounded-md px-3 py-2 transition-colors ${isActive ? "bg-accent font-medium" : isNotificationBlinking ? "bg-amber-100 text-amber-900 hover:bg-amber-100 dark:bg-amber-900/30 dark:text-amber-200" : "hover:bg-accent"}`} title={t("layout.notifications")}>
+                  <Bell className={`h-4 w-4 shrink-0 ${isNotificationBlinking ? "animate-pulse" : ""}`} />
+                  <div className="flex items-center gap-2">
+                    <span>{t("layout.notifications")}</span>
+                    {unreadCount > 0 && <Badge className={isNotificationBlinking ? "animate-pulse bg-amber-500 text-amber-950" : ""}>{unreadCount > 99 ? "99+" : unreadCount}</Badge>}
+                  </div>
+                </NavLink>
+
+                <NavLink to="/comments" onClick={() => setIsMobileNavOpen(false)} className={({isActive}) => `flex items-center gap-2 rounded-md px-3 py-2 transition-colors ${isActive ? "bg-accent font-medium" : "hover:bg-accent"}`} title={t("layout.comments", { defaultValue: "Comments" })}>
+                  <MessageSquare className="h-4 w-4 shrink-0" />
+                  <span>{t("layout.comments", { defaultValue: "Comments" })}</span>
+                </NavLink>
+
+                <NavLink to="/copilot" onClick={() => setIsMobileNavOpen(false)} className={({isActive}) => `flex items-center gap-2 rounded-md px-3 py-2 transition-colors ${isActive ? "bg-accent font-medium text-indigo-600" : "hover:bg-accent text-indigo-600/80"}`} title={t("layout.copilot", { defaultValue: "Copilot AI Chat" })}>
+                  <Bot className="h-4 w-4 shrink-0" />
+                  <span>{t("layout.copilot", { defaultValue: "Copilot" })}</span>
+                </NavLink>
+              </nav>
+
+              {/* Bottom section */}
+              <div className="mt-auto">
+                <div className="mb-3 space-y-2">
+                  <NavLink to="/profile" onClick={() => setIsMobileNavOpen(false)} className={({isActive}) => `flex items-center gap-2 rounded-md px-3 py-2 transition-colors ${isActive ? "bg-accent font-medium" : "hover:bg-accent"}`} title={t("layout.profile")}>
+                    {profile ? <UserAvatar avatarUrl={profile.avatarUrl} name={profile.fullName || `User ${profile.id}`} className="h-5 w-5 shrink-0 bg-transparent" /> : <UserRound className="h-4 w-4 shrink-0" />}
+                    <span>{t("layout.profile")}</span>
+                  </NavLink>
+
+                  <NavLink to="/my-skills" onClick={() => setIsMobileNavOpen(false)} className={({isActive}) => `flex items-center gap-2 rounded-md px-3 py-2 transition-colors ${isActive ? "bg-accent font-medium" : "hover:bg-accent"}`} title={t("layout.my_skills")}>
+                    <ShieldCheck className="h-4 w-4 shrink-0" />
+                    <span>{t("layout.my_skills")}</span>
+                  </NavLink>
+
+                  {userRole === "ADMIN" && (
+                    <div className="pt-2">
+                      <p className="px-3 text-xs font-semibold uppercase text-muted-foreground">Admin</p>
+                      <NavLink to="/admin/users" onClick={() => setIsMobileNavOpen(false)} className={({isActive}) => `mt-2 flex items-center gap-2 rounded-md px-3 py-2 transition-colors ${isActive ? "bg-accent font-medium" : "hover:bg-accent"}`} title={t("admin.users_title")}>
+                        <Users className="h-4 w-4 shrink-0" />
+                        <span>{t("admin.users_title")}</span>
+                      </NavLink>
+                      <NavLink to="/admin/skills" onClick={() => setIsMobileNavOpen(false)} className={({isActive}) => `mt-1 flex items-center gap-2 rounded-md px-3 py-2 transition-colors ${isActive ? "bg-accent font-medium" : "hover:bg-accent"}`} title={t("admin.global_skills")}>
+                        <Code className="h-4 w-4 shrink-0" />
+                        <span>{t("admin.global_skills")}</span>
+                      </NavLink>
+                      <NavLink to="/admin/settings" onClick={() => setIsMobileNavOpen(false)} className={({isActive}) => `mt-1 flex items-center gap-2 rounded-md px-3 py-2 transition-colors ${isActive ? "bg-accent font-medium" : "hover:bg-accent"}`} title={t("admin.system_settings.title", { defaultValue: "Cấu hình AI & Hệ thống" })}>
+                        <Settings className="h-4 w-4 shrink-0" />
+                        <span className="truncate">{t("admin.system_settings.title", { defaultValue: "Cấu hình AI & Hệ thống" })}</span>
+                      </NavLink>
+                    </div>
+                  )}
+                </div>
+
+                <Button onClick={() => { setIsMobileNavOpen(false); void handleLogout(); }} variant="outline" className="w-full gap-2" disabled={isLoading} title={isLoading ? t("layout.logging_out") : t("layout.logout")}>
+                  <LogOut className="h-4 w-4 shrink-0" />
+                  <span>{isLoading ? t("layout.logging_out") : t("layout.logout")}</span>
+                </Button>
+              </div>
+            </div>
+          </SheetContent>
+        </Sheet>
+
+        {/* Center logo */}
+        <div className="flex items-center gap-2">
+          <img src={logo} alt="TaskPilot" className="h-6 w-6" />
+          <span className="text-sm font-bold">
+            <span className="text-[#103E6A]">task</span>
+            <span className="text-[#0394B1]">pilot</span>
+          </span>
+        </div>
+
+        {/* Right side: notification + user avatar */}
+        <div className="flex items-center gap-1">
+          <NavLink to="/notifications" className="relative p-2">
+            <Bell className={`h-5 w-5 ${isNotificationBlinking ? "animate-pulse text-amber-500" : "text-muted-foreground"}`} />
+            {unreadCount > 0 && (
+              <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-bold text-destructive-foreground">
+                {unreadCount > 99 ? "99+" : unreadCount}
+              </span>
+            )}
+          </NavLink>
+          <NavLink to="/profile">
+            {profile ? <UserAvatar avatarUrl={profile.avatarUrl} name={profile.fullName || ''} className="h-7 w-7 shrink-0" /> : <UserRound className="h-5 w-5 text-muted-foreground" />}
+          </NavLink>
+        </div>
+      </div>
+
       <aside
-        className={`flex flex-col border-r bg-card py-4 text-card-foreground transition-all duration-300 ${isCollapsed ? "w-16 items-center px-2" : "w-64 px-4"
+        className={`hidden md:flex flex-col border-r bg-card py-4 text-card-foreground transition-all duration-300 ${isCollapsed ? "w-16 items-center px-2" : "w-64 px-4"
           }`}
       >
         <div className={`mb-4 flex items-center ${isCollapsed ? "flex-col gap-4" : "justify-between"}`}>
@@ -447,7 +576,7 @@ export default function MainLayout() {
         </div>
       </aside>
 
-      <main className="flex-1 overflow-auto">
+      <main className="flex-1 overflow-auto pt-14 md:pt-0">
         <Outlet />
       </main>
     </div>

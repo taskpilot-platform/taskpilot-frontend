@@ -2,11 +2,14 @@
 import { memo, useCallback, useState, useRef, useEffect, useMemo } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Send, Bot, User, Trash2, Plus, Loader2, ChevronRight, ChevronLeft, CheckCircle2, Search, BrainCircuit, Database, PencilLine, ListChecks, Wand2, X, Check } from "lucide-react";
+import { Send, Bot, User, Trash2, Plus, Loader2, ChevronRight, ChevronLeft, CheckCircle2, Search, BrainCircuit, Database, PencilLine, ListChecks, Wand2, X, Check, Menu } from "lucide-react";
 import { fetchEventSource } from "@microsoft/fetch-event-source";
 import { toast } from "react-toastify";
 import { useTranslation } from "react-i18next";
+import { Sheet, SheetContent, SheetTrigger, SheetTitle, SheetDescription } from "@/components/ui/sheet";
+import { useIsMobile } from "@/hooks/useIsMobile";
 
+import logo from "@/assets/logo.svg";
 import { useAuthStore } from "@/stores/auth.store";
 import { aiService, type ChatSession, type ChatMessage } from "@/services/ai.service";
 import { projectService } from "../services/project.service";
@@ -1180,6 +1183,8 @@ export default function AiChatPage() {
   const localMessageToolsRef = useRef<Record<number, ToolEvent[]>>({});
   const [expandedThinking, setExpandedThinking] = useState<string | null>(null);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+  const isMobile = useIsMobile();
   const [lastModelName, setLastModelName] = useState("");
   const [assignmentDrafts, setAssignmentDrafts] = useState<Record<string, AssignmentDraft>>({});
   const [dynamicFormValues, setDynamicFormValues] = useState<Record<string, Record<string, string>>>({});
@@ -2633,7 +2638,7 @@ export default function AiChatPage() {
   return (
     <div className="flex h-screen overflow-hidden bg-transparent">
       {/* Sidebar: Session List */}
-      <div className={`border-r border-border/40 flex flex-col bg-background/10 backdrop-blur-[40px] backdrop-saturate-150 transition-all duration-300 ${isSidebarCollapsed ? "w-16 items-center" : "w-64"}`}>
+      <div className={`hidden md:flex border-r border-border/40 flex-col bg-background/10 backdrop-blur-[40px] backdrop-saturate-150 transition-all duration-300 ${isSidebarCollapsed ? "w-16 items-center" : "w-64"}`}>
         <div className={`p-4 border-b border-border/40 flex items-center bg-transparent w-full ${isSidebarCollapsed ? "flex-col gap-4 px-0 justify-center" : "justify-between"}`}>
           {!isSidebarCollapsed && (
             <h2 className="font-semibold text-foreground flex items-center gap-2 whitespace-nowrap">
@@ -2740,6 +2745,131 @@ export default function AiChatPage() {
 
       {/* Main Chat Area */}
       <div className="flex-1 flex flex-col bg-transparent relative">
+        {/* Mobile Header */}
+        <div className="md:hidden flex items-center justify-between px-4 py-2.5 border-b border-border/40 bg-background/10 backdrop-blur-[40px] backdrop-saturate-150 relative z-20">
+          <Sheet open={isMobileSidebarOpen} onOpenChange={setIsMobileSidebarOpen}>
+            <SheetTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-primary/10">
+                <Menu className="w-5 h-5" />
+              </Button>
+            </SheetTrigger>
+            <SheetContent side="left" className="w-72 p-0 bg-background/95 backdrop-blur-xl border-r border-border/40">
+              <SheetTitle className="sr-only">Chat Sessions</SheetTitle>
+              <SheetDescription className="sr-only">List of your TaskPilot chat sessions</SheetDescription>
+              {/* Session list inside drawer */}
+              <div className="flex flex-col h-full bg-transparent">
+                <div className="p-4 border-b border-border/40 flex items-center justify-between bg-transparent">
+                  <h2 className="font-semibold text-foreground flex items-center gap-2">
+                    <Bot className="w-5 h-5 text-primary shrink-0" /> {t("copilot.title")}
+                  </h2>
+                  <Button variant="ghost" size="icon" onClick={() => { setActiveSession(null); setIsMobileSidebarOpen(false); }} className="h-8 w-8 hover:bg-primary/10 shrink-0" title="New Chat">
+                    <Plus className="w-4 h-4" />
+                  </Button>
+                </div>
+                <div className="flex-1 overflow-y-auto flex flex-col divide-y divide-border/20">
+                  {sessions.map(s => {
+                    const isEditing = editingSessionId === s.id;
+                    return (
+                      <div
+                        key={s.id}
+                        onClick={() => {
+                          if (!isEditing) {
+                            setActiveSession(s);
+                            setIsMobileSidebarOpen(false);
+                          }
+                        }}
+                        className={`p-3 px-4 cursor-pointer flex justify-between items-center group transition-colors ${activeSession?.id === s.id
+                            ? "bg-primary/15 text-primary dark:text-neutral-50 font-semibold"
+                            : "hover:bg-white/20 dark:hover:bg-white/10 text-neutral-800 dark:text-neutral-200 font-medium"
+                          }`}
+                      >
+                        {isEditing ? (
+                          <div className="flex-1 flex items-center gap-1 min-w-0" onClick={(e) => e.stopPropagation()}>
+                            <input
+                              type="text"
+                              value={editingTitle}
+                              onChange={(e) => setEditingTitle(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                  void handleSaveTitle(s.id);
+                                } else if (e.key === "Escape") {
+                                  setEditingSessionId(null);
+                                }
+                              }}
+                              className="flex-1 text-sm bg-white/80 dark:bg-black/40 border border-black/20 dark:border-white/20 rounded px-1.5 py-0.5 text-neutral-950 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary min-w-0"
+                              autoFocus
+                            />
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-6 w-6 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/20 shrink-0"
+                              onClick={() => void handleSaveTitle(s.id)}
+                            >
+                              <Check className="w-3.5 h-3.5" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-6 w-6 text-neutral-400 dark:text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-800 shrink-0"
+                              onClick={() => setEditingSessionId(null)}
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </Button>
+                          </div>
+                        ) : (
+                          <>
+                            <div
+                              className="flex-1 truncate text-sm text-neutral-900 dark:text-neutral-100"
+                              title={stripThinkArtifacts(s.title) || t("copilot.new_chat")}
+                            >
+                              {stripThinkArtifacts(s.title) || t("copilot.new_chat")}
+                            </div>
+                            <div className="flex items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6 text-neutral-500 dark:text-neutral-400 hover:text-primary hover:bg-primary/10"
+                                onClick={() => {
+                                  setEditingSessionId(s.id);
+                                  setEditingTitle(stripThinkArtifacts(s.title) || t("copilot.new_chat"));
+                                }}
+                                title="Đổi tên"
+                              >
+                                <PencilLine className="w-3 h-3" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6 text-neutral-500 dark:text-neutral-400 hover:text-destructive hover:bg-destructive/10"
+                                onClick={(e) => handleDeleteSession(e, s.id)}
+                                title="Xóa"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </Button>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    );
+                  })}
+                  {sessions.length === 0 && (
+                    <div className="text-center text-neutral-500 dark:text-neutral-400 text-sm mt-4 font-medium">
+                      {t("copilot.no_sessions")}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </SheetContent>
+          </Sheet>
+
+          <span className="font-semibold text-sm truncate max-w-[200px]">
+            {activeSession ? stripThinkArtifacts(activeSession.title) || t("copilot.new_chat") : t("copilot.title")}
+          </span>
+
+          <Button variant="ghost" size="icon" onClick={() => setActiveSession(null)} className="h-8 w-8 hover:bg-primary/10 shrink-0" title="New Chat">
+            <Plus className="w-4 h-4" />
+          </Button>
+        </div>
         {/* Messages */}
         <div
           ref={messagesViewportRef}
@@ -2748,12 +2878,12 @@ export default function AiChatPage() {
         >
           {messages.length === 0 && !currentStreamMsg && (
             <div className="flex flex-col items-center justify-center h-full text-center space-y-4 p-4">
-              <div className="bg-background/20 backdrop-blur-[40px] backdrop-saturate-150 p-8 rounded-3xl border border-border/30 shadow-xl flex flex-col items-center max-w-lg">
+              <div className="bg-background/20 backdrop-blur-[40px] backdrop-saturate-150 p-4 sm:p-8 rounded-3xl border border-border/30 shadow-xl flex flex-col items-center max-w-lg w-full">
                 <div className="h-16 w-16 bg-primary/20 text-primary rounded-full flex items-center justify-center mb-4">
                   <Bot className="w-8 h-8" />
                 </div>
-                <h3 className="text-2xl font-bold text-foreground drop-shadow-sm">{t("copilot.welcome_title")}</h3>
-                <p className="text-foreground/90 font-medium mt-3 leading-relaxed drop-shadow-sm">
+                <h3 className="text-xl font-bold text-foreground drop-shadow-sm sm:text-2xl">{t("copilot.welcome_title")}</h3>
+                <p className="text-foreground/90 font-medium mt-3 leading-relaxed drop-shadow-sm text-xs sm:text-sm">
                   {t("copilot.welcome_desc")}
                 </p>
               </div>
@@ -2821,7 +2951,7 @@ export default function AiChatPage() {
         {/* Input Area */}
         <div className="p-4 border-t border-border/40 bg-background/10 backdrop-blur-[40px] backdrop-saturate-150 relative z-10">
           <ChatComposer
-            placeholder={t("copilot.input_placeholder") + " (Enter để gửi, Shift+Enter để xuống dòng)"}
+            placeholder={t("copilot.input_placeholder") + (!isMobile ? " (Enter để gửi, Shift+Enter để xuống dòng)" : "")}
             modelName={streamModel || "TaskPilot AI"}
             maxChars={MAX_PROMPT_CHARS}
             getLastPrompt={getLastPrompt}

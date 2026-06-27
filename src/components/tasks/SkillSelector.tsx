@@ -46,6 +46,7 @@ export function SkillSelector({ selectedSkills, onChange }: SkillSelectorProps) 
     } else {
       onChange([...selectedSkills, skill]);
     }
+    setOpen(false);
   };
 
   const removeSkill = (id: number) => {

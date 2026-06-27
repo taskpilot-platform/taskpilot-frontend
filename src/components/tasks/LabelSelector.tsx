@@ -50,6 +50,7 @@ export function LabelSelector({ projectId, selectedLabels, onChange, isManager }
     } else {
       onChange([...selectedLabels, label]);
     }
+    setOpen(false);
   };
 
   const removeLabel = (id: number) => {
@@ -68,6 +69,7 @@ export function LabelSelector({ projectId, selectedLabels, onChange, isManager }
         setProjectLabels([...projectLabels, res.data]);
         onChange([...selectedLabels, res.data]);
         setSearch("");
+        setOpen(false);
       }
     } catch (err: any) {
       toast.error(err.response?.data?.message || "Failed to create label");

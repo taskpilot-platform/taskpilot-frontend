@@ -218,10 +218,10 @@ export default function CommentsPage() {
   const hasNextPage = page + 1 < totalPages;
 
   return (
-    <div className="min-h-screen space-y-6 p-6 md:p-8">
+    <div className="min-h-screen space-y-6 p-4 sm:p-6 md:p-8">
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div className="space-y-1">
-          <h1 className="flex items-center gap-2 text-3xl font-bold tracking-tight">
+          <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight sm:text-3xl">
             <MessageSquare className="h-7 w-7 text-primary" />
             {t("comments.title", { defaultValue: "Comments" })}
           </h1>

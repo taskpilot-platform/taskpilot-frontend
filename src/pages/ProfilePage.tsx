@@ -185,14 +185,14 @@ export default function ProfilePage() {
   };
 
   return (
-    <div className="min-h-screen space-y-6 p-6 md:p-8">
+    <div className="min-h-screen space-y-6 p-4 sm:p-6 md:p-8">
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div className="space-y-1">
-          <h1 className="text-3xl font-bold tracking-tight">{t("profile.title")}</h1>
+          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t("profile.title")}</h1>
           <p className="text-muted-foreground">{t("profile.desc")}</p>
         </div>
 
-        <div className="rounded-lg border p-1">
+        <div className="flex rounded-lg border p-1 overflow-x-auto">
           <Button
             type="button"
             variant={activeTab === "profile" ? "default" : "ghost"}

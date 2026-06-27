@@ -921,12 +921,12 @@ export default function ProjectWorkspacePage() {
   };
 
   return (
-    <div className="min-h-screen space-y-6 p-6 md:p-8 flex flex-col">
+    <div className="min-h-screen space-y-4 p-2 sm:p-6 md:p-8 flex flex-col">
       {/* HEADER */}
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between shrink-0">
         <div className="space-y-1">
           <div className="flex items-center gap-2">
-            <h1 className="text-3xl font-bold tracking-tight">{project?.name || t("tasks.title", "Workspace")}</h1>
+            <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{project?.name || t("tasks.title", "Workspace")}</h1>
 
             {/* Project Switcher */}
             <DropdownMenu>
@@ -972,7 +972,7 @@ export default function ProjectWorkspacePage() {
           </div>
           <p className="text-muted-foreground line-clamp-1">{project?.description || t("tasks.desc", "Manage tasks and subtasks.")}</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {/* All Projects Navigation */}
           <Button variant="outline" className="gap-2 shadow-sm border-primary/20 hover:bg-primary/5 text-primary group transition-all" onClick={() => navigate("/projects")}>
             <ArrowLeft className="h-4 w-4 group-hover:-translate-x-0.5 transition-transform" />
@@ -1011,7 +1011,7 @@ export default function ProjectWorkspacePage() {
                   <FormField control={form.control} name="description" render={({ field }) => (
                     <FormItem><FormLabel>Description</FormLabel><FormControl><Textarea placeholder="Details about this task..." {...field} /></FormControl><FormMessage /></FormItem>
                   )} />
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <FormField control={form.control} name="priority" render={({ field }) => (
                       <FormItem><FormLabel>Priority</FormLabel>
                         <Select onValueChange={field.onChange} defaultValue={field.value}>
@@ -1050,7 +1050,7 @@ export default function ProjectWorkspacePage() {
                       </FormItem>
                     )} />
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <FormField control={form.control} name="startDate" render={({ field }) => (
                       <FormItem><FormLabel>Start Date</FormLabel>
                         <FormControl><DateInput {...field} value={field.value || ""} /></FormControl>
@@ -1096,7 +1096,7 @@ export default function ProjectWorkspacePage() {
                   <Label htmlFor="sprint-goal">Goal</Label>
                   <Textarea id="sprint-goal" {...sprintForm.register("goal")} placeholder="Build the next focused increment" />
                 </div>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="space-y-2">
                     <Label htmlFor="sprint-start">Start date</Label>
                     <DateInput id="sprint-start" {...sprintForm.register("startDate")} />
@@ -1129,7 +1129,7 @@ export default function ProjectWorkspacePage() {
                   <Label htmlFor="edit-sprint-goal">Goal</Label>
                   <Textarea id="edit-sprint-goal" {...editSprintForm.register("goal")} placeholder="Build the next focused increment" />
                 </div>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="space-y-2">
                     <Label htmlFor="edit-sprint-start">Start date</Label>
                     <DateInput id="edit-sprint-start" {...editSprintForm.register("startDate")} />
@@ -1156,17 +1156,17 @@ export default function ProjectWorkspacePage() {
       {/* TABS (View Mode) */}
       <Card className="shrink-0 shadow-sm border-muted/60">
         <CardContent className="flex flex-col gap-4 pt-6 md:flex-row md:items-center md:justify-between">
-          <div className="flex flex-wrap items-center gap-2 border-b w-full md:w-auto pb-2 md:pb-0 md:border-b-0">
-            <Button type="button" variant={activeTab === "overview" ? "secondary" : "ghost"} className={`gap-2 ${activeTab === "overview" ? "bg-muted" : "hover:bg-muted/50"}`} onClick={() => navigate(`/projects/${currentProjectId}/overview`)}>
+          <div className="flex overflow-x-auto flex-nowrap items-center gap-2 border-b w-full md:w-auto pb-2 md:pb-0 md:border-b-0 whitespace-nowrap scrollbar-none">
+            <Button type="button" variant={activeTab === "overview" ? "secondary" : "ghost"} className={`gap-2 shrink-0 ${activeTab === "overview" ? "bg-muted" : "hover:bg-muted/50"}`} onClick={() => navigate(`/projects/${currentProjectId}/overview`)}>
               <LayoutDashboard className="h-4 w-4" /> Overview
             </Button>
-            <Button type="button" variant={activeTab === "board" ? "secondary" : "ghost"} className={`gap-2 ${activeTab === "board" ? "bg-muted" : "hover:bg-muted/50"}`} onClick={() => navigate(`/projects/${currentProjectId}/board`)}>
+            <Button type="button" variant={activeTab === "board" ? "secondary" : "ghost"} className={`gap-2 shrink-0 ${activeTab === "board" ? "bg-muted" : "hover:bg-muted/50"}`} onClick={() => navigate(`/projects/${currentProjectId}/board`)}>
               <FolderKanban className="h-4 w-4" /> Board
             </Button>
-            <Button type="button" variant={activeTab === "backlog" ? "secondary" : "ghost"} className={`gap-2 ${activeTab === "backlog" ? "bg-muted" : "hover:bg-muted/50"}`} onClick={() => navigate(`/projects/${currentProjectId}/backlog`)}>
+            <Button type="button" variant={activeTab === "backlog" ? "secondary" : "ghost"} className={`gap-2 shrink-0 ${activeTab === "backlog" ? "bg-muted" : "hover:bg-muted/50"}`} onClick={() => navigate(`/projects/${currentProjectId}/backlog`)}>
               <ListChecks className="h-4 w-4" /> Backlog
             </Button>
-            <Button type="button" variant={activeTab === "timeline" ? "secondary" : "ghost"} className={`gap-2 ${activeTab === "timeline" ? "bg-muted" : "hover:bg-muted/50"}`} onClick={() => navigate(`/projects/${currentProjectId}/timeline`)}>
+            <Button type="button" variant={activeTab === "timeline" ? "secondary" : "ghost"} className={`gap-2 shrink-0 ${activeTab === "timeline" ? "bg-muted" : "hover:bg-muted/50"}`} onClick={() => navigate(`/projects/${currentProjectId}/timeline`)}>
               <CalendarDays className="h-4 w-4" /> Timeline
             </Button>
           </div>
@@ -1280,7 +1280,7 @@ export default function ProjectWorkspacePage() {
                         <div className="flex flex-col sm:flex-row sm:items-start justify-between border-b pb-6 mb-6 gap-4">
                           <div>
                             <div className="flex items-center gap-3 mb-3">
-                              <h2 className="text-3xl font-bold tracking-tight text-foreground">{project?.name}</h2>
+                              <h2 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">{project?.name}</h2>
                               <Badge variant="secondary" className="text-sm px-2 py-0.5">{project?.status}</Badge>
                             </div>
 
@@ -1517,7 +1517,7 @@ export default function ProjectWorkspacePage() {
                       </div>
                     </div>
                   </CardHeader>
-                  <CardContent className="p-4 space-y-5">
+                  <CardContent className="p-2 sm:p-4 space-y-5">
                     <div className="flex items-center gap-3 text-xs text-muted-foreground">
                       <span className="inline-flex items-center gap-1"><span className={`h-2 w-5 rounded ${TASK_TONE_CLASS.legend.active}`} /> Active</span>
                       <span className="inline-flex items-center gap-1"><span className={`h-2 w-5 rounded ${TASK_TONE_CLASS.legend.done}`} /> Done</span>
@@ -1527,8 +1527,8 @@ export default function ProjectWorkspacePage() {
                       const sprintPosition = getTimelinePosition(sprint.startDate, sprint.endDate);
                       const { scheduled, noDates } = splitTimelineTasks(sprint.tasks);
                       return (
-                        <section key={sprint.id} className="rounded-lg border bg-background/70 p-4">
-                          <div className="flex items-center justify-between gap-3">
+                        <section key={sprint.id} className="rounded-lg border bg-background/70 p-2 sm:p-4">
+                          <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:justify-between border-b pb-2 sm:pb-0 sm:border-b-0">
                             <div className="flex items-center gap-2">
                               <h3 className="font-semibold">{sprint.name}</h3>
                               <Badge variant={sprint.status === "ACTIVE" ? "default" : "secondary"}>{sprint.status}</Badge>
@@ -1569,7 +1569,7 @@ export default function ProjectWorkspacePage() {
                     {timelineData && (() => {
                       const { scheduled, noDates } = splitTimelineTasks(timelineData.unscheduledTasks);
                       return (
-                        <section className="rounded-lg border bg-background/70 p-4">
+                        <section className="rounded-lg border bg-background/70 p-2 sm:p-4">
                           <div className="flex items-center justify-between">
                             <h3 className="font-semibold">Unscheduled / Backlog</h3>
                             <Badge variant="outline">{timelineData.unscheduledTasks.length} tasks</Badge>
@@ -1622,7 +1622,7 @@ export default function ProjectWorkspacePage() {
                       </div>
                     </div>
                   </CardHeader>
-                  <CardContent className="p-4">
+                  <CardContent className="p-2 sm:p-4">
                     <div className="space-y-4">
                       {!backlogData || (backlogData.unscheduledTasks.length === 0 && backlogData.sprints.length === 0) ? (
                         <div className="text-center p-8 text-muted-foreground border-2 border-dashed rounded-lg bg-muted/10">
