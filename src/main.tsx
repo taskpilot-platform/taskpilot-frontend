@@ -30,7 +30,7 @@ createRoot(document.getElementById("root")!).render(
       {/* ColorThemeProvider: quản lý màu chủ đạo (class "theme-xxx" trên <html>) */}
       <ColorThemeProvider defaultTheme="zinc">
         {/* ToastContainer nằm ngoài cùng để hiện ở mọi trang */}
-        <ToastContainer />
+        <ToastContainer autoClose={2000} />
         {/* ConfirmProvider cung cấp hộp thoại xác nhận tuỳ chỉnh */}
         <ConfirmProvider>
           {/* Router Provider quản lý việc chuyển trang */}

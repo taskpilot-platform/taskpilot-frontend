@@ -8,12 +8,21 @@ import {
   Settings,
   ShieldAlert,
   SlidersHorizontal,
-  X
+  X,
+  GripVertical
 } from "lucide-react";
 import { toast } from "react-toastify";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -28,6 +37,33 @@ import {
 import { getApiErrorMessage } from "@/lib/http";
 import { adminSettingsService } from "@/services/admin.service";
 import type { SystemSettingResponse } from "@/types/admin";
+
+const ALL_SUPPORTED_MODELS = [
+  { provider: "GEMINI", model: "gemini-3.5-flash" },
+  { provider: "GEMINI", model: "gemini-2.5-flash" },
+  { provider: "GEMINI", model: "gemini-3.1-flash-lite" },
+  { provider: "GEMINI", model: "gemini-2.5-flash-lite" },
+  { provider: "GEMINI", model: "gemini-2.5-pro" },
+  { provider: "GEMINI", model: "gemini-2.0-flash" },
+  { provider: "GEMINI", model: "gemini-2.0-flash-lite" },
+  { provider: "GEMINI", model: "gemini-3.1-pro-preview" },
+  { provider: "GEMINI", model: "gemma-4-26b-a4b-it" },
+  { provider: "GITHUB", model: "gpt-4o" },
+  { provider: "GITHUB", model: "DeepSeek-R1" },
+  { provider: "GROQ", model: "meta-llama/llama-4-scout-17b-16e-instruct" },
+  { provider: "GROQ", model: "llama-3.3-70b-versatile" },
+  { provider: "GROQ", model: "llama-3.1-8b-instant" },
+  { provider: "OPENROUTER", model: "google/gemma-4-31b-it:free" },
+  { provider: "OPENROUTER", model: "nvidia/nemotron-3-ultra-550b-a55b:free" },
+  { provider: "OPENROUTER", model: "poolside/laguna-m.1:free" },
+  { provider: "OPENROUTER", model: "openai/gpt-oss-120b:free" },
+  { provider: "OPENROUTER", model: "moonshotai/kimi-k2.6:free" },
+  { provider: "OPENROUTER", model: "z-ai/glm-4.5-air:free" },
+  { provider: "OPENROUTER", model: "poolside/laguna-xs.2:free" },
+  { provider: "OPENROUTER", model: "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free" },
+  { provider: "OPENROUTER", model: "google/gemma-4-26b-a4b-it:free" },
+  { provider: "OPENROUTER", model: "openai/gpt-oss-20b:free" }
+];
 
 export default function AdminSettingsPage() {
   const { t } = useTranslation();
@@ -58,13 +94,22 @@ export default function AdminSettingsPage() {
   const [whitelistIpsState, setWhitelistIpsState] = useState<string>("");
   const [fallbackValueStr, setFallbackValueStr] = useState<string>("");
 
+  interface PriorityModelItem {
+    provider: string;
+    model: string;
+  }
+  const [modelPriorityState, setModelPriorityState] = useState<PriorityModelItem[]>([]);
+  const [isPriorityModalOpen, setIsPriorityModalOpen] = useState(false);
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+
+
   const selectedSetting = useMemo(
     () => settings.find((s) => s.keyName === selectedKey) || null,
     [settings, selectedKey],
   );
 
-  const loadSettingsList = async (kw = keyword) => {
-    setIsLoading(true);
+  const loadSettingsList = async (kw = keyword, silent = false) => {
+    if (!silent) setIsLoading(true);
     try {
       const response = await adminSettingsService.getAllSettings(kw);
       setSettings(response.data);
@@ -79,7 +124,7 @@ export default function AdminSettingsPage() {
     } catch (error) {
       toast.error(getApiErrorMessage(error));
     } finally {
-      setIsLoading(false);
+      if (!silent) setIsLoading(false);
     }
   };
 
@@ -163,6 +208,34 @@ export default function AdminSettingsPage() {
         } else {
           setWhitelistIpsState("");
         }
+      } else if (key === "ai.model_priority") {
+        const dbModels = (val && typeof val === "object" && Array.isArray((val as any).models))
+          ? (val as any).models
+          : Array.isArray(val) ? val : [];
+
+        const merged: PriorityModelItem[] = [];
+        const seen = new Set<string>();
+
+        dbModels.forEach((m: any) => {
+          if (m && m.provider && m.model) {
+            const keyStr = `${m.provider.toUpperCase()}:${m.model}`;
+            if (!seen.has(keyStr)) {
+              seen.add(keyStr);
+              merged.push({ provider: m.provider.toUpperCase(), model: m.model });
+            }
+          }
+        });
+
+        ALL_SUPPORTED_MODELS.forEach(m => {
+          const keyStr = `${m.provider.toUpperCase()}:${m.model}`;
+          if (!seen.has(keyStr)) {
+            seen.add(keyStr);
+            merged.push({ provider: m.provider.toUpperCase(), model: m.model });
+          }
+        });
+
+        setModelPriorityState(merged);
+
       } else {
         setFallbackValueStr(JSON.stringify(val, null, 2));
       }
@@ -220,6 +293,9 @@ export default function AdminSettingsPage() {
         .split("\n")
         .map(ip => ip.trim())
         .filter(ip => ip.length > 0);
+    } else if (selectedKey === "ai.model_priority") {
+      payloadValue = { models: modelPriorityState };
+
     } else {
       try {
         payloadValue = JSON.parse(fallbackValueStr);
@@ -237,9 +313,10 @@ export default function AdminSettingsPage() {
         description: selectedSetting.description || undefined,
       });
 
+      setSettings(prev => prev.map(s => s.keyName === selectedKey ? { ...s, valueJson: payloadValue } : s));
       toast.success(t("projects.update_success"));
       setMode("list");
-      await loadSettingsList();
+      await loadSettingsList(keyword, true);
     } catch (error) {
       toast.error(getApiErrorMessage(error));
     } finally {
@@ -258,6 +335,8 @@ export default function AdminSettingsPage() {
         return "Thiết lập chế độ hoạt động hiện hành của hệ thống phân công công việc tự động bằng AI.";
       case "whitelist_ips":
         return "Danh sách các địa chỉ IP được cấp quyền truy cập đặc cách hoặc kết nối trực tiếp đến hệ thống (IP Whitelist).";
+      case "ai.model_priority":
+        return "Thứ tự ưu tiên của các mô hình AI (Model Waterfall) khi định tuyến câu hỏi và xử lý tác vụ của Copilot.";
       default:
         return selectedSetting?.description || "Không có mô tả.";
     }
@@ -274,6 +353,8 @@ export default function AdminSettingsPage() {
         return "Chọn một trong các chế độ: Cân bằng (BALANCED), Khẩn cấp (URGENT), Đào tạo (TRAINING).";
       case "whitelist_ips":
         return "Nhập các địa chỉ IP hợp lệ (IPv4 hoặc IPv6), mỗi địa chỉ IP nằm trên một dòng riêng biệt.";
+      case "ai.model_priority":
+        return "Mảng các đối tượng chứa tên nhà cung cấp (provider) và mô hình (model) theo thứ tự ưu tiên giảm dần. Ví dụ: [{\"provider\": \"GEMINI\", \"model\": \"gemma-4-26b-a4b-it\"}].";
       default:
         return "Phụ thuộc vào loại cấu hình cụ thể.";
     }
@@ -290,7 +371,6 @@ export default function AdminSettingsPage() {
     }));
   };
 
-  // Handler to update normalization state
   const updateNormalization = (mode: string, field: 'fit' | 'load' | 'perf', value: string) => {
     setNormalizationState(prev => ({
       ...prev,
@@ -299,6 +379,49 @@ export default function AdminSettingsPage() {
         [field]: value
       }
     }));
+  };
+
+  // Drag and drop handlers for model priority waterfall
+  const handleDragStart = (e: React.DragEvent, index: number) => {
+    setDraggedIndex(index);
+    e.dataTransfer.effectAllowed = "move";
+  };
+
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    if (draggedIndex === null || draggedIndex === index) return;
+
+    const updated = [...modelPriorityState];
+    const draggedItem = updated[draggedIndex];
+    updated.splice(draggedIndex, 1);
+    updated.splice(index, 0, draggedItem);
+
+    setDraggedIndex(index);
+    setModelPriorityState(updated);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedIndex(null);
+  };
+
+  const handleSavePriority = async () => {
+    setIsMutating(true);
+    try {
+      await adminSettingsService.updateSetting({
+        keyName: "ai.model_priority",
+        valueJson: { models: modelPriorityState },
+        description: "Thứ tự ưu tiên của các mô hình AI (Model Waterfall) khi định tuyến câu hỏi và xử lý tác vụ của Copilot.",
+      });
+
+      setSettings(prev => prev.map(s => s.keyName === "ai.model_priority" ? { ...s, valueJson: { models: modelPriorityState } } : s));
+      toast.success(t("projects.update_success"));
+      setIsPriorityModalOpen(false);
+      await loadSettingsList(keyword, true);
+    } catch (error) {
+      toast.error(getApiErrorMessage(error));
+    } finally {
+      setIsMutating(false);
+    }
   };
 
   // Render form fields dynamically
@@ -458,6 +581,23 @@ export default function AdminSettingsPage() {
       );
     }
 
+    if (selectedKey === "ai.model_priority") {
+      return (
+        <div className="rounded-lg bg-primary/5 p-4 border border-primary/20 text-sm space-y-2">
+          <div className="font-semibold text-primary flex items-center gap-1.5 text-xs">
+            <Settings className="h-3.5 w-3.5" />
+            Chỉnh sửa ưu tiên mô hình AI
+          </div>
+          <p className="text-muted-foreground leading-relaxed text-xs">
+            Thiết lập thứ tự ưu tiên của mô hình AI hiện được thực hiện thông qua giao diện kéo thả trực quan dạng Popup Modal. 
+            Vui lòng nhấn vào dòng cấu hình trong bảng danh sách để hiển thị cửa sổ chỉnh sửa này.
+          </p>
+        </div>
+      );
+    }
+
+
+
     // Fallback editor for other keys
     return (
       <div className="space-y-2">
@@ -549,10 +689,37 @@ export default function AdminSettingsPage() {
                         key={setting.keyName}
                         className={selectedKey === setting.keyName ? "bg-accent/40 cursor-pointer" : "cursor-pointer"}
                         onClick={() => {
-                          if (selectedKey === setting.keyName) {
-                            handleModeChange("list");
+                          if (setting.keyName === "ai.model_priority") {
+                            const val = setting.valueJson;
+                            const dbModels = (val && typeof val === "object" && Array.isArray((val as any).models))
+                              ? (val as any).models
+                              : Array.isArray(val) ? val : [];
+                            const merged: PriorityModelItem[] = [];
+                            const seen = new Set<string>();
+                            dbModels.forEach((m: any) => {
+                              if (m && m.provider && m.model) {
+                                const keyStr = `${m.provider.toUpperCase()}:${m.model}`;
+                                if (!seen.has(keyStr)) {
+                                  seen.add(keyStr);
+                                  merged.push({ provider: m.provider.toUpperCase(), model: m.model });
+                                }
+                              }
+                            });
+                            ALL_SUPPORTED_MODELS.forEach(m => {
+                              const keyStr = `${m.provider.toUpperCase()}:${m.model}`;
+                              if (!seen.has(keyStr)) {
+                                  seen.add(keyStr);
+                                  merged.push({ provider: m.provider.toUpperCase(), model: m.model });
+                              }
+                            });
+                            setModelPriorityState(merged);
+                            setIsPriorityModalOpen(true);
                           } else {
-                            setSelectedKey(setting.keyName);
+                            if (selectedKey === setting.keyName) {
+                              handleModeChange("list");
+                            } else {
+                              setSelectedKey(setting.keyName);
+                            }
                           }
                         }}
                       >
@@ -624,6 +791,65 @@ export default function AdminSettingsPage() {
           </div>
         )}
       </div>
+
+      <Dialog open={isPriorityModalOpen} onOpenChange={setIsPriorityModalOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <SlidersHorizontal className="h-5 w-5 text-primary" />
+              Thứ tự ưu tiên của Mô hình AI (Model Waterfall)
+            </DialogTitle>
+            <DialogDescription>
+              Nhấn giữ và kéo thả các dòng mô hình để sắp xếp lại thứ tự ưu tiên (Rank #1 là cao nhất). Hệ thống sẽ thử gọi các mô hình theo thứ tự này từ trên xuống dưới.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-2 my-4 max-h-[50vh] overflow-y-auto pr-1">
+            {modelPriorityState.map((item, index) => (
+              <div
+                key={`${item.provider}-${item.model}-${index}`}
+                draggable
+                onDragStart={(e) => handleDragStart(e, index)}
+                onDragOver={(e) => handleDragOver(e, index)}
+                onDragEnd={handleDragEnd}
+                className={`flex items-center justify-between p-3 rounded-lg border bg-card hover:bg-accent/15 cursor-grab active:cursor-grabbing transition-all select-none border-border/60 ${
+                  draggedIndex === index ? "opacity-40 border-primary bg-primary/5 shadow-md" : "shadow-sm"
+                }`}
+              >
+                <div className="flex items-center gap-3 min-w-0 flex-1">
+                  <div className="flex flex-col items-center justify-center bg-muted h-10 w-10 rounded-md shrink-0 border">
+                    <span className="text-[10px] font-bold text-muted-foreground uppercase leading-none">Rank</span>
+                    <span className="text-sm font-bold text-foreground">#{index + 1}</span>
+                  </div>
+                  <div className="flex flex-col gap-0.5 min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] px-2 py-0.5 rounded bg-secondary font-semibold text-secondary-foreground shrink-0 uppercase tracking-wider">
+                        {item.provider}
+                      </span>
+                      <span className="font-semibold text-sm text-foreground truncate block" title={item.model}>
+                        {item.model}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0 text-muted-foreground/50">
+                  <span className="text-[10px] font-mono select-none px-1.5 py-0.5 rounded border bg-muted mr-1 text-muted-foreground font-semibold">DRAG</span>
+                  <GripVertical className="h-4 w-4" />
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setIsPriorityModalOpen(false)}>
+              Hủy bỏ
+            </Button>
+            <Button onClick={handleSavePriority} disabled={isMutating}>
+              Lưu Cấu Hình
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

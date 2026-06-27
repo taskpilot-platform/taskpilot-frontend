@@ -1247,6 +1247,9 @@ export default function AiChatPage() {
     if (activeSession) {
       restorePendingRequest(activeSession.id);
       loadMessages(activeSession.id);
+      aiService.warmupSession(activeSession.id).catch(err => {
+        console.warn("[Cache Warming] Failed to trigger session warmup:", err);
+      });
     } else {
       setMessages([]);
       stopPolling();

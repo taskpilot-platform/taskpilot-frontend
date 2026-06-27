@@ -70,4 +70,8 @@ export const aiService = {
 		);
 		return response.data.data;
 	},
+
+	async warmupSession(sessionId: number): Promise<void> {
+		await http.post(`/v1/ai/sessions/${sessionId}/warmup`);
+	},
 };
