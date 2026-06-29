@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { memo, useCallback, useState, useRef, useEffect, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Send, Bot, User, Trash2, Plus, Loader2, ChevronRight, ChevronLeft, CheckCircle2, Search, BrainCircuit, Database, PencilLine, ListChecks, Wand2, X, Check, Menu } from "lucide-react";
@@ -462,6 +463,8 @@ function stripThinkArtifacts(value?: string | null) {
     .trim();
 }
 
+let globalNavigate: any = null;
+
 // Cấu hình render Markdown dùng chung cho toàn trang
 const markdownComponents = {
   table: ({ children }: any) => (
@@ -486,6 +489,30 @@ const markdownComponents = {
       );
     }
     return <code className={className} {...props}>{children}</code>;
+  },
+  a: ({ href, children }: any) => {
+    if (href && (href.startsWith("/") || href.includes("localhost:") || href.includes("taskpilot-platform.netlify.app"))) {
+      const urlPath = href.startsWith("/") 
+        ? href 
+        : href.replace(/^https?:\/\/[^/]+/, "");
+      return (
+        <a
+          href={href}
+          onClick={(e) => {
+            e.preventDefault();
+            window.open(window.location.origin + urlPath, "_blank");
+          }}
+          className="text-blue-600 dark:text-blue-400 underline font-bold cursor-pointer hover:opacity-85"
+        >
+          {children}
+        </a>
+      );
+    }
+    return (
+      <a href={href} target="_blank" rel="noopener noreferrer" className="text-blue-600 dark:text-blue-400 underline font-bold hover:opacity-85">
+        {children}
+      </a>
+    );
   }
 };
 
@@ -665,11 +692,13 @@ const TOOL_NAME_MAPPING: Record<string, string> = {
 function ToolEventCard({
   tool,
   compact = false,
+  hideConfirm = false,
   onConfirmAction,
   onCancelAction,
 }: {
   tool: ToolEvent;
   compact?: boolean;
+  hideConfirm?: boolean;
   onConfirmAction?: (confirmation: PendingActionConfirmation) => void;
   onCancelAction?: (actionId: string) => void;
 }) {
@@ -702,7 +731,7 @@ function ToolEventCard({
       )}
 
       {/* Box Xác nhận vẫn giữ UI rõ ràng để user dễ click */}
-      {confirmation && (
+      {confirmation && !hideConfirm && (
         <div className="mt-3 ml-[18px] rounded-lg border border-amber-500/30 bg-amber-50/50 dark:bg-amber-950/20 overflow-hidden max-w-md">
           <div className="flex items-center gap-2 px-3 pt-2 pb-1.5">
             <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-amber-500/20 text-amber-600 dark:text-amber-400 text-[10px] font-black animate-pulse">!</span>
@@ -797,11 +826,13 @@ function PostToolProcessingRow({ toolName, isComplete }: { toolName: string; isC
 function StaggeredToolCard({
   tool,
   delayMs = 0,
+  hideConfirm = false,
   onConfirmAction,
   onCancelAction,
 }: {
   tool: ToolEvent;
   delayMs?: number;
+  hideConfirm?: boolean;
   onConfirmAction?: (confirmation: PendingActionConfirmation) => void;
   onCancelAction?: (actionId: string) => void;
 }) {
@@ -835,6 +866,7 @@ function StaggeredToolCard({
     >
       <ToolEventCard
         tool={tool}
+        hideConfirm={hideConfirm}
         onConfirmAction={onConfirmAction}
         onCancelAction={onCancelAction}
       />
@@ -1133,6 +1165,7 @@ const ThinkingAccordion = memo(function ThinkingAccordion({
                      <StaggeredToolCard
                        tool={item.tool}
                        delayMs={0}
+                       hideConfirm={true}
                        onConfirmAction={confirmPendingAction}
                        onCancelAction={cancelPendingAction}
                      />
@@ -1164,6 +1197,8 @@ const ThinkingAccordion = memo(function ThinkingAccordion({
 });
 
 export default function AiChatPage() {
+  const navigate = useNavigate();
+  globalNavigate = navigate;
   const { t } = useTranslation();
   const { accessToken } = useAuthStore();
   const [sessions, setSessions] = useState<ChatSession[]>([]);
@@ -1188,6 +1223,7 @@ export default function AiChatPage() {
   const [lastModelName, setLastModelName] = useState("");
   const [assignmentDrafts, setAssignmentDrafts] = useState<Record<string, AssignmentDraft>>({});
   const [dynamicFormValues, setDynamicFormValues] = useState<Record<string, Record<string, string>>>({});
+  const [planModificationTexts, setPlanModificationTexts] = useState<Record<string, string>>({});
   const [skillDirectory, setSkillDirectory] = useState<SkillDirectoryItem[]>([]);
   const [myProjects, setMyProjects] = useState<{ id: number; name: string }[]>([]);
   const [sprintsByProject, setSprintsByProject] = useState<Record<number, { id: number; name: string }[]>>({});
@@ -1232,10 +1268,28 @@ export default function AiChatPage() {
   }, []);
 
   useEffect(() => {
+    const pendingConfirmations = messages
+      .filter((m) => m.sender === "ASSISTANT" && m.tools)
+      .flatMap((m) => m.tools || [])
+      .map((t) => t.confirmation)
+      .filter((c) => !!c && c.status === "PENDING");
+
+    for (const c of pendingConfirmations) {
+      if (c.arguments && c.arguments.projectId) {
+        const projectId = parseInt(String(c.arguments.projectId), 10);
+        if (!isNaN(projectId)) {
+          void loadSprintsForProject(projectId);
+          void loadMembersForProject(projectId);
+          void loadLabelsForProject(projectId);
+        }
+      }
+    }
+  }, [messages]);
+
+  useEffect(() => {
     if (accessToken) {
       return;
     }
-
     if (activeStreamControllerRef.current) {
       activeStreamControllerRef.current.abort();
       activeStreamControllerRef.current = null;
@@ -2176,7 +2230,7 @@ export default function AiChatPage() {
   const getDynamicFieldValue = (values: Record<string, string>, field: DynamicFormField) =>
     values[field.name] ?? getDynamicFieldDefault(field);
 
-  const submitDynamicForm = async (formKey: string, spec: DynamicFormSpec) => {
+  const submitDynamicForm = async (formKey: string, spec: DynamicFormSpec, associatedConfirmations: PendingActionConfirmation[] = []) => {
     const values = dynamicFormValues[formKey] ?? {};
     const missing = spec.fields.find((field) => field.required && !getDynamicFieldValue(values, field).trim());
     if (missing) {
@@ -2189,15 +2243,24 @@ export default function AiChatPage() {
     const fieldLines = spec.fields
       .map((field) => `- ${field.name}: ${getDynamicFieldValue(values, field)}`)
       .join("\n");
-    const promptParts = [
+      
+    const promptParts = [];
+    if (associatedConfirmations && associatedConfirmations.length > 0) {
+      associatedConfirmations.forEach((c) => {
+        promptParts.push(`CONFIRM_ACTION ${c.actionId} xác nhận đồng ý thực hiện`);
+      });
+    }
+
+    promptParts.push(
       "Structured form response",
       spec.title ? `Form Title: ${spec.title}` : "",
       `Intent: ${spec.intent || "additional_information"}`,
       "Use this information to continue the previous user request.",
       taskId ? `Task ID: ${taskId}` : "",
       "Fields:",
-      fieldLines,
-    ];
+      fieldLines
+    );
+
     if (assignmentForm) {
       promptParts.push(
         "Important TaskPilot instruction:",
@@ -2429,6 +2492,311 @@ export default function AiChatPage() {
     );
   };
 
+  const renderCombinedConfirmAndForm = (formKey: string, confirmations: PendingActionConfirmation[], spec: DynamicFormSpec) => {
+    const values = dynamicFormValues[formKey] ?? {};
+    let projectIdVal = values["projectId"];
+    if (!projectIdVal) {
+      for (const c of confirmations) {
+        if (c.arguments && c.arguments.projectId) {
+          projectIdVal = String(c.arguments.projectId);
+          break;
+        }
+      }
+    }
+    const modText = planModificationTexts[formKey] ?? "";
+
+    const handleSendModification = async () => {
+      if (!modText.trim()) {
+        toast.error("Vui lòng nhập nội dung yêu cầu điều chỉnh.");
+        return;
+      }
+      confirmations.forEach(c => cancelPendingAction(c.actionId));
+      
+      setDynamicFormValues((forms) => {
+        const next = { ...forms };
+        delete next[formKey];
+        return next;
+      });
+      setPlanModificationTexts((texts) => {
+        const next = { ...texts };
+        delete next[formKey];
+        return next;
+      });
+
+      await sendMessage(modText);
+    };
+
+    return (
+      <div className="mt-3 rounded-lg border border-amber-500/30 bg-background/55 p-3 shadow-lg backdrop-blur-[28px] backdrop-saturate-150">
+        <div className="mb-3 border-b border-amber-500/20 pb-2">
+          <div className="flex items-center gap-2 mb-1.5">
+            <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-amber-500/20 text-amber-600 dark:text-amber-400 text-[10px] font-black animate-pulse">!</span>
+            <span className="text-[10px] font-bold uppercase tracking-widest text-amber-600/80 dark:text-amber-400/80">Xác nhận thao tác & Điền thông tin bổ sung</span>
+          </div>
+          <div className="space-y-1">
+            {confirmations.map((c) => (
+              <div key={c.actionId} className="text-[12.5px] font-semibold text-neutral-700 dark:text-neutral-300 pl-6">
+                • {c.summary || "Xác nhận thực hiện thao tác ghi dữ liệu"}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          {spec.fields.map((field) => {
+            const value = getDynamicFieldValue(values, field);
+            const fieldLabel = (
+              <div className="mb-1 flex items-center gap-1 text-xs font-medium text-foreground/80">
+                <span>{field.label}</span>
+                {field.required && <span className="text-destructive">*</span>}
+              </div>
+            );
+            if (field.type === "checkbox") {
+              return (
+                <label
+                  key={field.name}
+                  className="flex items-center gap-2 rounded-md border border-input bg-background/70 px-3 py-2 text-sm text-foreground"
+                >
+                  <input
+                    type="checkbox"
+                    checked={value === "true"}
+                    onChange={(event) => updateDynamicFormValue(formKey, field.name, event.target.checked ? "true" : "false")}
+                    className="h-4 w-4 rounded border-input accent-primary"
+                  />
+                  <span>{field.label}</span>
+                  {field.required && <span className="text-destructive">*</span>}
+                </label>
+              );
+            }
+            if (field.type === "textarea") {
+              return (
+                <label key={field.name} className="block">
+                  {fieldLabel}
+                  <Textarea
+                    value={value}
+                    onChange={(event) => updateDynamicFormValue(formKey, field.name, event.target.value)}
+                    placeholder={field.placeholder || field.label}
+                    className="min-h-20 bg-background/70"
+                  />
+                </label>
+              );
+            }
+            if (isSkillFieldName(field.name)) {
+              if (field.name.toLowerCase().endsWith("ids") || field.type === "multiselect") {
+                field.type = "multiselect";
+                field.options = skillDirectory.map(s => ({ label: s.name, value: String(s.id) }));
+              } else {
+                return (
+                  <label key={field.name} className="block">
+                    {fieldLabel}
+                    {renderSkillSelect(
+                      value,
+                      (nextValue) => updateDynamicFormValue(formKey, field.name, nextValue),
+                      field.placeholder || "Chọn skill từ hệ thống",
+                    )}
+                  </label>
+                );
+              }
+            }
+            if (field.name === "projectId" && field.type === "number") {
+              field.type = "select";
+              field.options = myProjects.map(p => ({ label: `${p.name} (ID: ${p.id})`, value: String(p.id) }));
+              if (value) {
+                const projectId = parseInt(value, 10);
+                if (!isNaN(projectId)) {
+                  loadSprintsForProject(projectId);
+                  loadMembersForProject(projectId);
+                  loadLabelsForProject(projectId);
+                }
+              }
+            }
+            if (field.name === "labelIds" || (field.name.toLowerCase().includes("label") && field.name.toLowerCase().endsWith("ids"))) {
+              field.type = "multiselect";
+              const projectIdStr = projectIdVal;
+              if (projectIdStr) {
+                const projectId = parseInt(projectIdStr, 10);
+                const labels = labelsByProject[projectId] || [];
+                field.options = labels.map(l => ({ label: l.name, value: String(l.id) }));
+              } else {
+                field.options = [];
+              }
+            }
+            if ((field.name === "difficultyLevel" || field.name === "difficulty") && field.type !== "number") {
+              field.type = "number";
+              field.min = 1;
+              field.max = 10;
+            }
+            const fieldNameLower = field.name.toLowerCase();
+            const isSprintField = fieldNameLower.includes("sprint");
+            const isAssigneeField = fieldNameLower.includes("assignee") || fieldNameLower.includes("member");
+
+            if ((isSprintField || isAssigneeField) && field.name !== "projectId") {
+              field.type = "select";
+              const projectIdStr = projectIdVal;
+              if (projectIdStr) {
+                const projectId = parseInt(projectIdStr, 10);
+                if (isSprintField) {
+                  const sprints = sprintsByProject[projectId] || [];
+                  field.options = sprints.map(s => ({ label: `${s.name} (ID: ${s.id})`, value: String(s.id) }));
+                } else if (isAssigneeField) {
+                  const members = membersByProject[projectId] || [];
+                  field.options = members.map(m => ({ label: `${m.name} (ID: ${m.id})`, value: String(m.id) }));
+                }
+              } else {
+                field.options = [];
+              }
+            }
+            if (field.type === "select") {
+              const options = field.options ?? [];
+              return (
+                <label key={field.name} className="block">
+                  {fieldLabel}
+                  <select
+                    value={value}
+                    onChange={(event) => updateDynamicFormValue(formKey, field.name, event.target.value)}
+                    className="h-9 w-full rounded-md border border-input bg-background/70 px-3 text-sm text-foreground"
+                  >
+                    <option value="">{field.placeholder || field.label}</option>
+                    {options.map((option) => {
+                      const label = typeof option === "string" ? option : option.label;
+                      const optionValue = typeof option === "string" ? option : option.value;
+                      return (
+                        <option key={optionValue} value={optionValue}>
+                          {label}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </label>
+              );
+            }
+            if (field.type === "multiselect") {
+              const options = field.options ?? [];
+              if (options.length === 0) {
+                return (
+                  <label key={field.name} className="block">
+                    {fieldLabel}
+                    <Input
+                      value={value}
+                      onChange={(event) => updateDynamicFormValue(formKey, field.name, event.target.value)}
+                      placeholder={field.placeholder || "Các ID cách nhau bằng dấu phẩy, ví dụ: 3,5"}
+                      className="bg-background/70"
+                    />
+                  </label>
+                );
+              }
+              const selectedValues = (typeof value === "string" ? value.split(",").filter(Boolean) : []) as string[];
+              return (
+                <div key={field.name} className="block">
+                  <div className="mb-1 text-sm font-medium text-foreground">{fieldLabel}</div>
+                  <div className="flex flex-wrap gap-2">
+                    {options.map((option) => {
+                      const label = typeof option === "string" ? option : option.label;
+                      const optionValue = typeof option === "string" ? String(option) : String(option.value);
+                      const isChecked = selectedValues.includes(optionValue);
+                      return (
+                        <label key={optionValue} className={`flex items-center gap-1.5 cursor-pointer rounded-full border px-3 py-1 text-sm transition-colors ${isChecked ? "bg-primary/20 border-primary text-primary font-semibold" : "bg-background/50 border-input text-foreground hover:bg-muted"}`}>
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            className="hidden"
+                            onChange={(e) => {
+                              const newValues = e.target.checked 
+                                ? [...selectedValues, optionValue]
+                                : selectedValues.filter(v => v !== optionValue);
+                              updateDynamicFormValue(formKey, field.name, newValues.join(","));
+                            }}
+                          />
+                          <span>{label}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            }
+            return (
+              <label key={field.name} className="block">
+                {fieldLabel}
+                <Input
+                  value={value}
+                  onChange={(event) => updateDynamicFormValue(formKey, field.name, event.target.value)}
+                  type={field.type === "number" || field.type === "date" ? field.type : "text"}
+                  min={field.min}
+                  max={field.max}
+                  placeholder={field.placeholder || field.label}
+                  className="bg-background/70"
+                />
+              </label>
+            );
+          })}
+        </div>
+        
+        {/* Ô nhập yêu cầu điều chỉnh */}
+        <div className="mt-4 pt-3 border-t border-amber-500/20">
+          <label className="block">
+            <div className="mb-1.5 text-xs font-semibold text-foreground/80 flex items-center gap-1.5 select-none">
+              <PencilLine className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+              <span>Yêu cầu điều chỉnh Plan (nếu có)</span>
+            </div>
+            <div className="flex gap-2">
+              <Input
+                value={modText}
+                onChange={(event) => setPlanModificationTexts(prev => ({ ...prev, [formKey]: event.target.value }))}
+                placeholder="Ví dụ: Không cần sửa description dự án nữa, đổi title task thành 'viết testcase'..."
+                className="bg-background/70 text-xs h-9 flex-1"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    void handleSendModification();
+                  }
+                }}
+              />
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                className="h-9 text-xs font-bold shrink-0"
+                onClick={() => void handleSendModification()}
+              >
+                Gửi yêu cầu
+              </Button>
+            </div>
+          </label>
+        </div>
+
+        <div className="mt-4 flex justify-end gap-2 border-t border-black/5 dark:border-white/5 pt-3">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              confirmations.forEach(c => cancelPendingAction(c.actionId));
+              setDynamicFormValues((forms) => {
+                const next = { ...forms };
+                delete next[formKey];
+                return next;
+              });
+              setPlanModificationTexts((texts) => {
+                const next = { ...texts };
+                delete next[formKey];
+                return next;
+              });
+            }}
+            className="text-rose-600 border-rose-500/30 hover:bg-rose-50 dark:hover:bg-rose-950/20"
+          >
+            <X className="h-4 w-4" />
+            Hủy bỏ
+          </Button>
+          <Button type="button" size="sm" onClick={() => void submitDynamicForm(formKey, spec, confirmations)}>
+            <Check className="h-4 w-4" />
+            Tiến hành theo plan
+          </Button>
+        </div>
+      </div>
+    );
+  };
+
   const renderConfirmationCards = (confirmations: PendingActionConfirmation[]) => (
     <div className="mt-3 grid gap-3">
       {confirmations.map((confirmation) =>
@@ -2463,11 +2831,16 @@ export default function AiChatPage() {
 
     const formKey = `message-${msg.id || idx}`;
     const confirmations = dedupeConfirmations(extractConfirmationSpecs(msg.content));
+    const dynamicForm = extractDynamicFormSpec(msg.content);
+
+    if (confirmations.length > 0 && dynamicForm) {
+      return renderCombinedConfirmAndForm(formKey, confirmations, dynamicForm);
+    }
+
     if (confirmations.length > 0) {
       return renderConfirmationCards(confirmations);
     }
 
-    const dynamicForm = extractDynamicFormSpec(msg.content);
     if (dynamicForm) {
       return renderDynamicForm(formKey, dynamicForm);
     }
@@ -2482,55 +2855,74 @@ export default function AiChatPage() {
 
 
 
+  const parseInterleavedContent = (content: string) => {
+    interface Segment {
+      type: 'think' | 'response';
+      content: string;
+      isUnclosed?: boolean;
+    }
+    const segments: Segment[] = [];
+    let currentIndex = 0;
+
+    while (currentIndex < content.length) {
+      const openMatch = content.slice(currentIndex).match(/<(d?think|thought)\b[^>]*>/i);
+      if (!openMatch) {
+        const remaining = content.slice(currentIndex).trim();
+        if (remaining) {
+          segments.push({ type: 'response', content: remaining });
+        }
+        break;
+      }
+
+      const openTagIndex = currentIndex + openMatch.index!;
+      const beforeText = content.slice(currentIndex, openTagIndex).trim();
+      if (beforeText) {
+        segments.push({ type: 'response', content: beforeText });
+      }
+
+      const openTagLength = openMatch[0].length;
+      const tagName = openMatch[1];
+      const closeTagRegex = new RegExp(`</\\s*${tagName}\\s*>`, 'i');
+      const closeMatch = content.slice(openTagIndex + openTagLength).match(closeTagRegex);
+
+      if (!closeMatch) {
+        const thinkContent = content.slice(openTagIndex + openTagLength);
+        segments.push({ type: 'think', content: thinkContent, isUnclosed: true });
+        break;
+      }
+
+      const closeTagIndex = openTagIndex + openTagLength + closeMatch.index!;
+      const thinkContent = content.slice(openTagIndex + openTagLength, closeTagIndex);
+      segments.push({ type: 'think', content: thinkContent, isUnclosed: false });
+
+      currentIndex = closeTagIndex + closeMatch[0].length;
+    }
+
+    return segments;
+  };
+
   const extractThinkPayload = (content: string) => {
-    const blockPattern = /<\s*(?:d?think|thought)\b[^>]*>([\s\S]*?)<\s*\/\s*(?:d?think|thought)\s*>/gi;
-    const tagPattern = /<\/?\s*(?:d?think|thought)\b[^>]*>/gi;
-    const openTagPattern = /<\s*(?:d?think|thought)\b[^>]*>/i;
+    const segments = parseInterleavedContent(content);
+    const hasThinkTag = segments.some(s => s.type === 'think');
+    const lastSegment = segments[segments.length - 1];
+    const hasUnclosedThink = lastSegment ? (lastSegment.type === 'think' && !!lastSegment.isUnclosed) : false;
 
-    const thinkBlocks: string[] = [];
-    let beforeThink = content;
-    let afterThink = "";
-    let firstStart = -1;
-    let lastEnd = -1;
-    let match: RegExpExecArray | null;
+    const responseText = segments
+      .filter(s => s.type === 'response')
+      .map(s => s.content)
+      .join("\n\n");
 
-    while ((match = blockPattern.exec(content)) !== null) {
-      if (firstStart === -1) {
-        firstStart = match.index;
-      }
-      lastEnd = match.index + match[0].length;
-      thinkBlocks.push(match[1]);
-    }
-
-    const unclosedOpen = firstStart === -1 ? content.search(openTagPattern) : -1;
-    const hasThinkTag = firstStart !== -1 || unclosedOpen !== -1 || tagPattern.test(content);
-    const hasUnclosedThink = unclosedOpen !== -1;
-
-    if (firstStart !== -1) {
-      beforeThink = content.slice(0, firstStart);
-      afterThink = content.slice(lastEnd);
-    } else if (unclosedOpen !== -1) {
-      beforeThink = content.slice(0, unclosedOpen);
-      afterThink = "";
-      const openMatch = content.slice(unclosedOpen).match(openTagPattern);
-      if (openMatch) {
-        thinkBlocks.push(content.slice(unclosedOpen + openMatch[0].length));
-      }
-    }
-
-    const sanitizeAnswerText = (text: string) =>
-      text.replace(blockPattern, " ").replace(tagPattern, " ").trim();
-
-    const thinkingText = thinkBlocks
-      .map((block) => block.trim())
-      .filter((block) => block.length > 0)
+    const thinkingText = segments
+      .filter(s => s.type === 'think')
+      .map(s => s.content.trim())
+      .filter(Boolean)
       .join("\n\n");
 
     return {
       hasThinkTag,
       hasUnclosedThink,
-      beforeThink: sanitizeAnswerText(beforeThink),
-      afterThink: sanitizeAnswerText(afterThink),
+      beforeThink: responseText,
+      afterThink: "",
       thinkingText,
     };
   };
@@ -2545,57 +2937,47 @@ export default function AiChatPage() {
     isStreamingMessage = false,
   ) => {
     const displayContent = stripDynamicFormBlocks(content, collapseWhenComplete);
-    const parsed = extractThinkPayload(displayContent);
-
-    // Chỉ hiển thị hộp thinking nếu AI thực sự có thẻ <think> hoặc force = true
-    const hasThinking = parsed.hasThinkTag || forceThinkingOpen;
-    const isThinkingComplete = !parsed.hasUnclosedThink;
-    
-    // Nếu force mở mà không có text, hiện dòng mặc định
-    const displayThinking = parsed.thinkingText || expanded || "Đang phân tích yêu cầu...";
-
-    // hasVisibleResponse = true khi AI đã bắt đầu generate text (có response text ngoài thinking)
-    const responseText = hasThinking
-      ? [parsed.afterThink, parsed.beforeThink].filter(Boolean).join("\n\n")
-      : displayContent;
-    const hasVisibleResponse = responseText.trim().length > 0;
+    const segments = parseInterleavedContent(displayContent);
+    const lastThinkIndex = segments.map((s, idx) => s.type === 'think' ? idx : -1).filter(idx => idx !== -1).pop();
 
     return (
       <div className="flex flex-col gap-2 text-neutral-900 dark:text-neutral-100">
+        {segments.map((segment, index) => {
+          if (segment.type === 'think') {
+            const isLastThink = index === lastThinkIndex;
+            const segmentTools = isLastThink ? tools : [];
+            const displayThinking = segment.content.trim() || (isLastThink ? expanded : "") || "Đang phân tích yêu cầu...";
+            return (
+              <ThinkingAccordion
+                key={`think-${index}`}
+                thinkingText={displayThinking}
+                tools={segmentTools}
+                isThinkingComplete={!segment.isUnclosed}
+                hasVisibleResponse={segments.slice(index + 1).some(s => s.type === 'response')}
+                collapseWhenComplete={collapseWhenComplete && !isStreamingMessage}
+                forceOpen={isStreamingMessage}
+                t={t}
+                confirmPendingAction={confirmPendingAction}
+                cancelPendingAction={cancelPendingAction}
+              />
+            );
+          } else {
+            return (
+              <div key={`resp-${index}`} className="max-w-full prose prose-sm dark:prose-invert pt-1">
+                <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                  {segment.content}
+                </ReactMarkdown>
+              </div>
+            );
+          }
+        })}
 
-        {/* 1. Thinking block & Tools (bọc trong Accordion gọn gàng) */}
-        {(hasThinking || (tools && tools.length > 0)) && (
-          <ThinkingAccordion
-            thinkingText={displayThinking}
-            tools={tools}
-            isThinkingComplete={isThinkingComplete}
-            hasVisibleResponse={hasVisibleResponse}
-            collapseWhenComplete={collapseWhenComplete}
-            forceOpen={isStreamingMessage && !isThinkingComplete}
-            t={t}
-            confirmPendingAction={confirmPendingAction}
-            cancelPendingAction={cancelPendingAction}
-          />
-        )}
-
-        {/* Stuck indicator: thinking done, tools called, no response yet.
-            Shows OUTSIDE accordion (which collapses when thinking is complete)
-            during the gap between last tool result and first response token. */}
-        {isStreamingMessage && isThinkingComplete && !hasVisibleResponse && tools && tools.length > 0 && (
+        {isStreamingMessage && segments.length > 0 && segments[segments.length - 1].type === 'think' && !segments[segments.length - 1].isUnclosed && tools && tools.length > 0 && (
           <PostToolProcessingRow
             toolName={tools[tools.length - 1].name}
-            isComplete={hasVisibleResponse}
+            isComplete={false}
           />
         )}
-
-        {/* 3. Response cuối cùng */}
-        <div className="max-w-full prose prose-sm dark:prose-invert pt-1">
-          <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-            {hasThinking 
-              ? [parsed.afterThink, parsed.beforeThink].filter(Boolean).join("\n\n")
-              : displayContent}
-          </ReactMarkdown>
-        </div>
       </div>
     );
   };
