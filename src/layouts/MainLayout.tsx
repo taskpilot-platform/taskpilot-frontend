@@ -16,6 +16,7 @@ import { toast } from "react-toastify";
 import { profileService } from "@/services/profile.service";
 import { notificationService } from "@/services/notification.service";
 import { authStorage, projectStorage } from "@/lib/storage";
+import { oneSignalLogin } from "@/lib/onesignal";
 
 const NOTIFICATION_BLINK_MS = 3000;
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL?.trim() || "";
@@ -158,6 +159,7 @@ export default function MainLayout() {
           setProfile(res.data);
           setUserRole(res.data.role);
           localStorage.setItem("userRole", res.data.role);
+          void oneSignalLogin(res.data.id);
         })
         .catch(() => {
           setUserRole("USER");

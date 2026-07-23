@@ -329,7 +329,7 @@ export default function ProjectsPage() {
                         <TableRow
                           key={project.id}
                           className="cursor-pointer hover:bg-accent/40 transition-colors"
-                          onClick={() => navigate(`/projects/${project.id}`)}
+                          onClick={() => navigate(`/projects/${project.id}/overview`)}
                         >
                           <TableCell>
                             <div className="font-medium">{project.name}</div>

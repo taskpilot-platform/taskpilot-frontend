@@ -190,7 +190,7 @@ export default function ProjectWorkspacePage() {
   const confirm = useConfirm();
   const { projectId, tabId, taskId } = useParams();
   const navigate = useNavigate();
-  const activeTab: ViewMode = isViewMode(tabId) ? tabId : "board";
+  const activeTab: ViewMode = isViewMode(tabId) ? tabId : "overview";
 
   const currentProjectId = Number(projectId);
   const currentTaskId = taskId ? Number(taskId) : null;
@@ -403,7 +403,7 @@ export default function ProjectWorkspacePage() {
 
   useEffect(() => {
     if (tabId && !isViewMode(tabId) && currentProjectId) {
-      navigate(`/projects/${currentProjectId}/board`, { replace: true });
+      navigate(`/projects/${currentProjectId}/overview`, { replace: true });
     }
   }, [tabId, currentProjectId, navigate]);
 
