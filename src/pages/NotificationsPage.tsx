@@ -138,9 +138,11 @@ export default function NotificationsPage() {
   useEffect(() => {
     void loadNotifications(true);
 
-    const intervalId = window.setInterval(() => {
-      void loadNotifications(false);
-    }, POLL_INTERVAL_MS);
+    const handleNotificationCreated = (e: Event) => {
+      const customEvent = e as CustomEvent<NotificationItem>;
+      const newItem = customEvent.detail;
+      setNotifications((prev) => mergeById(prev, [newItem]));
+    };
 
     const onVisibilityChange = () => {
       if (document.visibilityState === "visible") {
@@ -152,11 +154,12 @@ export default function NotificationsPage() {
       void loadNotifications(false);
     };
 
+    window.addEventListener("notificationCreated", handleNotificationCreated);
     document.addEventListener("visibilitychange", onVisibilityChange);
     window.addEventListener("focus", onWindowFocus);
 
     return () => {
-      window.clearInterval(intervalId);
+      window.removeEventListener("notificationCreated", handleNotificationCreated);
       document.removeEventListener("visibilitychange", onVisibilityChange);
       window.removeEventListener("focus", onWindowFocus);
     };

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { fetchEventSource } from "@microsoft/fetch-event-source";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
@@ -104,6 +104,7 @@ const startNotificationStream = (token: string) => {
               window.location.href = `/notifications/${item.id}`;
             },
           });
+          window.dispatchEvent(new CustomEvent("notificationCreated", { detail: item }));
         } catch {
           // Ignore JSON parse errors
         }
@@ -166,9 +167,13 @@ export default function MainLayout() {
     return () => window.removeEventListener('profileUpdated', fetchProfile);
   }, []);
 
+  const currentPathRef = useRef(location.pathname);
+  useEffect(() => {
+    currentPathRef.current = location.pathname;
+  }, [location.pathname]);
+
   useEffect(() => {
     let isMounted = true;
-    let previousCount = -1;
 
     const loadUnreadCount = async () => {
       try {
@@ -176,44 +181,18 @@ export default function MainLayout() {
         if (!isMounted) {
           return;
         }
-
-        const nextCount = response.data;
-        setUnreadCount(nextCount);
-
-        if (
-          previousCount >= 0 &&
-          nextCount > previousCount &&
-          !location.pathname.startsWith("/notifications")
-        ) {
-          setIsNotificationBlinking(true);
-          window.setTimeout(() => setIsNotificationBlinking(false), NOTIFICATION_BLINK_MS);
-        }
-
-        previousCount = nextCount;
+        setUnreadCount(response.data);
       } catch {
-        // Ignore polling errors in sidebar.
+        // Ignore errors in sidebar.
       }
     };
 
     void loadUnreadCount();
-    const intervalId = window.setInterval(() => {
-      void loadUnreadCount();
-    }, 15000);
-
-    const onVisibilityChange = () => {
-      if (document.visibilityState === "visible") {
-        void loadUnreadCount();
-      }
-    };
-
-    document.addEventListener("visibilitychange", onVisibilityChange);
 
     return () => {
       isMounted = false;
-      window.clearInterval(intervalId);
-      document.removeEventListener("visibilitychange", onVisibilityChange);
     };
-  }, [location.pathname]);
+  }, []);
 
   useEffect(() => {
     if (!location.pathname.startsWith("/notifications")) {
@@ -232,7 +211,13 @@ export default function MainLayout() {
     }
 
     const detachUnreadListener = attachNotificationUnreadListener((nextCount) => {
-      setUnreadCount(nextCount);
+      setUnreadCount((prev) => {
+        if (nextCount > prev && !currentPathRef.current.startsWith("/notifications")) {
+          setIsNotificationBlinking(true);
+          window.setTimeout(() => setIsNotificationBlinking(false), NOTIFICATION_BLINK_MS);
+        }
+        return nextCount;
+      });
     });
     startNotificationStream(token);
 
