@@ -22,10 +22,22 @@ import type { NotificationItem } from "@/types/notification";
 const POLL_INTERVAL_MS = 5000;
 const URL_SCHEME_PATTERN = /^[a-zA-Z][a-zA-Z\d+\-.]*:/;
 
+function parseDateMs(dateStr: string | null | undefined): number {
+  if (!dateStr) return 0;
+  const time = new Date(dateStr).getTime();
+  return Number.isNaN(time) ? 0 : time;
+}
+
 function sortByNewest(items: NotificationItem[]): NotificationItem[] {
-  return [...items].sort(
-    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-  );
+  return [...items].sort((a, b) => {
+    const timeA = parseDateMs(a.createdAt);
+    const timeB = parseDateMs(b.createdAt);
+
+    if (timeA === timeB) {
+      return b.id - a.id;
+    }
+    return timeB - timeA;
+  });
 }
 
 function mergeById(prev: NotificationItem[], incoming: NotificationItem[]): NotificationItem[] {

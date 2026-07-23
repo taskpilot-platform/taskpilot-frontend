@@ -99,6 +99,9 @@ const startNotificationStream = (token: string) => {
       } else if (event.event === "notification.created") {
         try {
           const item: NotificationItem = JSON.parse(event.data);
+          if (!item.createdAt) {
+            item.createdAt = new Date().toISOString();
+          }
           toast.info(`🔔 ${item.title}: ${item.message}`, {
             onClick: () => {
               window.location.href = `/notifications/${item.id}`;
