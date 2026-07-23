@@ -9,6 +9,7 @@ import { getApiErrorMessage } from "@/lib/http";
 import { useAuthStore } from "@/stores/auth.store";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import type { UserProfile } from "@/types/user";
+import type { NotificationItem } from "@/types/notification";
 import { LayoutDashboard, ShieldCheck, UserRound, LogOut, FolderKanban, Users, Code, Settings, Menu, ChevronLeft, Bot, Bell, MessageSquare } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { toast } from "react-toastify";
@@ -90,13 +91,22 @@ const startNotificationStream = (token: string) => {
       }
     },
     onmessage(event) {
-      if (event.event !== "notification.unread-count") {
-        return;
-      }
-
-      const nextCount = parseNotificationUnreadCount(event.data);
-      if (nextCount !== null) {
-        notifyUnreadListeners(nextCount);
+      if (event.event === "notification.unread-count") {
+        const nextCount = parseNotificationUnreadCount(event.data);
+        if (nextCount !== null) {
+          notifyUnreadListeners(nextCount);
+        }
+      } else if (event.event === "notification.created") {
+        try {
+          const item: NotificationItem = JSON.parse(event.data);
+          toast.info(`🔔 ${item.title}: ${item.message}`, {
+            onClick: () => {
+              window.location.href = `/notifications/${item.id}`;
+            },
+          });
+        } catch {
+          // Ignore JSON parse errors
+        }
       }
     },
     onerror(error) {

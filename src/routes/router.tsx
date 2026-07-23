@@ -101,6 +101,10 @@ export const router = createBrowserRouter([
         element: <NotificationsPage />,
       },
       {
+        path: "/notifications/:notificationId",
+        element: <NotificationsPage />,
+      },
+      {
         path: "/comments",
         element: <CommentsPage />,
       },

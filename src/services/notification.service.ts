@@ -11,6 +11,11 @@ export const notificationService = {
     return response.data;
   },
 
+  async getNotificationById(notificationId: number | string): Promise<ApiResponse<NotificationItem>> {
+    const response = await http.get<ApiResponse<NotificationItem>>(`/v1/notifications/${notificationId}`);
+    return response.data;
+  },
+
   async markAsRead(notificationId: number): Promise<ApiResponse<NotificationItem>> {
     const response = await http.put<ApiResponse<NotificationItem>>(`/v1/notifications/${notificationId}/read`);
     return response.data;

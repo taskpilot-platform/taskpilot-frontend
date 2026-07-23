@@ -1,12 +1,20 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { Bell, CheckCheck, Loader2 } from "lucide-react";
+import { useNavigate, useParams } from "react-router-dom";
+import { Bell, CheckCheck, ExternalLink, Loader2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { toast } from "react-toastify";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { getApiErrorMessage } from "@/lib/http";
 import { notificationService } from "@/services/notification.service";
 import type { NotificationItem } from "@/types/notification";
@@ -46,9 +54,14 @@ function isInternalAppPath(linkAction: string | null): linkAction is string {
 export default function NotificationsPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const { notificationId } = useParams<{ notificationId?: string }>();
+
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isMutating, setIsMutating] = useState(false);
+  const [activeModalNotification, setActiveModalNotification] = useState<NotificationItem | null>(null);
+  const [isModalLoading, setIsModalLoading] = useState(false);
+
   const latestRequestIdRef = useRef(0);
 
   const unreadCount = useMemo(
@@ -80,6 +93,48 @@ export default function NotificationsPage() {
     }
   };
 
+  // Load single notification when route /notifications/:notificationId is present
+  useEffect(() => {
+    if (!notificationId) {
+      setActiveModalNotification(null);
+      return;
+    }
+
+    const id = Number(notificationId);
+    if (Number.isNaN(id)) {
+      navigate("/notifications", { replace: true });
+      return;
+    }
+
+    // Check if already present in state
+    const existing = notifications.find((item) => item.id === id);
+    if (existing) {
+      setActiveModalNotification(existing);
+      if (!existing.isRead) {
+        void markNotificationRead(existing.id);
+      }
+      return;
+    }
+
+    // Otherwise fetch detail from backend API
+    const fetchDetail = async () => {
+      setIsModalLoading(true);
+      try {
+        const response = await notificationService.getNotificationById(id);
+        const item = response.data;
+        setActiveModalNotification(item);
+        setNotifications((prev) => mergeById(prev, [item]));
+      } catch (error) {
+        toast.error(getApiErrorMessage(error));
+        navigate("/notifications", { replace: true });
+      } finally {
+        setIsModalLoading(false);
+      }
+    };
+
+    void fetchDetail();
+  }, [notificationId, notifications, navigate]);
+
   useEffect(() => {
     void loadNotifications(true);
 
@@ -107,17 +162,18 @@ export default function NotificationsPage() {
     };
   }, []);
 
-  const markNotificationRead = async (notificationId: number) => {
-    await notificationService.markAsRead(notificationId);
+  const markNotificationRead = async (id: number) => {
+    await notificationService.markAsRead(id);
     setNotifications((prev) =>
-      prev.map((item) => (item.id === notificationId ? { ...item, isRead: true } : item)),
+      prev.map((item) => (item.id === id ? { ...item, isRead: true } : item)),
     );
+    setActiveModalNotification((prev) => (prev && prev.id === id ? { ...prev, isRead: true } : prev));
   };
 
-  const handleMarkAsRead = async (notificationId: number) => {
+  const handleMarkAsRead = async (id: number) => {
     setIsMutating(true);
     try {
-      await markNotificationRead(notificationId);
+      await markNotificationRead(id);
     } catch (error) {
       toast.error(getApiErrorMessage(error));
     } finally {
@@ -125,27 +181,32 @@ export default function NotificationsPage() {
     }
   };
 
-  const handleOpenNotification = async (item: NotificationItem) => {
-    if (!item.linkAction) {
+  const handleItemClick = (item: NotificationItem) => {
+    navigate(`/notifications/${item.id}`);
+  };
+
+  const handleCloseModal = () => {
+    setActiveModalNotification(null);
+    navigate("/notifications");
+  };
+
+  const handleActionClick = async () => {
+    if (!activeModalNotification?.linkAction) {
       return;
     }
 
-    if (!isInternalAppPath(item.linkAction)) {
+    const path = activeModalNotification.linkAction;
+    if (!isInternalAppPath(path)) {
       toast.error("Unsupported notification link");
       return;
     }
 
-    setIsMutating(true);
-    try {
-      if (!item.isRead) {
-        await markNotificationRead(item.id);
-      }
-      navigate(item.linkAction);
-    } catch (error) {
-      toast.error(getApiErrorMessage(error));
-    } finally {
-      setIsMutating(false);
+    if (!activeModalNotification.isRead) {
+      await markNotificationRead(activeModalNotification.id);
     }
+
+    setActiveModalNotification(null);
+    navigate(path);
   };
 
   const handleMarkAllAsRead = async () => {
@@ -153,6 +214,9 @@ export default function NotificationsPage() {
     try {
       await notificationService.markAllAsRead();
       setNotifications((prev) => prev.map((item) => ({ ...item, isRead: true })));
+      if (activeModalNotification) {
+        setActiveModalNotification({ ...activeModalNotification, isRead: true });
+      }
       toast.success(t("notifications.mark_all_success"));
     } catch (error) {
       toast.error(getApiErrorMessage(error));
@@ -202,21 +266,18 @@ export default function NotificationsPage() {
               {notifications.map((item) => (
                 <div
                   key={item.id}
-                  role={item.linkAction ? "button" : undefined}
-                  tabIndex={item.linkAction ? 0 : undefined}
-                  onClick={() => void handleOpenNotification(item)}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => handleItemClick(item)}
                   onKeyDown={(event) => {
-                    if (!item.linkAction) {
-                      return;
-                    }
                     if (event.key === "Enter" || event.key === " ") {
                       event.preventDefault();
-                      void handleOpenNotification(item);
+                      handleItemClick(item);
                     }
                   }}
-                  className={`rounded-lg border p-4 transition-colors ${
-                    item.isRead ? "bg-card" : "bg-accent/30"
-                  } ${item.linkAction ? "cursor-pointer hover:border-primary/50 hover:bg-accent/20" : ""}`}
+                  className={`rounded-lg border p-4 cursor-pointer transition-colors ${
+                    item.isRead ? "bg-card" : "bg-accent/30 font-medium"
+                  } hover:border-primary/50 hover:bg-accent/20`}
                 >
                   <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                     <div className="flex items-center gap-2">
@@ -240,10 +301,10 @@ export default function NotificationsPage() {
                     )}
                   </div>
 
-                  {item.message && <p className="text-sm text-muted-foreground">{item.message}</p>}
+                  {item.message && <p className="text-sm text-muted-foreground line-clamp-2">{item.message}</p>}
 
                   <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
-                    <span>{item.type}</span>
+                    <Badge variant="outline">{item.type}</Badge>
                     <span>{new Date(item.createdAt).toLocaleString()}</span>
                   </div>
                 </div>
@@ -252,6 +313,51 @@ export default function NotificationsPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Notification Detail Modal */}
+      <Dialog open={Boolean(notificationId || activeModalNotification)} onOpenChange={(open) => !open && handleCloseModal()}>
+        <DialogContent className="sm:max-w-md">
+          {isModalLoading ? (
+            <div className="flex items-center justify-center p-8 text-sm text-muted-foreground">
+              <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+              Đang tải chi tiết thông báo...
+            </div>
+          ) : activeModalNotification ? (
+            <>
+              <DialogHeader>
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline">{activeModalNotification.type}</Badge>
+                  {activeModalNotification.isRead ? (
+                    <span className="text-xs text-muted-foreground">Đã đọc</span>
+                  ) : (
+                    <Badge variant="default">Mới</Badge>
+                  )}
+                </div>
+                <DialogTitle className="mt-2 text-xl font-bold">{activeModalNotification.title}</DialogTitle>
+                <DialogDescription className="text-xs text-muted-foreground">
+                  {new Date(activeModalNotification.createdAt).toLocaleString()}
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="my-4 text-sm text-foreground leading-relaxed whitespace-pre-wrap">
+                {activeModalNotification.message}
+              </div>
+
+              <DialogFooter className="gap-2 sm:gap-0">
+                {activeModalNotification.linkAction && (
+                  <Button type="button" className="gap-2" onClick={() => void handleActionClick()}>
+                    <ExternalLink className="h-4 w-4" />
+                    Chuyển tới công việc / dự án
+                  </Button>
+                )}
+                <Button type="button" variant="outline" onClick={handleCloseModal}>
+                  Đóng
+                </Button>
+              </DialogFooter>
+            </>
+          ) : null}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
