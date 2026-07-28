@@ -1,5 +1,11 @@
 import OneSignal from "react-onesignal";
 
+declare global {
+  interface Window {
+    OneSignalDeferred?: any[];
+  }
+}
+
 let initialized = false;
 
 function getOneSignalAppId(): string {
@@ -16,23 +22,41 @@ export async function initOneSignal(): Promise<void> {
     return;
   }
 
-  await OneSignal.init({
-    appId,
-    allowLocalhostAsSecureOrigin: true,
-  });
-
   initialized = true;
-  OneSignal.Slidedown.promptPush();
+  try {
+    await OneSignal.init({
+      appId,
+      allowLocalhostAsSecureOrigin: true,
+    });
+    OneSignal.Slidedown.promptPush();
+  } catch {
+    // Ignore duplicate init calls
+  }
 }
 
 export async function oneSignalLogin(userId: string | number): Promise<void> {
   const appId = getOneSignalAppId();
-  if (!appId) {
+  if (!appId || !userId) {
     return;
   }
 
-  await initOneSignal();
-  await OneSignal.login(String(userId));
+  try {
+    await initOneSignal();
+    if (typeof window !== "undefined") {
+      window.OneSignalDeferred = window.OneSignalDeferred || [];
+      window.OneSignalDeferred.push(async (oneSignal: any) => {
+        try {
+          if (oneSignal && typeof oneSignal.login === "function") {
+            await oneSignal.login(String(userId));
+          }
+        } catch {
+          // Ignore OneSignal SDK internal errors (e.g. 409 conflict, uninitialized properties)
+        }
+      });
+    }
+  } catch {
+    // Ignore initialization errors
+  }
 }
 
 export async function oneSignalLogout(): Promise<void> {
@@ -41,5 +65,19 @@ export async function oneSignalLogout(): Promise<void> {
     return;
   }
 
-  await OneSignal.logout();
+  try {
+    if (typeof window !== "undefined" && window.OneSignalDeferred) {
+      window.OneSignalDeferred.push(async (oneSignal: any) => {
+        try {
+          if (oneSignal && typeof oneSignal.logout === "function") {
+            await oneSignal.logout();
+          }
+        } catch {
+          // Ignore logout errors
+        }
+      });
+    }
+  } catch {
+    // Ignore logout errors
+  }
 }
