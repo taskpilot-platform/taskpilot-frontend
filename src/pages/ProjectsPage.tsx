@@ -66,20 +66,13 @@ export default function ProjectsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isMutating, setIsMutating] = useState(false);
 
-  const [createName, setCreateName] = useState("");
-  const [createDescription, setCreateDescription] = useState("");
-  const [createHeuristicMode, setCreateHeuristicMode] = useState<HeuristicMode>("BALANCED");
-  const [createStartDate, setCreateStartDate] = useState("");
-  const [createEndDate, setCreateEndDate] = useState("");
-
+  const initialCreateForm = { name: "", description: "", heuristicMode: "BALANCED" as HeuristicMode, startDate: "", endDate: "" };
+  const [createForm, setCreateForm] = useState(initialCreateForm);
   const [joinCode, setJoinCode] = useState("");
+  const [editForm, setEditForm] = useState({ name: "", description: "", status: "ACTIVE" as ProjectStatus, heuristicMode: "BALANCED" as HeuristicMode, startDate: "", endDate: "" });
 
-  const [editName, setEditName] = useState("");
-  const [editDescription, setEditDescription] = useState("");
-  const [editStatus, setEditStatus] = useState<ProjectStatus>("ACTIVE");
-  const [editHeuristicMode, setEditHeuristicMode] = useState<HeuristicMode>("BALANCED");
-  const [editStartDate, setEditStartDate] = useState("");
-  const [editEndDate, setEditEndDate] = useState("");
+  const setCreateField = (k: keyof typeof initialCreateForm, v: string) => setCreateForm((prev) => ({ ...prev, [k]: v }));
+  const setEditField = (k: keyof typeof editForm, v: string) => setEditForm((prev) => ({ ...prev, [k]: v }));
 
   const selectedProjectMeta = useMemo(
     () => projects.find((project) => project.id === selectedProjectId) || null,
@@ -127,12 +120,14 @@ export default function ProjectsPage() {
       setProjectSummary(summaryResponse.data);
       setProjectMembers(membersResponse.data);
 
-      setEditName(detailResponse.data.name || "");
-      setEditDescription(detailResponse.data.description || "");
-      setEditStatus(detailResponse.data.status);
-      setEditHeuristicMode(detailResponse.data.heuristicMode);
-      setEditStartDate(detailResponse.data.startDate || "");
-      setEditEndDate(detailResponse.data.endDate || "");
+      setEditForm({
+        name: detailResponse.data.name || "",
+        description: detailResponse.data.description || "",
+        status: detailResponse.data.status,
+        heuristicMode: detailResponse.data.heuristicMode,
+        startDate: detailResponse.data.startDate || "",
+        endDate: detailResponse.data.endDate || "",
+      });
       setMode("detail");
     } catch (error) {
       toast.error(getApiErrorMessage(error));
@@ -175,19 +170,15 @@ export default function ProjectsPage() {
     setIsMutating(true);
     try {
       await projectService.createProject({
-        name: createName.trim(),
-        description: createDescription.trim() || undefined,
-        heuristicMode: createHeuristicMode,
-        startDate: createStartDate || undefined,
-        endDate: createEndDate || undefined,
+        name: createForm.name.trim(),
+        description: createForm.description.trim() || undefined,
+        heuristicMode: createForm.heuristicMode,
+        startDate: createForm.startDate || undefined,
+        endDate: createForm.endDate || undefined,
       });
 
       toast.success(t("projects.create_success"));
-      setCreateName("");
-      setCreateDescription("");
-      setCreateHeuristicMode("BALANCED");
-      setCreateStartDate("");
-      setCreateEndDate("");
+      setCreateForm(initialCreateForm);
       setMode("list");
       await loadMyProjects(0, pageSize);
     } catch (error) {
@@ -230,12 +221,12 @@ export default function ProjectsPage() {
     setIsMutating(true);
     try {
       await projectService.updateProject(selectedProjectId, {
-        name: editName.trim() || undefined,
-        description: editDescription.trim() || undefined,
-        status: editStatus,
-        heuristicMode: editHeuristicMode,
-        startDate: editStartDate || undefined,
-        endDate: editEndDate || undefined,
+        name: editForm.name.trim() || undefined,
+        description: editForm.description.trim() || undefined,
+        status: editForm.status,
+        heuristicMode: editForm.heuristicMode,
+        startDate: editForm.startDate || undefined,
+        endDate: editForm.endDate || undefined,
       });
 
       toast.success(t("projects.update_success"));
@@ -414,8 +405,8 @@ export default function ProjectsPage() {
                         <Label htmlFor="projectName">{t("projects.name")}</Label>
                         <Input
                           id="projectName"
-                          value={createName}
-                          onChange={(event) => setCreateName(event.target.value)}
+                          value={createForm.name}
+                          onChange={(e) => setCreateField("name", e.target.value)}
                           placeholder={t("projects.name_placeholder")}
                           required
                         />
@@ -425,8 +416,8 @@ export default function ProjectsPage() {
                         <Label htmlFor="projectDescription">{t("projects.desc")}</Label>
                         <textarea
                           id="projectDescription"
-                          value={createDescription}
-                          onChange={(event) => setCreateDescription(event.target.value)}
+                          value={createForm.description}
+                          onChange={(e) => setCreateField("description", e.target.value)}
                           rows={3}
                           className="w-full rounded-md border bg-background px-3 py-2 text-sm"
                           placeholder={t("projects.desc_placeholder")}
@@ -437,8 +428,8 @@ export default function ProjectsPage() {
                         <Label htmlFor="heuristicMode">{t("projects.mode")}</Label>
                         <select
                           id="heuristicMode"
-                          value={createHeuristicMode}
-                          onChange={(event) => setCreateHeuristicMode(event.target.value as HeuristicMode)}
+                          value={createForm.heuristicMode}
+                          onChange={(e) => setCreateField("heuristicMode", e.target.value as HeuristicMode)}
                           className="w-full rounded-md border bg-background px-3 py-2 text-sm"
                         >
                           {heuristicModes.map((m) => (
@@ -455,8 +446,8 @@ export default function ProjectsPage() {
                           <Input
                             id="startDate"
                             type="date"
-                            value={createStartDate}
-                            onChange={(event) => setCreateStartDate(event.target.value)}
+                            value={createForm.startDate}
+                            onChange={(e) => setCreateField("startDate", e.target.value)}
                           />
                         </div>
                         <div className="space-y-1.5">
@@ -464,8 +455,8 @@ export default function ProjectsPage() {
                           <Input
                             id="endDate"
                             type="date"
-                            value={createEndDate}
-                            onChange={(event) => setCreateEndDate(event.target.value)}
+                            value={createForm.endDate}
+                            onChange={(e) => setCreateField("endDate", e.target.value)}
                           />
                         </div>
                       </div>
@@ -535,8 +526,8 @@ export default function ProjectsPage() {
                           <Label htmlFor="editName">{t("projects.name")}</Label>
                           <Input
                             id="editName"
-                            value={editName}
-                            onChange={(event) => setEditName(event.target.value)}
+                            value={editForm.name}
+                            onChange={(e) => setEditField("name", e.target.value)}
                             disabled={!isSelectedProjectManager}
                             required
                           />
@@ -546,8 +537,8 @@ export default function ProjectsPage() {
                           <Label htmlFor="editDescription">{t("projects.desc")}</Label>
                           <textarea
                             id="editDescription"
-                            value={editDescription}
-                            onChange={(event) => setEditDescription(event.target.value)}
+                            value={editForm.description}
+                            onChange={(e) => setEditField("description", e.target.value)}
                             rows={3}
                             className="w-full rounded-md border bg-background px-3 py-2 text-sm"
                             disabled={!isSelectedProjectManager}
@@ -558,8 +549,8 @@ export default function ProjectsPage() {
                           <Label htmlFor="editStatus">{t("projects.col_status")}</Label>
                           <select
                             id="editStatus"
-                            value={editStatus}
-                            onChange={(event) => setEditStatus(event.target.value as ProjectStatus)}
+                            value={editForm.status}
+                            onChange={(e) => setEditField("status", e.target.value as ProjectStatus)}
                             className="w-full rounded-md border bg-background px-3 py-2 text-sm"
                             disabled={!isSelectedProjectManager}
                           >
@@ -575,8 +566,8 @@ export default function ProjectsPage() {
                           <Label htmlFor="editMode">Heuristic mode</Label>
                           <select
                             id="editMode"
-                            value={editHeuristicMode}
-                            onChange={(event) => setEditHeuristicMode(event.target.value as HeuristicMode)}
+                            value={editForm.heuristicMode}
+                            onChange={(e) => setEditField("heuristicMode", e.target.value as HeuristicMode)}
                             className="w-full rounded-md border bg-background px-3 py-2 text-sm"
                             disabled={!isSelectedProjectManager}
                           >
@@ -593,8 +584,8 @@ export default function ProjectsPage() {
                           <Input
                             id="editStartDate"
                             type="date"
-                            value={editStartDate}
-                            onChange={(event) => setEditStartDate(event.target.value)}
+                            value={editForm.startDate}
+                            onChange={(e) => setEditField("startDate", e.target.value)}
                             disabled={!isSelectedProjectManager}
                           />
                         </div>
@@ -604,8 +595,8 @@ export default function ProjectsPage() {
                           <Input
                             id="editEndDate"
                             type="date"
-                            value={editEndDate}
-                            onChange={(event) => setEditEndDate(event.target.value)}
+                            value={editForm.endDate}
+                            onChange={(e) => setEditField("endDate", e.target.value)}
                             disabled={!isSelectedProjectManager}
                           />
                         </div>
@@ -629,30 +620,19 @@ export default function ProjectsPage() {
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-2 text-sm">
-                    <div className="flex items-center justify-between">
-                      <span className="text-muted-foreground">{t("projects.member_count")}</span>
-                      <strong>{projectSummary?.totalMembers ?? 0}</strong>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-muted-foreground">{t("projects.task_count")}</span>
-                      <strong>{projectSummary?.totalTasks ?? 0}</strong>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-muted-foreground">{t("projects.task_done")}</span>
-                      <strong>{projectSummary?.completedTasks ?? 0}</strong>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-muted-foreground">{t("projects.task_wip")}</span>
-                      <strong>{projectSummary?.inProgressTasks ?? 0}</strong>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-muted-foreground">{t("projects.task_todo")}</span>
-                      <strong>{projectSummary?.pendingTasks ?? 0}</strong>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-muted-foreground">{t("projects.progress")}</span>
-                      <strong>{Number(projectSummary?.completionRate ?? 0).toFixed(1)}%</strong>
-                    </div>
+                    {[
+                      { l: t("projects.member_count"), v: projectSummary?.totalMembers ?? 0 },
+                      { l: t("projects.task_count"), v: projectSummary?.totalTasks ?? 0 },
+                      { l: t("projects.task_done"), v: projectSummary?.completedTasks ?? 0 },
+                      { l: t("projects.task_wip"), v: projectSummary?.inProgressTasks ?? 0 },
+                      { l: t("projects.task_todo"), v: projectSummary?.pendingTasks ?? 0 },
+                      { l: t("projects.progress"), v: `${Number(projectSummary?.completionRate ?? 0).toFixed(1)}%` },
+                    ].map((s) => (
+                      <div key={s.l} className="flex items-center justify-between">
+                        <span className="text-muted-foreground">{s.l}</span>
+                        <strong>{s.v}</strong>
+                      </div>
+                    ))}
                   </CardContent>
                 </Card>
 
