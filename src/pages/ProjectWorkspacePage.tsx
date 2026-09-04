@@ -28,6 +28,7 @@ import {
   Trash2,
   LogOut
 } from "lucide-react";
+import { useLeaveProject } from "@/hooks/useLeaveProject";
 import { useTranslation } from "react-i18next";
 import { toast } from "react-toastify";
 import { useForm } from "react-hook-form";
@@ -221,7 +222,6 @@ export default function ProjectWorkspacePage() {
   // Member Detail state
   const [selectedMemberForDetail, setSelectedMemberForDetail] = useState<ProjectMember | null>(null);
   const [memberTasks, setMemberTasks] = useState<TaskDto[]>([]);
-  const [isLeaving, setIsLeaving] = useState(false);
   const [isLoadingMemberTasks, setIsLoadingMemberTasks] = useState(false);
 
   // Backlog state
@@ -232,6 +232,7 @@ export default function ProjectWorkspacePage() {
   // Overview edit state removed since Settings is canonical
 
   const myMemberInfo = useMemo(() => projectMembers.find(m => m.userId === myUserId), [projectMembers, myUserId]);
+  const { isLeaving, handleLeaveProject: handleLeaveProjectInWorkspace } = useLeaveProject(currentProjectId, projectMembers, myUserId);
   const isManager = myMemberInfo?.role === "MANAGER";
   const isArchived = project?.status === "ARCHIVED";
 
@@ -586,36 +587,6 @@ export default function ProjectWorkspacePage() {
       void loadData(currentProjectId);
     } catch (error) {
       toast.error(getApiErrorMessage(error));
-    }
-  };
-
-  const handleLeaveProjectInWorkspace = async () => {
-    const activeManagers = projectMembers.filter(m => m.role === "MANAGER");
-    const isCurrentUserManager = myMemberInfo?.role === "MANAGER";
-
-    if (isCurrentUserManager && activeManagers.length <= 1) {
-      toast.error(t("projects.leave_error_last_manager", {
-        defaultValue: "Bạn không thể rời dự án vì bạn là Manager duy nhất còn lại. Vui lòng bổ nhiệm người khác làm Manager trước khi rời."
-      }));
-      return;
-    }
-
-    const confirmed = await confirm({
-      title: t("projects.leave_title", { defaultValue: "Rời dự án" }),
-      message: t("projects.leave_confirm", { defaultValue: "Are you sure you want to leave this project?" }),
-      variant: "warning",
-    });
-    if (!confirmed) return;
-
-    setIsLeaving(true);
-    try {
-      await projectService.leaveProject(currentProjectId);
-      toast.success(t("projects.leave_success", { defaultValue: "Left project successfully" }));
-      navigate("/projects");
-    } catch (error) {
-      toast.error(getApiErrorMessage(error));
-    } finally {
-      setIsLeaving(false);
     }
   };
 
