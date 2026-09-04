@@ -1,5 +1,5 @@
-import { http } from "@/lib/http";
-import type { ApiResponse, PaginatedResponse } from "@/types/api";
+import { api } from "@/lib/http";
+import type { PaginatedResponse } from "@/types/api";
 import type { CommentSearchParams, CommentSearchResult } from "@/types/comment";
 
 function compactParams(params: CommentSearchParams) {
@@ -15,13 +15,6 @@ function compactParams(params: CommentSearchParams) {
 }
 
 export const commentService = {
-  async searchComments(
-    params: CommentSearchParams,
-  ): Promise<ApiResponse<PaginatedResponse<CommentSearchResult>>> {
-    const response = await http.get<ApiResponse<PaginatedResponse<CommentSearchResult>>>(
-      "/v1/comments",
-      { params: compactParams(params) },
-    );
-    return response.data;
-  },
+  searchComments: (params: CommentSearchParams) =>
+    api.get<PaginatedResponse<CommentSearchResult>>("/v1/comments", compactParams(params)),
 };

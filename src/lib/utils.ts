@@ -28,3 +28,15 @@ export function isTokenValid(token: string | null): boolean {
     return false;
   }
 }
+
+export function mergeById<T extends { id: number; createdAt?: string | null }>(prev: T[], incoming: T[]): T[] {
+  const map = new Map<number, T>();
+  for (const item of prev) map.set(item.id, item);
+  for (const item of incoming) map.set(item.id, item);
+  return Array.from(map.values()).sort((a, b) => {
+    const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+    if (timeA === timeB) return b.id - a.id;
+    return timeB - timeA;
+  });
+}

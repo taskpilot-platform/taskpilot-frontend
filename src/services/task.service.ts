@@ -1,5 +1,4 @@
-import { http } from "@/lib/http";
-import type { ApiResponse } from "@/types/api";
+import { api } from "@/lib/http";
 import type {
   CreateTaskCommentRequest,
   CreateTaskRequest,
@@ -13,86 +12,40 @@ import type {
 } from "@/types/task";
 
 export const taskService = {
-  async getTasksByProject(projectId: number): Promise<ApiResponse<TaskDto[]>> {
-    const response = await http.get<ApiResponse<TaskDto[]>>("/v1/tasks", {
-      params: { projectId },
-    });
-    return response.data;
-  },
-
-  async getTaskById(taskId: number): Promise<ApiResponse<TaskDetailDto>> {
-    const response = await http.get<ApiResponse<TaskDetailDto>>(`/v1/tasks/${taskId}`);
-    return response.data;
-  },
-
-  async getSubtasks(taskId: number): Promise<ApiResponse<TaskDto[]>> {
-    const response = await http.get<ApiResponse<TaskDto[]>>(`/v1/tasks/${taskId}/subtasks`);
-    return response.data;
-  },
-
-  async createTask(payload: CreateTaskRequest): Promise<ApiResponse<TaskDto>> {
-    const response = await http.post<ApiResponse<TaskDto>>("/v1/tasks", payload);
-    return response.data;
-  },
-
-  async updateTask(taskId: number, payload: UpdateTaskRequest): Promise<ApiResponse<TaskDto>> {
-    const response = await http.put<ApiResponse<TaskDto>>(`/v1/tasks/${taskId}`, payload);
-    return response.data;
-  },
-
-  async deleteTask(taskId: number): Promise<ApiResponse<null>> {
-    const response = await http.delete<ApiResponse<null>>(`/v1/tasks/${taskId}`);
-    return response.data;
-  },
-
-  async moveTaskKanban(taskId: number, payload: KanbanMoveRequest): Promise<ApiResponse<TaskDto>> {
-    const response = await http.patch<ApiResponse<TaskDto>>(`/v1/tasks/${taskId}/kanban`, payload);
-    return response.data;
-  },
-
-  async updateTaskSprint(taskId: number, sprintId: number | null): Promise<ApiResponse<TaskDto>> {
-    const response = await http.patch<ApiResponse<TaskDto>>(`/v1/tasks/${taskId}/sprint`, { sprintId });
-    return response.data;
-  },
-
-  async getTaskComments(taskId: number): Promise<ApiResponse<TaskCommentDto[]>> {
-    const response = await http.get<ApiResponse<TaskCommentDto[]>>(`/v1/tasks/${taskId}/comments`);
-    return response.data;
-  },
-
-  async createTaskComment(
-    taskId: number,
-    payload: CreateTaskCommentRequest,
-  ): Promise<ApiResponse<TaskCommentDto>> {
-    const response = await http.post<ApiResponse<TaskCommentDto>>(`/v1/tasks/${taskId}/comments`, payload);
-    return response.data;
-  },
-
-  async updateTaskComment(
+  getTasksByProject: (projectId: number) =>
+    api.get<TaskDto[]>("/v1/tasks", { projectId }),
+  getTaskById: (taskId: number) =>
+    api.get<TaskDetailDto>(`/v1/tasks/${taskId}`),
+  getSubtasks: (taskId: number) =>
+    api.get<TaskDto[]>(`/v1/tasks/${taskId}/subtasks`),
+  createTask: (payload: CreateTaskRequest) =>
+    api.post<TaskDto>("/v1/tasks", payload),
+  updateTask: (taskId: number, payload: UpdateTaskRequest) =>
+    api.put<TaskDto>(`/v1/tasks/${taskId}`, payload),
+  deleteTask: (taskId: number) =>
+    api.del<null>(`/v1/tasks/${taskId}`),
+  moveTaskKanban: (taskId: number, payload: KanbanMoveRequest) =>
+    api.patch<TaskDto>(`/v1/tasks/${taskId}/kanban`, payload),
+  updateTaskSprint: (taskId: number, sprintId: number | null) =>
+    api.patch<TaskDto>(`/v1/tasks/${taskId}/sprint`, { sprintId }),
+  getTaskComments: (taskId: number) =>
+    api.get<TaskCommentDto[]>(`/v1/tasks/${taskId}/comments`),
+  createTaskComment: (taskId: number, payload: CreateTaskCommentRequest) =>
+    api.post<TaskCommentDto>(`/v1/tasks/${taskId}/comments`, payload),
+  updateTaskComment: (
     taskId: number,
     commentId: number,
     payload: UpdateTaskCommentRequest,
-  ): Promise<ApiResponse<TaskCommentDto>> {
-    const response = await http.put<ApiResponse<TaskCommentDto>>(
+  ) =>
+    api.put<TaskCommentDto>(
       `/v1/tasks/${taskId}/comments/${commentId}`,
       payload,
-    );
-    return response.data;
-  },
-
-  async deleteTaskComment(taskId: number, commentId: number): Promise<ApiResponse<TaskCommentDto>> {
-    const response = await http.delete<ApiResponse<TaskCommentDto>>(`/v1/tasks/${taskId}/comments/${commentId}`);
-    return response.data;
-  },
-
-  async getCommentMentionCandidates(
-    taskId: number,
-    keyword?: string,
-  ): Promise<ApiResponse<UserProfileLiteDto[]>> {
-    const response = await http.get<ApiResponse<UserProfileLiteDto[]>>(
+    ),
+  deleteTaskComment: (taskId: number, commentId: number) =>
+    api.del<TaskCommentDto>(`/v1/tasks/${taskId}/comments/${commentId}`),
+  getCommentMentionCandidates: (taskId: number, keyword?: string) =>
+    api.get<UserProfileLiteDto[]>(
       `/v1/tasks/${taskId}/comments/mention-candidates`,
-      { params: keyword?.trim() ? { keyword: keyword.trim() } : undefined },
-    );
-    return response.data;
-  },
+      keyword?.trim() ? { keyword: keyword.trim() } : undefined,
+    ),
 };

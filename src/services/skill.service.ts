@@ -1,42 +1,13 @@
-import { http } from "@/lib/http";
-import type { ApiResponse } from "@/types/api";
+import { api } from "@/lib/http";
 import type { AddSkillRequest, SkillDirectoryItem, UpdateSkillRequest, UserSkill } from "@/types/user";
 
 export const skillService = {
-  async getMySkills(): Promise<ApiResponse<UserSkill[]>> {
-    const response = await http.get<ApiResponse<UserSkill[]>>("/v1/users/me/skills");
-    return response.data;
-  },
-
-  async getMySkillDetail(skillId: number): Promise<ApiResponse<UserSkill>> {
-    const response = await http.get<ApiResponse<UserSkill>>(`/v1/users/me/skills/${skillId}`);
-    return response.data;
-  },
-
-  async getSkillDirectory(): Promise<ApiResponse<SkillDirectoryItem[]>> {
-    const response = await http.get<ApiResponse<SkillDirectoryItem[]>>("/v1/users/me/skills/directory");
-    return response.data;
-  },
-
-  async searchSkills(keyword: string): Promise<ApiResponse<SkillDirectoryItem[]>> {
-    const response = await http.get<ApiResponse<SkillDirectoryItem[]>>("/v1/skills/search", {
-      params: { keyword }
-    });
-    return response.data;
-  },
-
-  async addMySkill(payload: AddSkillRequest): Promise<ApiResponse<null>> {
-    const response = await http.post<ApiResponse<null>>("/v1/users/me/skills", payload);
-    return response.data;
-  },
-
-  async updateMySkill(skillId: number, payload: UpdateSkillRequest): Promise<ApiResponse<null>> {
-    const response = await http.put<ApiResponse<null>>(`/v1/users/me/skills/${skillId}`, payload);
-    return response.data;
-  },
-
-  async deleteMySkill(skillId: number): Promise<ApiResponse<null>> {
-    const response = await http.delete<ApiResponse<null>>(`/v1/users/me/skills/${skillId}`);
-    return response.data;
-  },
+  getMySkills: () => api.get<UserSkill[]>("/v1/users/me/skills"),
+  getMySkillDetail: (skillId: number) => api.get<UserSkill>(`/v1/users/me/skills/${skillId}`),
+  getSkillDirectory: () => api.get<SkillDirectoryItem[]>("/v1/users/me/skills/directory"),
+  searchSkills: (keyword: string) => api.get<SkillDirectoryItem[]>("/v1/skills/search", { keyword }),
+  addMySkill: (payload: AddSkillRequest) => api.post<null>("/v1/users/me/skills", payload),
+  updateMySkill: (skillId: number, payload: UpdateSkillRequest) =>
+    api.put<null>(`/v1/users/me/skills/${skillId}`, payload),
+  deleteMySkill: (skillId: number) => api.del<null>(`/v1/users/me/skills/${skillId}`),
 };

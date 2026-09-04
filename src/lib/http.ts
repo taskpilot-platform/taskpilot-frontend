@@ -1,6 +1,6 @@
 import axios from "axios";
 import type { AxiosError } from "axios";
-import type { ApiErrorResponse } from "@/types/api";
+import type { ApiErrorResponse, ApiResponse } from "@/types/api";
 import { authStorage } from "@/lib/storage";
 
 const API_BASE_URL =
@@ -36,6 +36,19 @@ http.interceptors.response.use(
     return Promise.reject(error);
   }
 );
+
+export const api = {
+  get: <T>(url: string, params?: Record<string, unknown>) =>
+    http.get<ApiResponse<T>>(url, { params }).then((r) => r.data),
+  post: <T>(url: string, data?: unknown) =>
+    http.post<ApiResponse<T>>(url, data).then((r) => r.data),
+  put: <T>(url: string, data?: unknown) =>
+    http.put<ApiResponse<T>>(url, data).then((r) => r.data),
+  patch: <T>(url: string, data?: unknown) =>
+    http.patch<ApiResponse<T>>(url, data).then((r) => r.data),
+  del: <T>(url: string, params?: Record<string, unknown>) =>
+    http.delete<ApiResponse<T>>(url, { params }).then((r) => r.data),
+};
 
 export function getApiErrorMessage(error: unknown): string {
   const fallbackMessage = "Có lỗi xảy ra. Vui lòng thử lại.";
