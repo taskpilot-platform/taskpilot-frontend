@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -28,6 +28,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { usePaginatedSplitView } from "@/hooks/usePaginatedSplitView";
 import { getApiErrorMessage } from "@/lib/http";
 import { adminUserService } from "@/services/admin.service";
 import { profileService } from "@/services/profile.service";
@@ -36,18 +37,31 @@ import type { AdminUserResponse } from "@/types/admin";
 export default function AdminUsersPage() {
   const { t } = useTranslation();
 
-  const [users, setUsers] = useState<AdminUserResponse[]>([]);
-  const [totalElements, setTotalElements] = useState(0);
-  const [currentPage, setCurrentPage] = useState(0);
-  const [pageSize, setPageSize] = useState(10);
-  const [searchInput, setSearchInput] = useState(""); // what user types live
-  const [keyword, setKeyword] = useState("");           // committed search sent to server
-  const [isLoading, setIsLoading] = useState(false);
-  const [isMutating, setIsMutating] = useState(false);
+  const {
+    items: users,
+    totalElements,
+    currentPage,
+    pageSize,
+    keyword,
+    setKeyword,
+    selectedId: selectedUserId,
+    setSelectedId: setSelectedUserId,
+    selectedItem: selectedUser,
+    mode,
+    setMode,
+    isLoading,
+    isMutating,
+    setIsMutating,
+    totalPages,
+    loadList: loadUsersList,
+    handleModeChange,
+    handlePageSizeChange,
+    handleSearch,
+  } = usePaginatedSplitView<AdminUserResponse>({
+    fetchItems: async (page, size, kw) => (await adminUserService.getAllUsers(page, size, kw)).data,
+    onError: (error) => toast.error(getApiErrorMessage(error)),
+  });
 
-  // User selection and mode state
-  const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
-  const [mode, setMode] = useState<"list" | "create" | "detail">("list");
   const [myProfile, setMyProfile] = useState<any | null>(null);
 
   // Edit form state
@@ -60,40 +74,8 @@ export default function AdminUsersPage() {
   const [createFullName, setCreateFullName] = useState("");
   const [createRole, setCreateRole] = useState("USER");
 
-  // Computed values
-  const totalPages = useMemo(
-    () => Math.max(1, Math.ceil(totalElements / pageSize)),
-    [totalElements, pageSize]
-  );
-
-  const selectedUser = useMemo(
-    () => users.find((u) => u.id === selectedUserId) || null,
-    [users, selectedUserId]
-  );
-
-  const loadUsersList = async (targetPage = currentPage, limit = pageSize, kw = keyword) => {
-    setIsLoading(true);
-    try {
-      const response = await adminUserService.getAllUsers(targetPage, limit, kw);
-      setUsers(response.data.content);
-      setTotalElements(response.data.totalElements);
-      setCurrentPage(response.data.number);
-    } catch (error) {
-      toast.error(getApiErrorMessage(error));
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    const kw = searchInput.trim();
-    setKeyword(kw);
-    void loadUsersList(0, pageSize, kw);
-  };
-
   useEffect(() => {
-    void loadUsersList(0, pageSize);
+    void loadUsersList(0, pageSize, keyword);
     const loadMyProfile = async () => {
       try {
         const res = await profileService.getMe();
@@ -113,19 +95,7 @@ export default function AdminUsersPage() {
       setEditStatus(selectedUser.status);
       setEditWorkload(selectedUser.currentWorkload || 0);
     }
-  }, [selectedUser]);
-
-  const handleModeChange = (newMode: "create" | "list" | "detail") => {
-    if (newMode === "list") {
-      setSelectedUserId(null); // Clear selection if any
-    }
-    setMode(newMode);
-  };
-
-  const handlePageSizeChange = (newSize: number) => {
-    setPageSize(newSize);
-    void loadUsersList(0, newSize);
-  };
+  }, [selectedUser, setMode]);
 
   const handleCreateUser = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -142,7 +112,7 @@ export default function AdminUsersPage() {
       setCreateFullName("");
       setCreateRole("USER");
       setMode("list");
-      await loadUsersList(0, pageSize);
+      await loadUsersList(0, pageSize, keyword);
     } catch (error) {
       toast.error(getApiErrorMessage(error));
     } finally {
@@ -219,7 +189,7 @@ export default function AdminUsersPage() {
             type="button"
             variant="secondary"
             className="gap-2"
-            onClick={() => void loadUsersList(currentPage, pageSize)}
+            onClick={() => void loadUsersList(currentPage, pageSize, keyword)}
             disabled={isMutating || isLoading}
           >
             <RefreshCw className="h-4 w-4" />
@@ -244,8 +214,8 @@ export default function AdminUsersPage() {
             <form onSubmit={handleSearch} className="mb-4 flex gap-2">
               <Input
                 placeholder={t("admin.users.search")}
-                value={searchInput}
-                onChange={(e) => setSearchInput(e.target.value)}
+                value={keyword}
+                onChange={(e) => setKeyword(e.target.value)}
                 className="max-w-sm"
               />
               <Button type="submit" variant="secondary" className="gap-2 shrink-0" disabled={isLoading}>
@@ -334,7 +304,7 @@ export default function AdminUsersPage() {
                       type="button"
                       variant="outline"
                       size="sm"
-                      onClick={() => void loadUsersList(Math.max(0, currentPage - 1), pageSize)}
+                      onClick={() => void loadUsersList(Math.max(0, currentPage - 1), pageSize, keyword)}
                       disabled={currentPage === 0 || isMutating || isLoading}
                     >
                       {t("projects.btn_prev")}
@@ -343,7 +313,7 @@ export default function AdminUsersPage() {
                       type="button"
                       variant="outline"
                       size="sm"
-                      onClick={() => void loadUsersList(Math.min(totalPages - 1, currentPage + 1), pageSize)}
+                      onClick={() => void loadUsersList(Math.min(totalPages - 1, currentPage + 1), pageSize, keyword)}
                       disabled={currentPage >= totalPages - 1 || isMutating || isLoading}
                     >
                       {t("projects.btn_next")}

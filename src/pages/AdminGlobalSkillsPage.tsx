@@ -42,7 +42,6 @@ export default function AdminGlobalSkillsPage() {
     totalElements,
     currentPage,
     pageSize,
-    setPageSize,
     keyword,
     setKeyword,
     selectedId: selectedSkillId,
@@ -55,6 +54,9 @@ export default function AdminGlobalSkillsPage() {
     setIsMutating,
     totalPages,
     loadList: loadSkillsList,
+    handleModeChange,
+    handlePageSizeChange,
+    handleSearch,
   } = usePaginatedSplitView<AdminSkillResponse>({
     fetchItems: async (page, size, kw) => (await adminSkillService.getAllSkills(kw, page, size)).data,
     onError: (error) => toast.error(getApiErrorMessage(error)),
@@ -73,30 +75,13 @@ export default function AdminGlobalSkillsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Initial load
 
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    void loadSkillsList(0, pageSize, keyword);
-  };
-
   useEffect(() => {
     if (selectedSkill) {
       setMode("detail");
       setEditName(selectedSkill.name);
       setEditDescription(selectedSkill.description || "");
     }
-  }, [selectedSkill]);
-
-  const handleModeChange = (newMode: "create" | "list" | "detail") => {
-    if (newMode === "list") {
-      setSelectedSkillId(null);
-    }
-    setMode(newMode);
-  };
-
-  const handlePageSizeChange = (newSize: number) => {
-    setPageSize(newSize);
-    void loadSkillsList(0, newSize, keyword);
-  };
+  }, [selectedSkill, setMode]);
 
   const handleCreateSkill = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();

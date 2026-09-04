@@ -61,6 +61,21 @@ export function usePaginatedSplitView<T extends { id: number }>({
     void loadList(page, pageSize, keyword);
   };
 
+  const handleModeChange = (newMode: "create" | "list" | "detail") => {
+    if (newMode === "list") setSelectedId(null);
+    setMode(newMode);
+  };
+
+  const handlePageSizeChange = (newSize: number) => {
+    setPageSize(newSize);
+    void loadList(0, newSize, keyword);
+  };
+
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    void loadList(0, pageSize, keyword);
+  };
+
   return {
     items,
     setItems,
@@ -83,5 +98,8 @@ export function usePaginatedSplitView<T extends { id: number }>({
     totalPages,
     loadList,
     setPage,
+    handleModeChange,
+    handlePageSizeChange,
+    handleSearch,
   };
 }
