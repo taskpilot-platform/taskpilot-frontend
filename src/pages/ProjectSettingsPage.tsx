@@ -22,6 +22,7 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { useConfirm } from "@/components/ui/confirm-dialog";
+import { useLeaveProject } from "@/hooks/useLeaveProject";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -63,7 +64,7 @@ export default function ProjectSettingsPage() {
   const [newLabelName, setNewLabelName] = useState("");
   const [newLabelColor, setNewLabelColor] = useState("#6366F1");
   const [isCreatingLabel, setIsCreatingLabel] = useState(false);
-  const [isLeaving, setIsLeaving] = useState(false);
+  const { isLeaving, handleLeaveProject } = useLeaveProject(currentProjectId, projectMembers, myUserId);
 
   const form = useForm<z.infer<typeof projectFormSchema>>({
     resolver: zodResolver(projectFormSchema),
@@ -131,35 +132,7 @@ export default function ProjectSettingsPage() {
     }
   };
 
-  const handleLeaveProject = async () => {
-    const activeManagers = projectMembers.filter(m => m.role === "MANAGER");
-    const isCurrentUserManager = projectMembers.find(m => m.userId === myUserId)?.role === "MANAGER";
 
-    if (isCurrentUserManager && activeManagers.length <= 1) {
-      toast.error(t("projects.leave_error_last_manager", {
-        defaultValue: "Bạn không thể rời dự án vì bạn là Manager duy nhất còn lại. Vui lòng bổ nhiệm người khác làm Manager trước khi rời."
-      }));
-      return;
-    }
-
-    const confirmed = await confirm({
-      title: t("projects.leave_title", { defaultValue: "Rời dự án" }),
-      message: t("projects.leave_confirm", { defaultValue: "Are you sure you want to leave this project?" }),
-      variant: "warning",
-    });
-    if (!confirmed) return;
-
-    setIsLeaving(true);
-    try {
-      await projectService.leaveProject(currentProjectId);
-      toast.success(t("projects.leave_success", { defaultValue: "Left project successfully" }));
-      navigate("/projects");
-    } catch (error) {
-      toast.error(getApiErrorMessage(error));
-    } finally {
-      setIsLeaving(false);
-    }
-  };
 
   const handleUpdateRole = async (userId: number, role: string) => {
     try {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -28,6 +28,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { usePaginatedSplitView } from "@/hooks/usePaginatedSplitView";
 import { getApiErrorMessage } from "@/lib/http";
 import { adminSkillService } from "@/services/admin.service";
 import type { AdminSkillResponse } from "@/types/admin";
@@ -36,17 +37,30 @@ export default function AdminGlobalSkillsPage() {
   const { t } = useTranslation();
   const confirm = useConfirm();
 
-  const [skills, setSkills] = useState<AdminSkillResponse[]>([]);
-  const [totalElements, setTotalElements] = useState(0);
-  const [currentPage, setCurrentPage] = useState(0);
-  const [pageSize, setPageSize] = useState(10);
-  const [keyword, setKeyword] = useState("");
-
-  const [selectedSkillId, setSelectedSkillId] = useState<number | null>(null);
-  const [mode, setMode] = useState<"list" | "create" | "detail">("list");
-
-  const [isLoading, setIsLoading] = useState(true);
-  const [isMutating, setIsMutating] = useState(false);
+  const {
+    items: skills,
+    totalElements,
+    currentPage,
+    pageSize,
+    keyword,
+    setKeyword,
+    selectedId: selectedSkillId,
+    setSelectedId: setSelectedSkillId,
+    selectedItem: selectedSkill,
+    mode,
+    setMode,
+    isLoading,
+    isMutating,
+    setIsMutating,
+    totalPages,
+    loadList: loadSkillsList,
+    handleModeChange,
+    handlePageSizeChange,
+    handleSearch,
+  } = usePaginatedSplitView<AdminSkillResponse>({
+    fetchItems: async (page, size, kw) => (await adminSkillService.getAllSkills(kw, page, size)).data,
+    onError: (error) => toast.error(getApiErrorMessage(error)),
+  });
 
   // Form Create
   const [createName, setCreateName] = useState("");
@@ -56,43 +70,10 @@ export default function AdminGlobalSkillsPage() {
   const [editName, setEditName] = useState("");
   const [editDescription, setEditDescription] = useState("");
 
-  const totalPages = useMemo(() => Math.max(1, Math.ceil(totalElements / pageSize)), [totalElements, pageSize]);
-
-  const selectedSkill = useMemo(
-    () => skills.find((s) => s.id === selectedSkillId) || null,
-    [skills, selectedSkillId],
-  );
-
-  const loadSkillsList = async (targetPage = currentPage, limit = pageSize, searchKeyword = keyword) => {
-    setIsLoading(true);
-    try {
-      const response = await adminSkillService.getAllSkills(searchKeyword || undefined, targetPage, limit);
-      setSkills(response.data.content);
-      setTotalElements(response.data.totalElements);
-      setCurrentPage(response.data.number);
-
-      if (response.data.content.length === 0) {
-        setSelectedSkillId(null);
-      } else if (selectedSkillId && !response.data.content.some((s) => s.id === selectedSkillId)) {
-        setSelectedSkillId(null);
-        setMode("list");
-      }
-    } catch (error) {
-      toast.error(getApiErrorMessage(error));
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   useEffect(() => {
     void loadSkillsList(0, pageSize, keyword);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Initial load
-
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    void loadSkillsList(0, pageSize, keyword);
-  };
 
   useEffect(() => {
     if (selectedSkill) {
@@ -100,19 +81,7 @@ export default function AdminGlobalSkillsPage() {
       setEditName(selectedSkill.name);
       setEditDescription(selectedSkill.description || "");
     }
-  }, [selectedSkill]);
-
-  const handleModeChange = (newMode: "create" | "list" | "detail") => {
-    if (newMode === "list") {
-      setSelectedSkillId(null);
-    }
-    setMode(newMode);
-  };
-
-  const handlePageSizeChange = (newSize: number) => {
-    setPageSize(newSize);
-    void loadSkillsList(0, newSize, keyword);
-  };
+  }, [selectedSkill, setMode]);
 
   const handleCreateSkill = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();

@@ -1,5 +1,4 @@
-import { http } from "@/lib/http";
-import type { ApiResponse } from "@/types/api";
+import { api } from "@/lib/http";
 import type {
   AuthResponse,
   ForgotPasswordRequest,
@@ -10,45 +9,12 @@ import type {
 } from "@/types/auth";
 
 export const authService = {
-  async register(payload: RegisterRequest): Promise<ApiResponse<void>> {
-    const response = await http.post<ApiResponse<void>>("/v1/auth/register", payload);
-    return response.data;
-  },
-
-  async login(payload: LoginRequest): Promise<ApiResponse<AuthResponse>> {
-    const response = await http.post<ApiResponse<AuthResponse>>(
-      "/v1/auth/login",
-      payload,
-    );
-    return response.data;
-  },
-
-  async refresh(payload: RefreshTokenRequest): Promise<ApiResponse<AuthResponse>> {
-    const response = await http.post<ApiResponse<AuthResponse>>(
-      "/v1/auth/refresh",
-      payload,
-    );
-    return response.data;
-  },
-
-  async logout(payload: RefreshTokenRequest): Promise<ApiResponse<void>> {
-    const response = await http.post<ApiResponse<void>>("/v1/auth/logout", payload);
-    return response.data;
-  },
-
-  async forgotPassword(payload: ForgotPasswordRequest): Promise<ApiResponse<void>> {
-    const response = await http.post<ApiResponse<void>>(
-      "/v1/auth/forgot-password",
-      payload,
-    );
-    return response.data;
-  },
-
-  async resetPassword(payload: ResetPasswordRequest): Promise<ApiResponse<void>> {
-    const response = await http.post<ApiResponse<void>>(
-      "/v1/auth/reset-password",
-      payload,
-    );
-    return response.data;
-  },
+  register: (payload: RegisterRequest) => api.post<void>("/v1/auth/register", payload),
+  login: (payload: LoginRequest) => api.post<AuthResponse>("/v1/auth/login", payload),
+  refresh: (payload: RefreshTokenRequest) => api.post<AuthResponse>("/v1/auth/refresh", payload),
+  logout: (payload: RefreshTokenRequest) => api.post<void>("/v1/auth/logout", payload),
+  forgotPassword: (payload: ForgotPasswordRequest) =>
+    api.post<void>("/v1/auth/forgot-password", payload),
+  resetPassword: (payload: ResetPasswordRequest) =>
+    api.post<void>("/v1/auth/reset-password", payload),
 };
