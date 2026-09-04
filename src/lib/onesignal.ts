@@ -1,10 +1,6 @@
 import OneSignal from "react-onesignal";
 
-declare global {
-  interface Window {
-    OneSignalDeferred?: any[];
-  }
-}
+
 
 let initialized = false;
 

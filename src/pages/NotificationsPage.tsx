@@ -19,7 +19,6 @@ import { getApiErrorMessage } from "@/lib/http";
 import { notificationService } from "@/services/notification.service";
 import type { NotificationItem } from "@/types/notification";
 
-const POLL_INTERVAL_MS = 5000;
 const URL_SCHEME_PATTERN = /^[a-zA-Z][a-zA-Z\d+\-.]*:/;
 
 function parseDateMs(dateStr: string | null | undefined): number {
