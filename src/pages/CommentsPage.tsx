@@ -21,8 +21,8 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { getApiErrorMessage } from "@/lib/http";
+import { mergeById } from "@/lib/utils";
 import { commentService } from "@/services/comment.service";
 import { projectService } from "@/services/project.service";
 import type { CommentSearchParams, CommentSearchResult } from "@/types/comment";
@@ -47,19 +47,6 @@ function parsePositiveInteger(value: string) {
 
   const parsed = Number(trimmed);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined;
-}
-
-function mergeById(current: CommentSearchResult[], incoming: CommentSearchResult[]) {
-  const byId = new Map<number, CommentSearchResult>();
-  for (const item of current) {
-    byId.set(item.id, item);
-  }
-  for (const item of incoming) {
-    byId.set(item.id, item);
-  }
-  return Array.from(byId.values()).sort(
-    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-  );
 }
 
 interface CommentResultItemProps {
