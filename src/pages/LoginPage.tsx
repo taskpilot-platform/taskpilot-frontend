@@ -2,12 +2,12 @@ import AuthShell from "@/components/auth/AuthShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PasswordField } from "@/components/auth/PasswordField";
 import { getApiErrorMessage } from "@/lib/http";
 import { useAuthStore } from "@/stores/auth.store";
 import { Link, useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import { useState } from "react";
-import { Eye, EyeOff } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 export default function LoginPage() {
@@ -17,11 +17,9 @@ export default function LoginPage() {
   const isLoading = useAuthStore((state) => state.isLoading);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
   const [touchedEmail, setTouchedEmail] = useState(false);
   const [touchedPassword, setTouchedPassword] = useState(false);
 
-  // Email format validation regex
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   const isEmailInvalid = touchedEmail && (!email || !emailRegex.test(email));
   const isPasswordInvalid = touchedPassword && !password;
@@ -73,36 +71,19 @@ export default function LoginPage() {
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <Label htmlFor="password">{t("auth.password")}</Label>
-            <Link
-              to="/forgot-password"
-              className="text-xs font-medium text-primary hover:underline"
-            >
+            <Link to="/forgot-password" className="text-xs font-medium text-primary hover:underline">
               {t("auth.password_forgot")}
             </Link>
           </div>
-          <div className="relative">
-            <Input
-              id="password"
-              type={showPassword ? "text" : "password"}
-              placeholder={t("auth.password_placeholder")}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              onBlur={() => setTouchedPassword(true)}
-              className={`pr-10 ${isPasswordInvalid ? 'border-destructive focus-visible:ring-destructive' : ''}`}
-              required
-            />
-            <button
-              type="button"
-              onClick={() => setShowPassword((prev) => !prev)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-              aria-label={showPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
-            >
-              {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-            </button>
-          </div>
-          {isPasswordInvalid && (
-            <p className="text-[0.8rem] font-medium text-destructive">{t("auth.password_invalid")}</p>
-          )}
+          <PasswordField
+            id="password"
+            placeholder={t("auth.password_placeholder")}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            onBlur={() => setTouchedPassword(true)}
+            error={isPasswordInvalid ? t("auth.password_invalid") : undefined}
+            required
+          />
         </div>
 
         <Button type="submit" className="w-full" disabled={isLoading || !isFormValid}>

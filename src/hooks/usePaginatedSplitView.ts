@@ -3,11 +3,13 @@ import { useState, useMemo } from "react";
 export interface PaginatedSplitViewOptions<T extends { id: number }> {
   fetchItems: (page: number, size: number, keyword?: string) => Promise<{ content: T[]; totalElements: number; number: number }>;
   defaultPageSize?: number;
+  onError?: (error: unknown) => void;
 }
 
 export function usePaginatedSplitView<T extends { id: number }>({
   fetchItems,
   defaultPageSize = 10,
+  onError,
 }: PaginatedSplitViewOptions<T>) {
   const [items, setItems] = useState<T[]>([]);
   const [totalElements, setTotalElements] = useState(0);
@@ -38,7 +40,17 @@ export function usePaginatedSplitView<T extends { id: number }>({
       setCurrentPage(data.number);
       if (data.content.length === 0) {
         setSelectedId(null);
+      } else {
+        setSelectedId((prev) => {
+          if (prev !== null && !data.content.some((i) => i.id === prev)) {
+            setMode("list");
+            return null;
+          }
+          return prev;
+        });
       }
+    } catch (error) {
+      onError?.(error);
     } finally {
       setIsLoading(false);
     }
