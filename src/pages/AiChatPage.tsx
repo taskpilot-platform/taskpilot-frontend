@@ -29,6 +29,8 @@ export default function AiChatPage() {
   const [editingTitle, setEditingTitle] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
 
+  const activeSessionId = activeSession?.id ?? null;
+
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
@@ -47,6 +49,9 @@ export default function AiChatPage() {
   const scrollRafRef = useRef<number | null>(null);
   const isMountedRef = useRef(true);
   const activeSessionIdRef = useRef<number | null>(null);
+  const lastWarmedSessionIdRef = useRef<number | null>(null);
+
+  activeSessionIdRef.current = activeSessionId;
 
   const loadSessions = useCallback(async () => {
     try {
@@ -139,18 +144,35 @@ export default function AiChatPage() {
     };
   }, [loadSessions]);
 
+  // Effect #1: Load messages when active session ID changes (clears messages on new chat)
   useEffect(() => {
-    activeSessionIdRef.current = activeSession?.id ?? null;
-    if (activeSession) {
-      restorePendingRequest(activeSession.id);
-      loadMessages(activeSession.id);
-      aiService.warmupSession(activeSession.id).catch((err) => {
-        console.warn("[Cache Warming] Failed to trigger session warmup:", err);
-      });
+    if (activeSessionId) {
+      void loadMessages(activeSessionId);
     } else {
       setMessages([]);
     }
-  }, [activeSession, loadMessages, restorePendingRequest]);
+  }, [activeSessionId, loadMessages]);
+
+  // Effect #2: Warmup session cache (only mark as warmed AFTER success, no retry loop)
+  useEffect(() => {
+    if (!activeSessionId) return;
+    if (lastWarmedSessionIdRef.current === activeSessionId) return;
+
+    aiService
+      .warmupSession(activeSessionId)
+      .then(() => {
+        lastWarmedSessionIdRef.current = activeSessionId;
+      })
+      .catch((err) => {
+        console.warn("[Cache Warming] Failed to trigger session warmup:", err);
+      });
+  }, [activeSessionId]);
+
+  // Effect #3: Restore pending request if page was reloaded during streaming
+  useEffect(() => {
+    if (!activeSessionId) return;
+    restorePendingRequest(activeSessionId);
+  }, [activeSessionId, restorePendingRequest]);
 
   useEffect(() => {
     const pendingConfirmations = messages
