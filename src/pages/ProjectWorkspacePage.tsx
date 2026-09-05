@@ -26,7 +26,8 @@ import {
   Play,
   SquareCheckBig,
   Trash2,
-  LogOut
+  LogOut,
+  BookOpen
 } from "lucide-react";
 import { useLeaveProject } from "@/hooks/useLeaveProject";
 import { useTranslation } from "react-i18next";
@@ -63,12 +64,13 @@ import { profileService } from "@/services/profile.service";
 import { projectStorage } from "@/lib/storage";
 import { getTaskTone, TASK_TONE_CLASS } from "@/lib/task-tone";
 import { TaskDetailSheet } from "@/components/tasks/TaskDetailSheet";
+import { ProjectKnowledgeTab } from "@/components/knowledge/ProjectKnowledgeTab";
 import type { MyProject, Project, ProjectMember, ProjectSummary } from "@/types/project";
 import type { TaskDetailDto, TaskDto, TaskPriority, TaskStatus } from "@/types/task";
 import type { BacklogResponse, BoardResponse, SprintDto } from "@/types/sprint";
 import type { TimelineResponse, TimelineTaskDto } from "@/types/timeline";
 
-const VALID_TABS = ["overview", "board", "backlog", "timeline"] as const;
+const VALID_TABS = ["overview", "board", "backlog", "timeline", "knowledge"] as const;
 type ViewMode = (typeof VALID_TABS)[number];
 type BacklogSortMode = "position" | "createdAt" | "priority";
 const VALID_TAB_SET = new Set<string>(VALID_TABS);
@@ -1140,6 +1142,9 @@ export default function ProjectWorkspacePage() {
             <Button type="button" variant={activeTab === "timeline" ? "secondary" : "ghost"} className={`gap-2 shrink-0 ${activeTab === "timeline" ? "bg-muted" : "hover:bg-muted/50"}`} onClick={() => navigate(`/projects/${currentProjectId}/timeline`)}>
               <CalendarDays className="h-4 w-4" /> Timeline
             </Button>
+            <Button type="button" variant={activeTab === "knowledge" ? "secondary" : "ghost"} className={`gap-2 shrink-0 ${activeTab === "knowledge" ? "bg-muted" : "hover:bg-muted/50"}`} onClick={() => navigate(`/projects/${currentProjectId}/knowledge`)}>
+              <BookOpen className="h-4 w-4" /> Knowledge
+            </Button>
           </div>
           <div className="relative md:w-72">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -1698,6 +1703,9 @@ export default function ProjectWorkspacePage() {
                   </CardContent>
                 </Card>
               </div>
+            )}
+            {activeTab === "knowledge" && (
+              <ProjectKnowledgeTab projectId={currentProjectId} isArchived={isArchived} />
             )}
           </>
         )}

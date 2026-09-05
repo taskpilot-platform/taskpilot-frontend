@@ -1,0 +1,25 @@
+import { describe, it, expect } from "vitest";
+import { render, screen } from "@testing-library/react";
+import { DocumentStatusBadge } from "@/components/knowledge/DocumentStatusBadge";
+
+describe("DocumentStatusBadge", () => {
+  it("renders READY status with emerald badge and Sẵn sàng label", () => {
+    render(<DocumentStatusBadge status="READY" />);
+    expect(screen.getByText("Sẵn sàng")).toBeInTheDocument();
+  });
+
+  it("renders PROCESSING status with blue badge and Đang lập chỉ mục label", () => {
+    render(<DocumentStatusBadge status="PROCESSING" />);
+    expect(screen.getByText("Đang lập chỉ mục...")).toBeInTheDocument();
+  });
+
+  it("renders UPLOADING status with amber badge and Đang tải lên label", () => {
+    render(<DocumentStatusBadge status="UPLOADING" />);
+    expect(screen.getByText("Đang tải lên...")).toBeInTheDocument();
+  });
+
+  it("renders FAILED status with rose badge and Thất bại label", () => {
+    render(<DocumentStatusBadge status="FAILED" />);
+    expect(screen.getByText("Thất bại")).toBeInTheDocument();
+  });
+});
