@@ -7,6 +7,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Loader2, AlertTriangle } from "lucide-react";
 import type { ProjectDocument } from "@/types/knowledge";
@@ -26,6 +27,7 @@ export const DeleteDocumentDialog: React.FC<DeleteDocumentDialogProps> = ({
   onClose,
   onConfirm,
 }) => {
+  const { t } = useTranslation();
   if (!document) return null;
 
   return (
@@ -37,20 +39,19 @@ export const DeleteDocumentDialog: React.FC<DeleteDocumentDialogProps> = ({
               <AlertTriangle className="h-5 w-5" />
             </div>
             <div>
-              <DialogTitle>Xóa tài liệu dự án</DialogTitle>
+              <DialogTitle>{t("knowledge.dialog_delete_title")}</DialogTitle>
               <DialogDescription className="text-xs text-muted-foreground mt-1">
-                Hành động này không thể hoàn tác.
+                {t("knowledge.dialog_delete_subtitle")}
               </DialogDescription>
             </div>
           </div>
         </DialogHeader>
 
         <div className="py-3 text-sm text-muted-foreground leading-relaxed">
-          Bạn có chắc chắn muốn xóa tài liệu{" "}
-          <strong className="text-foreground font-semibold">
-            &ldquo;{document.originalFilename}&rdquo;
-          </strong>
-          ? Thao tác này sẽ xóa tệp lưu trữ trên S3 và toàn bộ các vector embeddings ({document.chunkCount || 0} chunks) đã lập chỉ mục trong cơ sở dữ liệu tri thức của dự án.
+          {t("knowledge.dialog_delete_confirm_desc", {
+            filename: document.originalFilename,
+            count: document.chunkCount || 0,
+          })}
         </div>
 
         <DialogFooter className="gap-2 sm:gap-0">
@@ -60,7 +61,7 @@ export const DeleteDocumentDialog: React.FC<DeleteDocumentDialogProps> = ({
             onClick={onClose}
             disabled={isDeleting}
           >
-            Hủy
+            {t("knowledge.dialog_delete_cancel")}
           </Button>
           <Button
             type="button"
@@ -70,7 +71,7 @@ export const DeleteDocumentDialog: React.FC<DeleteDocumentDialogProps> = ({
             className="gap-2"
           >
             {isDeleting && <Loader2 className="h-4 w-4 animate-spin" />}
-            Xóa tài liệu
+            {t("knowledge.dialog_delete_confirm")}
           </Button>
         </DialogFooter>
       </DialogContent>

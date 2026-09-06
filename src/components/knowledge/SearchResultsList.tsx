@@ -1,5 +1,6 @@
 import React from "react";
 import { SearchX, Loader2, Sparkles, X } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { SearchResultItem } from "./SearchResultItem";
 import type { ScoredChunk } from "@/types/knowledge";
@@ -19,15 +20,17 @@ export const SearchResultsList: React.FC<SearchResultsListProps> = ({
   searchError,
   onClear,
 }) => {
+  const { t } = useTranslation();
+
   if (isSearching) {
     return (
       <div className="flex flex-col items-center justify-center rounded-xl border border-border bg-card p-8 text-center animate-pulse">
         <Loader2 className="h-8 w-8 animate-spin text-primary mb-3" />
         <h4 className="text-sm font-semibold text-foreground">
-          Đang truy vấn không gian vector 768 chiều...
+          {t("knowledge.search_loading_title")}
         </h4>
         <p className="mt-1 text-xs text-muted-foreground">
-          Đang tính toán khoảng cách cosine trên PostgreSQL pgvector HNSW index.
+          {t("knowledge.search_loading_desc")}
         </p>
       </div>
     );
@@ -38,7 +41,7 @@ export const SearchResultsList: React.FC<SearchResultsListProps> = ({
       <div className="flex flex-col items-center justify-center rounded-xl border border-rose-500/30 bg-rose-50/50 dark:bg-rose-950/20 p-6 text-center">
         <SearchX className="h-8 w-8 text-rose-500 mb-2" />
         <h4 className="text-sm font-semibold text-rose-700 dark:text-rose-400">
-          Lỗi tìm kiếm tri thức
+          {t("knowledge.search_error_title")}
         </h4>
         <p className="mt-1 text-xs text-muted-foreground">{searchError}</p>
         <Button
@@ -48,7 +51,7 @@ export const SearchResultsList: React.FC<SearchResultsListProps> = ({
           onClick={onClear}
           className="mt-3 text-xs"
         >
-          Xóa kết quả
+          {t("knowledge.search_error_clear")}
         </Button>
       </div>
     );
@@ -59,10 +62,10 @@ export const SearchResultsList: React.FC<SearchResultsListProps> = ({
       <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border bg-muted/20 p-8 text-center">
         <SearchX className="h-10 w-10 text-muted-foreground/60 mb-2" />
         <h4 className="text-sm font-semibold text-foreground">
-          Không tìm thấy đoạn tri thức phù hợp
+          {t("knowledge.search_empty_title")}
         </h4>
         <p className="mt-1 max-w-md text-xs text-muted-foreground leading-relaxed">
-          Không có đoạn văn bản nào trong tài liệu dự án vượt qua ngưỡng tương đồng cosine tối thiểu. Hệ thống đảm bảo không sinh dữ liệu sai lệch (hallucination).
+          {t("knowledge.search_empty_desc")}
         </p>
         <Button
           type="button"
@@ -71,7 +74,7 @@ export const SearchResultsList: React.FC<SearchResultsListProps> = ({
           onClick={onClear}
           className="mt-3 text-xs text-muted-foreground hover:text-foreground"
         >
-          Xóa bộ lọc tìm kiếm
+          {t("knowledge.search_empty_clear")}
         </Button>
       </div>
     );
@@ -86,7 +89,7 @@ export const SearchResultsList: React.FC<SearchResultsListProps> = ({
       <div className="flex items-center justify-between gap-2 px-1">
         <div className="flex items-center gap-2 text-xs font-semibold text-foreground">
           <Sparkles className="h-4 w-4 text-primary" />
-          <span>Tìm thấy {results.length} đoạn tri thức liên quan:</span>
+          <span>{t("knowledge.search_results_found", { count: results.length })}</span>
         </div>
         <Button
           type="button"
@@ -96,7 +99,7 @@ export const SearchResultsList: React.FC<SearchResultsListProps> = ({
           className="h-7 text-xs text-muted-foreground hover:text-foreground gap-1"
         >
           <X className="h-3 w-3" />
-          Thu gọn
+          {t("knowledge.search_collapse")}
         </Button>
       </div>
 

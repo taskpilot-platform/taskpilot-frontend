@@ -7,6 +7,7 @@ import {
   HardDrive,
   Info,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -35,6 +36,7 @@ export const DocumentUploadCard: React.FC<DocumentUploadCardProps> = ({
   isArchived = false,
   onUploadSuccess,
 }) => {
+  const { t } = useTranslation();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const {
@@ -65,10 +67,10 @@ export const DocumentUploadCard: React.FC<DocumentUploadCardProps> = ({
       <CardHeader className="pb-3">
         <CardTitle className="text-base font-semibold flex items-center gap-2">
           <UploadCloud className="h-5 w-5 text-primary" />
-          Tải Lên Tài Liệu Dự Án
+          {t("knowledge.upload_card_title")}
         </CardTitle>
         <CardDescription className="text-xs">
-          Tài liệu được tự động tải lên Supabase S3, trích xuất văn bản qua Apache Tika, chia nhỏ 700/100 ký tự và nhúng vector 768 chiều bằng mô hình Gemini canonical.
+          {t("knowledge.upload_card_desc")}
         </CardDescription>
       </CardHeader>
 
@@ -99,8 +101,10 @@ export const DocumentUploadCard: React.FC<DocumentUploadCardProps> = ({
           </div>
 
           <div className="text-sm font-medium text-foreground">
-            Kéo thả tệp vào đây hoặc{" "}
-            <span className="text-primary hover:underline">chọn từ thiết bị</span>
+            {t("knowledge.dropzone_prompt")}{" "}
+            <span className="text-primary hover:underline">
+              {t("knowledge.dropzone_browse")}
+            </span>
           </div>
 
           {/* Supported format tags */}
@@ -115,7 +119,7 @@ export const DocumentUploadCard: React.FC<DocumentUploadCardProps> = ({
               </Badge>
             ))}
             <span className="text-[11px] text-muted-foreground ml-1.5 inline-flex items-center gap-1">
-              <HardDrive className="h-3 w-3" /> Tối đa 25MB
+              <HardDrive className="h-3 w-3" /> {t("knowledge.max_file_size")}
             </span>
           </div>
         </div>
@@ -152,12 +156,12 @@ export const DocumentUploadCard: React.FC<DocumentUploadCardProps> = ({
                 {isUploading ? (
                   <>
                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    Đang tải lên...
+                    {t("knowledge.btn_uploading")}
                   </>
                 ) : (
                   <>
                     <UploadCloud className="h-3.5 w-3.5" />
-                    Bắt đầu nạp tri thức
+                    {t("knowledge.btn_start_upload")}
                   </>
                 )}
               </Button>

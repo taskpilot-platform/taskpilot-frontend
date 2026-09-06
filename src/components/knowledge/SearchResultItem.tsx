@@ -1,5 +1,6 @@
 import React from "react";
 import { Layers, Quote } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge";
 import type { ScoredChunk } from "@/types/knowledge";
 
@@ -12,6 +13,7 @@ export const SearchResultItem: React.FC<SearchResultItemProps> = ({
   chunk,
   rank,
 }) => {
+  const { t } = useTranslation();
   const similarityScore = (chunk.similarity * 100).toFixed(1);
   const isHighMatch = chunk.similarity >= 0.7;
 
@@ -28,12 +30,17 @@ export const SearchResultItem: React.FC<SearchResultItemProps> = ({
           </Badge>
           <span className="text-xs text-muted-foreground inline-flex items-center gap-1">
             <Layers className="h-3 w-3" />
-            Chunk #{chunk.chunkIndex} (Doc ID: {chunk.documentId})
+            {t("knowledge.chunk_meta", {
+              chunkIndex: chunk.chunkIndex,
+              documentId: chunk.documentId,
+            })}
           </span>
         </div>
 
         <div className="flex items-center gap-1.5">
-          <span className="text-[11px] text-muted-foreground font-medium">Độ tương đồng:</span>
+          <span className="text-[11px] text-muted-foreground font-medium">
+            {t("knowledge.similarity_label")}
+          </span>
           <Badge
             variant="outline"
             className={`font-mono text-xs font-semibold ${

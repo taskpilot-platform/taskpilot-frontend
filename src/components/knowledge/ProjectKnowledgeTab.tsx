@@ -1,5 +1,6 @@
 import React from "react";
 import { ShieldAlert, Info, Sparkles } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { KnowledgeHeader } from "./KnowledgeHeader";
 import { DocumentUploadCard } from "./DocumentUploadCard";
 import { DocumentList } from "./DocumentList";
@@ -15,6 +16,7 @@ export const ProjectKnowledgeTab: React.FC<ProjectKnowledgeTabProps> = ({
   projectId,
   isArchived = false,
 }) => {
+  const { t } = useTranslation();
   const {
     documents,
     isLoading,
@@ -41,10 +43,10 @@ export const ProjectKnowledgeTab: React.FC<ProjectKnowledgeTabProps> = ({
           <ShieldAlert className="h-8 w-8" />
         </div>
         <h3 className="text-lg font-bold text-rose-800 dark:text-rose-300">
-          Không có quyền truy cập tri thức dự án
+          {t("knowledge.forbidden_title")}
         </h3>
         <p className="mt-2 max-w-md text-sm text-muted-foreground leading-relaxed">
-          Bạn không phải là thành viên hợp lệ của dự án này. Hệ thống TaskPilot áp dụng cơ chế phân quyền đa người thuê (Tenant Isolation Gate) nghiêm ngặt trước mọi truy vấn vector và tài liệu.
+          {t("knowledge.forbidden_desc")}
         </p>
       </div>
     );
@@ -71,11 +73,11 @@ export const ProjectKnowledgeTab: React.FC<ProjectKnowledgeTabProps> = ({
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
                 <Sparkles className="h-4 w-4 text-primary" />
-                Danh Sách Tài Liệu Đã Nạp ({documents.length})
+                {t("knowledge.doc_list_title", { count: documents.length })}
               </h3>
               {isPolling && (
                 <span className="text-[11px] text-blue-600 dark:text-blue-400 animate-pulse font-medium">
-                  Đang đồng bộ trạng thái vector...
+                  {t("knowledge.syncing_status")}
                 </span>
               )}
             </div>
@@ -104,17 +106,11 @@ export const ProjectKnowledgeTab: React.FC<ProjectKnowledgeTabProps> = ({
           <div className="rounded-lg border border-border/80 bg-muted/30 p-4 text-xs space-y-2 text-muted-foreground leading-relaxed">
             <div className="font-semibold text-foreground flex items-center gap-1.5">
               <Info className="h-3.5 w-3.5 text-primary" />
-              Cách RAG hoạt động trong TaskPilot
+              {t("knowledge.how_it_works_title")}
             </div>
-            <p>
-              1. <strong>Tải lên & Trích xuất:</strong> Tệp được lưu trữ trên S3, văn bản được giải mã qua Apache Tika (PDF, DOCX, TXT, MD, CSV).
-            </p>
-            <p>
-              2. <strong>Phân đoạn & Embedding:</strong> Nội dung được chia đệ quy 700 ký tự (overlap 100) và tính toán vector 768 chiều bằng Gemini <code>gemini-embedding-2</code>.
-            </p>
-            <p>
-              3. <strong>Hỏi đáp cùng AI Copilot:</strong> Khi chat trong <em>AI Copilot</em> hoặc dùng ô tìm kiếm, AI sẽ tự động kích hoạt công cụ <code>searchProjectKnowledge</code> để trả lời chính xác theo tài liệu dự án.
-            </p>
+            <p>{t("knowledge.how_it_works_step1")}</p>
+            <p>{t("knowledge.how_it_works_step2")}</p>
+            <p>{t("knowledge.how_it_works_step3")}</p>
           </div>
         </div>
       </div>

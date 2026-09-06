@@ -64,7 +64,7 @@ describe("DocumentList & DocumentListItem", () => {
 
     expect(screen.getByText("architecture.pdf")).toBeInTheDocument();
     expect(screen.getByText(/500 KB/i)).toBeInTheDocument();
-    expect(screen.getByText(/15 chunks/i)).toBeInTheDocument();
+    expect(screen.getByText(/15 đoạn trích/i)).toBeInTheDocument();
     expect(screen.getByText("Sẵn sàng")).toBeInTheDocument();
   });
 

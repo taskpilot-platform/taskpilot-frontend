@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { FolderOpen } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { DocumentListItem } from "./DocumentListItem";
 import { DeleteDocumentDialog } from "./DeleteDocumentDialog";
 import type { ProjectDocument } from "@/types/knowledge";
@@ -23,6 +24,7 @@ export const DocumentList: React.FC<DocumentListProps> = ({
   isDeleting,
   isRetrying,
 }) => {
+  const { t } = useTranslation();
   const [docToDelete, setDocToDelete] = useState<ProjectDocument | null>(null);
 
   const handleConfirmDelete = async () => {
@@ -60,10 +62,10 @@ export const DocumentList: React.FC<DocumentListProps> = ({
           <FolderOpen className="h-7 w-7" />
         </div>
         <h4 className="text-base font-semibold text-foreground">
-          Chưa có tài liệu nào trong dự án
+          {t("knowledge.empty_title")}
         </h4>
         <p className="mt-1.5 max-w-sm text-xs text-muted-foreground leading-relaxed">
-          Hãy tải lên tài liệu dự án (PDF, DOCX, TXT, MD, CSV) để hệ thống RAG tự động phân đoạn và lập chỉ mục tri thức vào cơ sở dữ liệu vector.
+          {t("knowledge.empty_desc")}
         </p>
       </div>
     );

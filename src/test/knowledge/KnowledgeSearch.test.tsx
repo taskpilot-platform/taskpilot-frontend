@@ -37,7 +37,7 @@ describe("SearchResultsList", () => {
     );
 
     expect(
-      screen.getByText("Đang truy vấn không gian vector 768 chiều...")
+      screen.getByText("Đang tìm kiếm trong tài liệu dự án...")
     ).toBeInTheDocument();
   });
 
@@ -91,7 +91,7 @@ describe("SearchResultsList", () => {
     );
 
     expect(
-      screen.getByText("Tìm thấy 2 đoạn tri thức liên quan:")
+      screen.getByText("Tìm thấy 2 đoạn nội dung liên quan:")
     ).toBeInTheDocument();
 
     expect(screen.getByText("#1")).toBeInTheDocument();

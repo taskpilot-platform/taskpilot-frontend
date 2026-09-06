@@ -11,6 +11,7 @@ import {
   Calendar,
   HardDrive,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { DocumentStatusBadge } from "./DocumentStatusBadge";
 import type { ProjectDocument } from "@/types/knowledge";
@@ -49,10 +50,10 @@ function formatFileSize(bytes: number): string {
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
 }
 
-function formatDate(dateStr: string): string {
+function formatDate(dateStr: string, lng: string): string {
   try {
     const d = new Date(dateStr);
-    return d.toLocaleDateString("vi-VN", {
+    return d.toLocaleDateString(lng === "vi" ? "vi-VN" : "en-US", {
       day: "2-digit",
       month: "2-digit",
       year: "numeric",
@@ -72,6 +73,8 @@ export const DocumentListItem: React.FC<DocumentListItemProps> = ({
   onRetry,
   onDeleteRequest,
 }) => {
+  const { t, i18n } = useTranslation();
+
   return (
     <div className="group flex flex-col gap-3 rounded-lg border border-border bg-card p-4 transition-all hover:border-primary/40 hover:shadow-sm">
       <div className="flex items-start justify-between gap-4">
@@ -98,13 +101,13 @@ export const DocumentListItem: React.FC<DocumentListItemProps> = ({
 
               <span className="inline-flex items-center gap-1">
                 <Calendar className="h-3.5 w-3.5 text-muted-foreground/70" />
-                {formatDate(document.createdAt)}
+                {formatDate(document.createdAt, i18n.language)}
               </span>
 
               {document.status === "READY" && (
                 <span className="inline-flex items-center gap-1 text-primary font-medium">
                   <Layers className="h-3.5 w-3.5" />
-                  {document.chunkCount || 0} chunks
+                  {t("knowledge.badge_chunks_count", { count: document.chunkCount || 0 })}
                 </span>
               )}
             </div>
@@ -123,12 +126,12 @@ export const DocumentListItem: React.FC<DocumentListItemProps> = ({
               onClick={() => onRetry(document)}
               disabled={isRetrying || isDeleting}
               className="h-8 gap-1.5 text-xs text-amber-600 border-amber-500/30 hover:bg-amber-500/10 hover:text-amber-700 dark:text-amber-400"
-              title="Thử lập chỉ mục lại"
+              title={t("knowledge.retry_tooltip")}
             >
               <RotateCw
                 className={`h-3.5 w-3.5 ${isRetrying ? "animate-spin" : ""}`}
               />
-              <span>Thử lại</span>
+              <span>{t("knowledge.retry")}</span>
             </Button>
           )}
 
@@ -140,7 +143,7 @@ export const DocumentListItem: React.FC<DocumentListItemProps> = ({
               onClick={() => onDeleteRequest(document)}
               disabled={isDeleting || isRetrying}
               className="h-8 w-8 text-muted-foreground hover:text-rose-600 hover:bg-rose-500/10 transition-colors"
-              title="Xóa tài liệu"
+              title={t("knowledge.delete_tooltip")}
             >
               <Trash2 className="h-4 w-4" />
             </Button>
@@ -153,7 +156,7 @@ export const DocumentListItem: React.FC<DocumentListItemProps> = ({
         <div className="flex items-start gap-2 rounded-md bg-rose-50/70 dark:bg-rose-950/30 border border-rose-500/20 p-2.5 text-xs text-rose-700 dark:text-rose-300">
           <AlertCircle className="h-4 w-4 shrink-0 text-rose-600 dark:text-rose-400 mt-0.5" />
           <div className="flex-1 break-words">
-            <span className="font-semibold">Chi tiết lỗi: </span>
+            <span className="font-semibold">{t("knowledge.error_details")} </span>
             <span>{document.errorMessage}</span>
           </div>
         </div>

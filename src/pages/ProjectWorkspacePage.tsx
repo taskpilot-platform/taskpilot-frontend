@@ -1143,7 +1143,7 @@ export default function ProjectWorkspacePage() {
               <CalendarDays className="h-4 w-4" /> Timeline
             </Button>
             <Button type="button" variant={activeTab === "knowledge" ? "secondary" : "ghost"} className={`gap-2 shrink-0 ${activeTab === "knowledge" ? "bg-muted" : "hover:bg-muted/50"}`} onClick={() => navigate(`/projects/${currentProjectId}/knowledge`)}>
-              <BookOpen className="h-4 w-4" /> Knowledge
+              <BookOpen className="h-4 w-4" /> {t("knowledge.tab_title")}
             </Button>
           </div>
           <div className="relative md:w-72">

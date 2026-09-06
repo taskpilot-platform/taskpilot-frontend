@@ -1,5 +1,6 @@
 import { useCallback, useState } from "react";
 import { toast } from "react-toastify";
+import i18n from "@/lib/i18n";
 import { knowledgeService } from "@/services/knowledge.service";
 import { getApiErrorMessage } from "@/lib/http";
 import type { ProjectDocument } from "@/types/knowledge";
@@ -24,7 +25,11 @@ export const SUPPORTED_MIME_TYPES = [
 
 export function validateFile(file: File): string | null {
   if (file.size > MAX_FILE_SIZE_BYTES) {
-    return `Kích thước file vượt quá giới hạn 25MB (${(file.size / (1024 * 1024)).toFixed(1)}MB).`;
+    const size = (file.size / (1024 * 1024)).toFixed(1);
+    return i18n.t("knowledge.toast_file_too_large", {
+      size,
+      defaultValue: `Kích thước file vượt quá giới hạn 25MB (${size}MB).`,
+    });
   }
 
   const name = file.name.toLowerCase();
@@ -33,7 +38,11 @@ export function validateFile(file: File): string | null {
   );
 
   if (!isExtensionValid) {
-    return `Định dạng file không được hỗ trợ. Vui lòng tải lên file: ${SUPPORTED_EXTENSIONS.join(", ")}.`;
+    const extensions = SUPPORTED_EXTENSIONS.join(", ");
+    return i18n.t("knowledge.toast_unsupported_format", {
+      extensions,
+      defaultValue: `Định dạng file không được hỗ trợ. Vui lòng tải lên file: ${extensions}.`,
+    });
   }
 
   return null;
@@ -94,7 +103,11 @@ export function useDocumentUpload(
 
   const uploadSelectedFile = useCallback(async (): Promise<boolean> => {
     if (!selectedFile) {
-      toast.warn("Vui lòng chọn tài liệu để tải lên.");
+      toast.warn(
+        i18n.t("knowledge.toast_please_select_file", {
+          defaultValue: "Vui lòng chọn tài liệu để tải lên.",
+        })
+      );
       return false;
     }
 
@@ -111,7 +124,10 @@ export function useDocumentUpload(
     try {
       const res = await knowledgeService.uploadDocument(projectId, selectedFile);
       toast.success(
-        `Tài liệu "${selectedFile.name}" đã được tải lên và đang được lập chỉ mục vector tự động.`
+        i18n.t("knowledge.toast_upload_success", {
+          name: selectedFile.name,
+          defaultValue: `Tài liệu "${selectedFile.name}" đã được tải lên và đang được lập chỉ mục vector tự động.`,
+        })
       );
       setSelectedFile(null);
       onUploadSuccess?.(res.data);

@@ -1,5 +1,6 @@
 import React from "react";
 import { Search, Loader2, Sparkles, X } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -11,16 +12,10 @@ interface KnowledgeSearchCardProps {
   projectId: number;
 }
 
-const QUICK_TEST_QUERIES = [
-  "Mục tiêu xây dựng hệ thống TaskPilot",
-  "Kiến trúc và công nghệ sử dụng",
-  "Quy trình hoạt động RAG",
-  "Công thức làm bánh pizza",
-];
-
 export const KnowledgeSearchCard: React.FC<KnowledgeSearchCardProps> = ({
   projectId,
 }) => {
+  const { t } = useTranslation();
   const {
     query,
     setQuery,
@@ -31,6 +26,13 @@ export const KnowledgeSearchCard: React.FC<KnowledgeSearchCardProps> = ({
     executeSearch,
     clearSearch,
   } = useKnowledgeSearch(projectId);
+
+  const sampleQueries = [
+    t("knowledge.sample_query_1"),
+    t("knowledge.sample_query_2"),
+    t("knowledge.sample_query_3"),
+    t("knowledge.sample_query_4"),
+  ];
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -47,10 +49,10 @@ export const KnowledgeSearchCard: React.FC<KnowledgeSearchCardProps> = ({
       <CardHeader className="pb-3">
         <CardTitle className="text-base font-semibold flex items-center gap-2">
           <Sparkles className="h-5 w-5 text-primary" />
-          Tìm Kiếm Tri Thức Dự Án (Semantic Search)
+          {t("knowledge.search_card_title")}
         </CardTitle>
         <CardDescription className="text-xs">
-          Tìm kiếm ngữ nghĩa trực tiếp trên các đoạn tài liệu dự án bằng PostgreSQL pgvector với độ đo Cosine Similarity.
+          {t("knowledge.search_card_desc")}
         </CardDescription>
       </CardHeader>
 
@@ -63,7 +65,7 @@ export const KnowledgeSearchCard: React.FC<KnowledgeSearchCardProps> = ({
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Nhập câu hỏi hoặc từ khóa ngữ nghĩa (VD: Mục tiêu của dự án là gì?)..."
+              placeholder={t("knowledge.search_placeholder")}
               className="pl-9 pr-8 text-sm"
               disabled={isSearching}
             />
@@ -86,12 +88,12 @@ export const KnowledgeSearchCard: React.FC<KnowledgeSearchCardProps> = ({
             {isSearching ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin" />
-                Đang tìm...
+                {t("knowledge.search_btn_searching")}
               </>
             ) : (
               <>
                 <Search className="h-4 w-4" />
-                Tìm kiếm
+                {t("knowledge.search_btn")}
               </>
             )}
           </Button>
@@ -100,9 +102,9 @@ export const KnowledgeSearchCard: React.FC<KnowledgeSearchCardProps> = ({
         {/* Quick UAT Test Chips */}
         <div className="flex flex-wrap items-center gap-1.5 pt-1">
           <span className="text-[11px] font-medium text-muted-foreground mr-1">
-            Truy vấn mẫu UAT:
+            {t("knowledge.sample_queries_label")}
           </span>
-          {QUICK_TEST_QUERIES.map((testQuery) => (
+          {sampleQueries.map((testQuery) => (
             <Badge
               key={testQuery}
               variant="outline"

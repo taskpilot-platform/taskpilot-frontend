@@ -8,9 +8,9 @@ describe("DocumentStatusBadge", () => {
     expect(screen.getByText("Sẵn sàng")).toBeInTheDocument();
   });
 
-  it("renders PROCESSING status with blue badge and Đang lập chỉ mục label", () => {
+  it("renders PROCESSING status with blue badge and Đang xử lý label", () => {
     render(<DocumentStatusBadge status="PROCESSING" />);
-    expect(screen.getByText("Đang lập chỉ mục...")).toBeInTheDocument();
+    expect(screen.getByText("Đang xử lý...")).toBeInTheDocument();
   });
 
   it("renders UPLOADING status with amber badge and Đang tải lên label", () => {

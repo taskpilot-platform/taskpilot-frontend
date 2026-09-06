@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "react-toastify";
+import i18n from "@/lib/i18n";
 import { knowledgeService } from "@/services/knowledge.service";
 import { getApiErrorMessage } from "@/lib/http";
 import type { ProjectDocument } from "@/types/knowledge";
@@ -93,7 +94,11 @@ export function useProjectDocuments(projectId: number) {
       try {
         await knowledgeService.deleteDocument(projectId, documentId);
         setDocuments((prev) => prev.filter((doc) => doc.id !== documentId));
-        toast.success("Đã xóa tài liệu và dữ liệu vector liên quan thành công.");
+        toast.success(
+          i18n.t("knowledge.toast_delete_success", {
+            defaultValue: "Đã xóa tài liệu và dữ liệu vector liên quan thành công.",
+          })
+        );
         return true;
       } catch (err) {
         toast.error(getApiErrorMessage(err));
@@ -118,7 +123,11 @@ export function useProjectDocuments(projectId: number) {
         setDocuments((prev) =>
           prev.map((doc) => (doc.id === documentId ? updated : doc))
         );
-        toast.info("Đang lập chỉ mục lại tài liệu...");
+        toast.info(
+          i18n.t("knowledge.toast_retry_success", {
+            defaultValue: "Đã kích hoạt lại quá trình lập chỉ mục vector.",
+          })
+        );
         // Trigger polling immediately
         pollingStartRef.current = Date.now();
         setIsPolling(true);

@@ -1,5 +1,6 @@
 import { useCallback, useState } from "react";
 import { toast } from "react-toastify";
+import i18n from "@/lib/i18n";
 import { knowledgeService } from "@/services/knowledge.service";
 import { getApiErrorMessage } from "@/lib/http";
 import type { ScoredChunk } from "@/types/knowledge";
@@ -15,7 +16,11 @@ export function useKnowledgeSearch(projectId: number) {
     async (searchQuery?: string) => {
       const q = (searchQuery ?? query).trim();
       if (!q) {
-        toast.warn("Vui lòng nhập từ khóa tìm kiếm.");
+        toast.warn(
+          i18n.t("knowledge.toast_enter_keyword", {
+            defaultValue: "Vui lòng nhập từ khóa tìm kiếm.",
+          })
+        );
         return;
       }
 
