@@ -1,4 +1,4 @@
-export type DocumentStatus = "UPLOADING" | "PROCESSING" | "READY" | "FAILED";
+export type DocumentStatus = "UPLOADING" | "QUEUED" | "PROCESSING" | "RETRY_WAIT" | "READY" | "FAILED";
 
 export interface ProjectDocument {
   id: number;

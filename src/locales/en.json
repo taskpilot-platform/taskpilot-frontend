@@ -481,6 +481,8 @@
 		"status_ready": "Ready",
 		"status_processing": "Processing...",
 		"status_uploading": "Uploading...",
+		"status_queued": "Queued",
+		"status_retry_wait": "Waiting for retry",
 		"status_failed": "Failed",
 		"dialog_delete_title": "Delete Project Document",
 		"dialog_delete_subtitle": "This action cannot be undone.",

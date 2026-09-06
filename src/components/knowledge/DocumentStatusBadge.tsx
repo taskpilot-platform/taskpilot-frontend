@@ -49,6 +49,28 @@ export const DocumentStatusBadge: React.FC<DocumentStatusBadgeProps> = ({
         </Badge>
       );
 
+    case "QUEUED":
+      return (
+        <Badge
+          variant="outline"
+          className={`border-purple-500/40 bg-purple-50 text-purple-700 dark:bg-purple-950/30 dark:text-purple-400 gap-1.5 font-medium ${className}`}
+        >
+          <Clock className="h-3 w-3 text-purple-600 dark:text-purple-400" />
+          <span>{t("knowledge.status_queued", "Đang chờ")}</span>
+        </Badge>
+      );
+
+    case "RETRY_WAIT":
+      return (
+        <Badge
+          variant="outline"
+          className={`border-orange-500/40 bg-orange-50 text-orange-700 dark:bg-orange-950/30 dark:text-orange-400 gap-1.5 font-medium ${className}`}
+        >
+          <Clock className="h-3 w-3 text-orange-600 dark:text-orange-400" />
+          <span>{t("knowledge.status_retry_wait", "Chờ thử lại")}</span>
+        </Badge>
+      );
+
     case "FAILED":
       return (
         <Badge

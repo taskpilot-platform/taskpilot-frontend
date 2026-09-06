@@ -22,4 +22,14 @@ describe("DocumentStatusBadge", () => {
     render(<DocumentStatusBadge status="FAILED" />);
     expect(screen.getByText("Thất bại")).toBeInTheDocument();
   });
+
+  it("renders QUEUED status with purple badge and Đang chờ xử lý label", () => {
+    render(<DocumentStatusBadge status="QUEUED" />);
+    expect(screen.getByText("Đang chờ xử lý")).toBeInTheDocument();
+  });
+
+  it("renders RETRY_WAIT status with orange badge and Chờ thử lại label", () => {
+    render(<DocumentStatusBadge status="RETRY_WAIT" />);
+    expect(screen.getByText("Chờ thử lại")).toBeInTheDocument();
+  });
 });

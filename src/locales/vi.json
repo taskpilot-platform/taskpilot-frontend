@@ -487,6 +487,8 @@
 		"status_ready": "Sẵn sàng",
 		"status_processing": "Đang xử lý...",
 		"status_uploading": "Đang tải lên...",
+		"status_queued": "Đang chờ xử lý",
+		"status_retry_wait": "Chờ thử lại",
 		"status_failed": "Thất bại",
 		"dialog_delete_title": "Xóa tài liệu dự án",
 		"dialog_delete_subtitle": "Hành động này không thể hoàn tác.",
