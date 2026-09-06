@@ -81,12 +81,21 @@ export function useAiChatStream({
   const streamingSessionIdRef = useRef<number | null>(null);
   const pollTimerRef = useRef<number | null>(null);
 
+  const loadMessagesRef = useRef(loadMessages);
+  loadMessagesRef.current = loadMessages;
+  const loadSessionsRef = useRef(loadSessions);
+  loadSessionsRef.current = loadSessions;
+  const currentStreamMsgRef = useRef(currentStreamMsg);
+  currentStreamMsgRef.current = currentStreamMsg;
+
   const targetStreamTextRef = useRef("");
   const typewriterTimerRef = useRef<number | null>(null);
   const lastTypewriterPaintRef = useRef(0);
   const streamCompletedRef = useRef(false);
   const isFinalizingRef = useRef(false);
   const pendingConfirmedMutationRef = useRef<ConfirmedTaskMutation | null>(null);
+
+  activeSessionIdRef.current = activeSession?.id ?? null;
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -231,7 +240,7 @@ export function useAiChatStream({
     typewriterTimerRef.current = window.requestAnimationFrame(tick);
   };
 
-  const startStatusPolling = (sessionId: number, clientMessageId: string) => {
+  const startStatusPolling = useCallback((sessionId: number, clientMessageId: string) => {
     stopPolling();
     let nullStatusCount = 0;
     let errorCount = 0;
@@ -267,8 +276,8 @@ export function useAiChatStream({
           stopPolling();
           resetStreamingUi();
           if (activeSessionIdRef.current === sessionId) {
-            await loadMessages(sessionId, true);
-            await loadSessions();
+            await loadMessagesRef.current(sessionId, true);
+            await loadSessionsRef.current();
           }
           handleConfirmedMutationFinalized();
           return;
@@ -278,7 +287,7 @@ export function useAiChatStream({
           clearPendingRequest(sessionId);
           stopPolling();
           resetStreamingUi();
-          const hasVisibleResult = targetStreamTextRef.current.trim().length > 0 || currentStreamMsg.trim().length > 0;
+          const hasVisibleResult = targetStreamTextRef.current.trim().length > 0 || currentStreamMsgRef.current.trim().length > 0;
           if (!hasVisibleResult && activeSessionIdRef.current === sessionId) {
             toast.error(status.errorMessage || t("copilot.error_ai_connection"), { toastId: AI_STREAM_ERROR_TOAST_ID });
           }
@@ -299,9 +308,9 @@ export function useAiChatStream({
     pollTimerRef.current = window.setInterval(() => {
       void tick();
     }, 2500);
-  };
+  }, [t]);
 
-  const restorePendingRequest = (sessionId: number) => {
+  const restorePendingRequest = useCallback((sessionId: number) => {
     const pendingId = getPendingRequest(sessionId);
     if (!pendingId) return;
 
@@ -311,7 +320,7 @@ export function useAiChatStream({
     streamingSessionIdRef.current = sessionId;
     setStreamingSessionId(sessionId);
     startStatusPolling(sessionId, pendingId);
-  };
+  }, [startStatusPolling]);
 
   const sendMessage = async (messageOverride: string) => {
     const outgoingText = messageOverride.trim();
