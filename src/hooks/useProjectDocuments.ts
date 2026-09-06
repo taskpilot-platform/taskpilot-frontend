@@ -5,8 +5,9 @@ import { knowledgeService } from "@/services/knowledge.service";
 import { getApiErrorMessage } from "@/lib/http";
 import type { ProjectDocument } from "@/types/knowledge";
 
-const POLLING_INTERVAL_MS = 3000;
+const POLLING_INTERVAL_MS = 2500;
 const MAX_POLLING_DURATION_MS = 300000; // 5 minutes max
+const TERMINAL_STATUSES: Set<string> = new Set(["READY", "FAILED"]);
 
 export function useProjectDocuments(projectId: number) {
   const [documents, setDocuments] = useState<ProjectDocument[]>([]);
@@ -32,10 +33,8 @@ export function useProjectDocuments(projectId: number) {
         const docs = res.data || [];
         setDocuments(docs);
 
-        // Determine if polling is needed
-        const hasPending = docs.some(
-          (d) => d.status === "UPLOADING" || d.status === "PROCESSING"
-        );
+        // Determine if polling is needed: poll whenever any document is non-terminal (QUEUED, PROCESSING, RETRY_WAIT, UPLOADING)
+        const hasPending = docs.some((d) => !TERMINAL_STATUSES.has(d.status));
 
         if (hasPending) {
           if (!pollingStartRef.current) {

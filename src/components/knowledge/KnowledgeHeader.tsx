@@ -21,7 +21,7 @@ export const KnowledgeHeader: React.FC<KnowledgeHeaderProps> = ({
   const { t } = useTranslation();
   const readyCount = documents.filter((d) => d.status === "READY").length;
   const processingCount = documents.filter(
-    (d) => d.status === "PROCESSING" || d.status === "UPLOADING"
+    (d) => d.status === "QUEUED" || d.status === "PROCESSING" || d.status === "RETRY_WAIT" || d.status === "UPLOADING"
   ).length;
   const failedCount = documents.filter((d) => d.status === "FAILED").length;
   const totalChunks = documents.reduce(
