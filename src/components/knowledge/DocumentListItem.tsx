@@ -19,6 +19,7 @@ import type { ProjectDocument } from "@/types/knowledge";
 interface DocumentListItemProps {
   document: ProjectDocument;
   isArchived?: boolean;
+  isManager?: boolean;
   isRetrying: boolean;
   isDeleting: boolean;
   onRetry: (doc: ProjectDocument) => void;
@@ -68,6 +69,7 @@ function formatDate(dateStr: string, lng: string): string {
 export const DocumentListItem: React.FC<DocumentListItemProps> = ({
   document,
   isArchived = false,
+  isManager = true,
   isRetrying,
   isDeleting,
   onRetry,
@@ -118,7 +120,7 @@ export const DocumentListItem: React.FC<DocumentListItemProps> = ({
         <div className="flex items-center gap-2 shrink-0">
           <DocumentStatusBadge status={document.status} />
 
-          {document.status === "FAILED" && !isArchived && (
+          {isManager && document.status === "FAILED" && !isArchived && (
             <Button
               type="button"
               variant="outline"
@@ -135,7 +137,7 @@ export const DocumentListItem: React.FC<DocumentListItemProps> = ({
             </Button>
           )}
 
-          {!isArchived && (
+          {isManager && !isArchived && (
             <Button
               type="button"
               variant="ghost"

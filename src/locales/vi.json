@@ -522,6 +522,8 @@
 		"toast_upload_success": "Tài liệu \"{{name}}\" đã được tải lên thành công và đang được phân tích tự động.",
 		"toast_delete_success": "Đã xóa tài liệu và dữ liệu liên quan thành công.",
 		"toast_retry_success": "Đã kích hoạt xử lý lại tài liệu.",
-		"toast_enter_keyword": "Vui lòng nhập từ khóa tìm kiếm."
+		"toast_enter_keyword": "Vui lòng nhập từ khóa tìm kiếm.",
+		"manager_only_upload_title": "Tải lên tài liệu bị giới hạn",
+		"manager_only_upload_desc": "Chỉ Quản lý dự án (Project Manager) mới có quyền tải lên hoặc xóa tài liệu của dự án. Thành viên có thể tra cứu và tìm kiếm thông tin bên cạnh."
 	}
 }

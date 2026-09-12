@@ -111,4 +111,21 @@ describe("DocumentList & DocumentListItem", () => {
     fireEvent.click(deleteButton);
     expect(onDeleteMock).toHaveBeenCalledWith(mockDocReady);
   });
+
+  it("hides retry and delete buttons when isManager is false", () => {
+    render(
+      <DocumentListItem
+        document={mockDocFailed}
+        isManager={false}
+        isRetrying={false}
+        isDeleting={false}
+        onRetry={vi.fn()}
+        onDeleteRequest={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText("corrupted.docx")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Thử lại/i })).not.toBeInTheDocument();
+    expect(screen.queryByTitle("Xóa tài liệu")).not.toBeInTheDocument();
+  });
 });

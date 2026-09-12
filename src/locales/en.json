@@ -516,6 +516,8 @@
 		"toast_upload_success": "Document \"{{name}}\" uploaded successfully and is being analyzed.",
 		"toast_delete_success": "Document and associated data deleted successfully.",
 		"toast_retry_success": "Document analysis re-triggered successfully.",
-		"toast_enter_keyword": "Please enter a search keyword."
+		"toast_enter_keyword": "Please enter a search keyword.",
+		"manager_only_upload_title": "Document upload restricted",
+		"manager_only_upload_desc": "Only Project Managers have permission to upload or delete project documents. Members can view documents and use semantic search."
 	}
 }

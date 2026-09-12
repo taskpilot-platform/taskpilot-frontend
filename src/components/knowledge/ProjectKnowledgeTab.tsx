@@ -1,5 +1,5 @@
 import React from "react";
-import { ShieldAlert, Info, Sparkles } from "lucide-react";
+import { ShieldAlert, Info, Sparkles, Lock } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { KnowledgeHeader } from "./KnowledgeHeader";
 import { DocumentUploadCard } from "./DocumentUploadCard";
@@ -10,11 +10,13 @@ import { useProjectDocuments } from "@/hooks/useProjectDocuments";
 interface ProjectKnowledgeTabProps {
   projectId: number;
   isArchived?: boolean;
+  isManager?: boolean;
 }
 
 export const ProjectKnowledgeTab: React.FC<ProjectKnowledgeTabProps> = ({
   projectId,
   isArchived = false,
+  isManager = true,
 }) => {
   const { t } = useTranslation();
   const {
@@ -86,6 +88,7 @@ export const ProjectKnowledgeTab: React.FC<ProjectKnowledgeTabProps> = ({
               documents={documents}
               isLoading={isLoading}
               isArchived={isArchived}
+              isManager={isManager}
               onDeleteDocument={deleteDocument}
               onRetryDocument={retryDocument}
               isDeleting={isDeleting}
@@ -94,13 +97,29 @@ export const ProjectKnowledgeTab: React.FC<ProjectKnowledgeTabProps> = ({
           </div>
         </div>
 
-        {/* Right Column: Upload Document & Instructions (5 cols) */}
+        {/* Right Column: Upload Document (Manager only) & Instructions (5 cols) */}
         <div className="lg:col-span-5 space-y-6">
-          <DocumentUploadCard
-            projectId={projectId}
-            isArchived={isArchived}
-            onUploadSuccess={() => void refetch()}
-          />
+          {isManager ? (
+            <DocumentUploadCard
+              projectId={projectId}
+              isArchived={isArchived}
+              onUploadSuccess={() => void refetch()}
+            />
+          ) : (
+            <div className="rounded-xl border border-border/80 bg-card p-6 text-center space-y-3 shadow-sm">
+              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                <Lock className="h-6 w-6" />
+              </div>
+              <div className="space-y-1">
+                <h4 className="text-sm font-semibold text-foreground">
+                  {t("knowledge.manager_only_upload_title")}
+                </h4>
+                <p className="text-xs text-muted-foreground max-w-xs mx-auto leading-relaxed">
+                  {t("knowledge.manager_only_upload_desc")}
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* RAG Workflow Info Banner */}
           <div className="rounded-lg border border-border/80 bg-muted/30 p-4 text-xs space-y-2 text-muted-foreground leading-relaxed">

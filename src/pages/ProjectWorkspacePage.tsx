@@ -1705,7 +1705,7 @@ export default function ProjectWorkspacePage() {
               </div>
             )}
             {activeTab === "knowledge" && (
-              <ProjectKnowledgeTab projectId={currentProjectId} isArchived={isArchived} />
+              <ProjectKnowledgeTab projectId={currentProjectId} isArchived={isArchived} isManager={isManager} />
             )}
           </>
         )}

@@ -67,4 +67,24 @@ describe("ProjectKnowledgeTab Security & Integration", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("spec.pdf")).toBeInTheDocument();
   });
+
+  it("renders restricted upload banner instead of upload dropzone when user is non-manager member", () => {
+    vi.spyOn(useProjectDocumentsModule, "useProjectDocuments").mockReturnValue({
+      documents: [],
+      isLoading: false,
+      isPolling: false,
+      error: null,
+      refetch: vi.fn(),
+      deleteDocument: vi.fn(),
+      retryDocument: vi.fn(),
+      isDeleting: () => false,
+      isRetrying: () => false,
+    });
+
+    render(<ProjectKnowledgeTab projectId={100} isManager={false} />);
+
+    expect(screen.getByText(/Tải lên tài liệu bị giới hạn/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Kéo thả tệp vào đây/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/Tìm Kiếm Tri Thức Dự Án/i)).toBeInTheDocument();
+  });
 });

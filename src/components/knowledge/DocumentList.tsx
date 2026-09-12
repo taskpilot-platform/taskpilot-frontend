@@ -9,6 +9,7 @@ interface DocumentListProps {
   documents: ProjectDocument[];
   isLoading: boolean;
   isArchived?: boolean;
+  isManager?: boolean;
   onDeleteDocument: (documentId: number) => Promise<boolean>;
   onRetryDocument: (documentId: number) => Promise<boolean>;
   isDeleting: (id: number) => boolean;
@@ -19,6 +20,7 @@ export const DocumentList: React.FC<DocumentListProps> = ({
   documents,
   isLoading,
   isArchived = false,
+  isManager = true,
   onDeleteDocument,
   onRetryDocument,
   isDeleting,
@@ -79,6 +81,7 @@ export const DocumentList: React.FC<DocumentListProps> = ({
             key={doc.id}
             document={doc}
             isArchived={isArchived}
+            isManager={isManager}
             isRetrying={isRetrying(doc.id)}
             isDeleting={isDeleting(doc.id)}
             onRetry={(d) => void onRetryDocument(d.id)}
