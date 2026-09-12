@@ -40,7 +40,7 @@ describe("useProjectDocuments Hook Polling Lifecycle", () => {
   it("polls repeatedly when document is QUEUED or PROCESSING, and stops when READY", async () => {
     // 1st call: returns QUEUED
     vi.mocked(knowledgeService.getDocuments).mockResolvedValueOnce({
-      success: true,
+      status: 200,
       message: "OK",
       data: [{ ...baseDoc, status: "QUEUED" }],
     });
@@ -57,7 +57,7 @@ describe("useProjectDocuments Hook Polling Lifecycle", () => {
 
     // 2nd call: returns PROCESSING
     vi.mocked(knowledgeService.getDocuments).mockResolvedValueOnce({
-      success: true,
+      status: 200,
       message: "OK",
       data: [{ ...baseDoc, status: "PROCESSING" }],
     });
@@ -73,7 +73,7 @@ describe("useProjectDocuments Hook Polling Lifecycle", () => {
 
     // 3rd call: returns READY (terminal status)
     vi.mocked(knowledgeService.getDocuments).mockResolvedValueOnce({
-      success: true,
+      status: 200,
       message: "OK",
       data: [{ ...baseDoc, status: "READY", chunkCount: 8 }],
     });
@@ -99,7 +99,7 @@ describe("useProjectDocuments Hook Polling Lifecycle", () => {
   it("continues polling on RETRY_WAIT and stops when FAILED", async () => {
     // 1st call: returns RETRY_WAIT
     vi.mocked(knowledgeService.getDocuments).mockResolvedValueOnce({
-      success: true,
+      status: 200,
       message: "OK",
       data: [{ ...baseDoc, status: "RETRY_WAIT" }],
     });
@@ -115,7 +115,7 @@ describe("useProjectDocuments Hook Polling Lifecycle", () => {
 
     // 2nd call: returns FAILED
     vi.mocked(knowledgeService.getDocuments).mockResolvedValueOnce({
-      success: true,
+      status: 200,
       message: "OK",
       data: [{ ...baseDoc, status: "FAILED", errorMessage: "Quota exceeded" }],
     });
