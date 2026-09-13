@@ -509,6 +509,7 @@
 		"search_results_found": "Found {{count}} relevant sections:",
 		"search_collapse": "Collapse",
 		"chunk_meta": "Section #{{chunkIndex}} (Doc #{{documentId}})",
+		"chunk_section": "Section #{{chunkIndex}}",
 		"similarity_label": "Relevance:",
 		"toast_file_too_large": "File size exceeds 25MB limit ({{size}}MB).",
 		"toast_unsupported_format": "Unsupported file format. Please upload: {{extensions}}.",

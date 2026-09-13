@@ -109,4 +109,31 @@ describe("SearchResultsList", () => {
     fireEvent.click(collapseButton);
     expect(onClearMock).toHaveBeenCalled();
   });
+
+  it("renders documentName and section index when documentName is provided", () => {
+    const chunkWithName: ScoredChunk[] = [
+      {
+        chunkId: 201,
+        documentId: 9,
+        projectId: 100,
+        chunkIndex: 532,
+        content: "Week 16: Finalize Process Payment Screen",
+        similarity: 0.6067,
+        documentName: "OOAD Report.pdf",
+      },
+    ];
+
+    render(
+      <SearchResultsList
+        results={chunkWithName}
+        isSearching={false}
+        hasSearched={true}
+        searchError={null}
+        onClear={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText("OOAD Report.pdf")).toBeInTheDocument();
+    expect(screen.getByText("Đoạn #532")).toBeInTheDocument();
+  });
 });

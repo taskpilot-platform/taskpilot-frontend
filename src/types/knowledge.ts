@@ -21,6 +21,7 @@ export interface ScoredChunk {
   chunkIndex: number;
   content: string;
   similarity: number;
+  documentName?: string;
 }
 
 export interface SearchKnowledgeParams {

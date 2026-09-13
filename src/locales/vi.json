@@ -515,6 +515,7 @@
 		"search_results_found": "Tìm thấy {{count}} đoạn nội dung liên quan:",
 		"search_collapse": "Thu gọn",
 		"chunk_meta": "Đoạn trích #{{chunkIndex}} (Tài liệu #{{documentId}})",
+		"chunk_section": "Đoạn #{{chunkIndex}}",
 		"similarity_label": "Độ tương đồng:",
 		"toast_file_too_large": "Kích thước file vượt quá giới hạn 25MB ({{size}}MB).",
 		"toast_unsupported_format": "Định dạng file không được hỗ trợ. Vui lòng tải lên file: {{extensions}}.",

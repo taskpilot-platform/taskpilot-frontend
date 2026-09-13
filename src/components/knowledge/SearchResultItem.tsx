@@ -1,5 +1,5 @@
 import React from "react";
-import { Layers, Quote } from "lucide-react";
+import { FileText, Layers, Quote } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge";
 import type { ScoredChunk } from "@/types/knowledge";
@@ -16,25 +16,36 @@ export const SearchResultItem: React.FC<SearchResultItemProps> = ({
   const { t } = useTranslation();
   const similarityScore = (chunk.similarity * 100).toFixed(1);
   const isHighMatch = chunk.similarity >= 0.7;
+  const docTitle = chunk.documentName || `Doc #${chunk.documentId}`;
 
   return (
     <div className="flex flex-col gap-2 rounded-lg border border-border bg-card p-4 transition-all hover:border-primary/40 hover:shadow-sm">
       {/* Header with Rank & Similarity */}
       <div className="flex items-center justify-between gap-2 border-b border-border/50 pb-2">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 min-w-0 flex-1 mr-2">
           <Badge
             variant="secondary"
-            className="h-5 px-1.5 text-xs font-mono font-bold bg-primary/10 text-primary border-primary/20"
+            className="h-5 px-1.5 text-xs font-mono font-bold bg-primary/10 text-primary border-primary/20 shrink-0"
           >
             #{rank}
           </Badge>
-          <span className="text-xs text-muted-foreground inline-flex items-center gap-1">
-            <Layers className="h-3 w-3" />
-            {t("knowledge.chunk_meta", {
-              chunkIndex: chunk.chunkIndex,
-              documentId: chunk.documentId,
-            })}
-          </span>
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground min-w-0 flex-1">
+            <FileText className="h-3.5 w-3.5 shrink-0 text-primary/70" />
+            <span
+              className="font-medium text-foreground truncate max-w-[280px] md:max-w-[360px] lg:max-w-[460px]"
+              title={docTitle}
+            >
+              {docTitle}
+            </span>
+            <span className="text-muted-foreground/40 shrink-0">•</span>
+            <span className="inline-flex items-center gap-1 shrink-0 text-muted-foreground">
+              <Layers className="h-3 w-3 text-muted-foreground/70" />
+              {t("knowledge.chunk_section", {
+                chunkIndex: chunk.chunkIndex,
+                defaultValue: `Section #${chunk.chunkIndex}`,
+              })}
+            </span>
+          </div>
         </div>
 
         <div className="flex items-center gap-1.5">
