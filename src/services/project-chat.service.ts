@@ -42,10 +42,31 @@ export const projectChatService = {
     onMessage: (message: ProjectChatMessage) => void,
     onStatusChange?: (connected: boolean) => void
   ): Client => {
-    // Dynamically derive WebSocket URL based on API proxy or current window location
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const host = window.location.host;
-    const brokerURL = `${protocol}//${host}/ws/chat`;
+    // Resolve WebSocket URL:
+    // 1. Explicit VITE_WS_URL if set
+    // 2. Derive from VITE_API_BASE_URL (http -> ws, https -> wss)
+    // 3. Fallback to current window.location with proxy
+    let brokerURL: string;
+    const configuredWsUrl = (import.meta.env.VITE_WS_URL as string | undefined)?.trim();
+    const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim();
+
+    if (configuredWsUrl) {
+      brokerURL = configuredWsUrl.endsWith("/ws/chat")
+        ? configuredWsUrl
+        : `${configuredWsUrl.replace(/\/+$/, "")}/ws/chat`;
+    } else if (apiBaseUrl && (apiBaseUrl.startsWith("http://") || apiBaseUrl.startsWith("https://"))) {
+      try {
+        const url = new URL(apiBaseUrl);
+        const wsProto = url.protocol === "https:" ? "wss:" : "ws:";
+        brokerURL = `${wsProto}//${url.host}/ws/chat`;
+      } catch {
+        const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+        brokerURL = `${protocol}//${window.location.host}/ws/chat`;
+      }
+    } else {
+      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+      brokerURL = `${protocol}//${window.location.host}/ws/chat`;
+    }
 
     const client = new Client({
       brokerURL,
