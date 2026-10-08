@@ -57,7 +57,7 @@ export const ProjectChatTab: React.FC<ProjectChatTabProps> = ({
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = (behavior: ScrollBehavior = "smooth") => {
-    messagesEndRef.current?.scrollIntoView({ behavior });
+    messagesEndRef.current?.scrollIntoView?.({ behavior });
   };
 
   // Fetch initial history

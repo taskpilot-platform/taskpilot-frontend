@@ -98,8 +98,8 @@ export const ProjectFilesTab: React.FC<ProjectFilesTabProps> = ({
     return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
   };
 
-  const getFileIcon = (fileName: string, _mime?: string) => {
-    const ext = fileName.split(".").pop()?.toLowerCase();
+  const getFileIcon = (fileName?: string, _mime?: string) => {
+    const ext = (fileName || "").split(".").pop()?.toLowerCase();
     if (["png", "jpg", "jpeg", "svg", "webp", "gif"].includes(ext || "")) {
       return <FileImage className="h-6 w-6 text-purple-500" />;
     }
