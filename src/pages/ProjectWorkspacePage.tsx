@@ -352,7 +352,7 @@ export default function ProjectWorkspacePage() {
     if (tab === "board" || tab === "overview") {
       const boardRes = await sprintService.getBoard(pid);
       setBoardData(boardRes.data);
-      mergeTasks(boardRes.data.tasks);
+      mergeTasks(boardRes.data?.tasks || []);
       return;
     }
 
@@ -1718,7 +1718,7 @@ export default function ProjectWorkspacePage() {
               <ProjectKnowledgeTab projectId={currentProjectId} isArchived={isArchived} isManager={isManager} />
             )}
             {activeTab === "files" && (
-              <ProjectFilesTab projectId={currentProjectId} isArchived={isArchived} isManager={isManager} />
+              <ProjectFilesTab projectId={currentProjectId} isArchived={isArchived} isManager={isManager} currentUserId={myUserId} />
             )}
             {activeTab === "chat" && (
               <ProjectChatTab projectId={currentProjectId} isArchived={isArchived} currentUserId={myUserId} />

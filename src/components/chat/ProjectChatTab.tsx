@@ -16,6 +16,7 @@ import { projectChatService } from "@/services/project-chat.service";
 import { projectFilesService } from "@/services/project-files.service";
 import { useAuthStore } from "@/stores/auth.store";
 import { profileService } from "@/services/profile.service";
+import { getApiErrorMessage } from "@/lib/http";
 import type { ProjectChatMessage } from "@/types/collab";
 
 interface ProjectChatTabProps {
@@ -135,7 +136,7 @@ export const ProjectChatTab: React.FC<ProjectChatTabProps> = ({
         setTimeout(() => scrollToBottom("smooth"), 50);
       }
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to send message";
+      const msg = getApiErrorMessage(err) || "Failed to send message";
       setError(msg);
     } finally {
       setIsSending(false);

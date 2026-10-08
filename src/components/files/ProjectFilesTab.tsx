@@ -18,25 +18,44 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { projectFilesService } from "@/services/project-files.service";
+import { profileService } from "@/services/profile.service";
+import { getApiErrorMessage } from "@/lib/http";
 import type { ProjectFile } from "@/types/collab";
 
 interface ProjectFilesTabProps {
   projectId: number;
   isArchived?: boolean;
   isManager?: boolean;
+  currentUserId?: number | null;
 }
 
 export const ProjectFilesTab: React.FC<ProjectFilesTabProps> = ({
   projectId,
   isArchived = false,
   isManager = false,
+  currentUserId: propUserId,
 }) => {
+  const [currentUserId, setCurrentUserId] = useState<number | null>(propUserId ?? null);
   const [files, setFiles] = useState<ProjectFile[]>([]);
   const [keyword, setKeyword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (propUserId) {
+      setCurrentUserId(propUserId);
+    } else {
+      void profileService.getMe()
+        .then((res) => {
+          if (res.data?.id) {
+            setCurrentUserId(res.data.id);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [propUserId]);
 
   const fetchFiles = useCallback(async () => {
     setIsLoading(true);
@@ -47,7 +66,7 @@ export const ProjectFilesTab: React.FC<ProjectFilesTabProps> = ({
         setFiles(res.data.content);
       }
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to load project files";
+      const msg = getApiErrorMessage(err) || "Failed to load project files";
       setError(msg);
     } finally {
       setIsLoading(false);
@@ -69,7 +88,7 @@ export const ProjectFilesTab: React.FC<ProjectFilesTabProps> = ({
       e.target.value = "";
       void fetchFiles();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Upload failed";
+      const msg = getApiErrorMessage(err) || "Upload failed";
       setError(msg);
     } finally {
       setIsUploading(false);
@@ -83,7 +102,7 @@ export const ProjectFilesTab: React.FC<ProjectFilesTabProps> = ({
       await projectFilesService.deleteFile(projectId, fileId);
       setFiles((prev) => prev.filter((f) => f.id !== fileId));
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Delete failed";
+      const msg = getApiErrorMessage(err) || "Delete failed";
       setError(msg);
     } finally {
       setDeletingId(null);
@@ -244,7 +263,7 @@ export const ProjectFilesTab: React.FC<ProjectFilesTabProps> = ({
                       <Download className="h-4 w-4" />
                     </a>
 
-                    {(isManager || !isArchived) && (
+                    {!isArchived && (isManager || (currentUserId != null && file.uploaderId === currentUserId)) && (
                       <Button
                         variant="ghost"
                         size="icon"
