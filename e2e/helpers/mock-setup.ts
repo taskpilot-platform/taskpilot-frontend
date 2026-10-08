@@ -33,6 +33,7 @@ export async function setupWorkspaceMocks(
     isArchived?: boolean;
     initialFiles?: any[];
     initialMessages?: any[];
+    initialMeetings?: any[];
   } = {}
 ) {
   const user = options.user || DEFAULT_MOCK_USER;
@@ -40,6 +41,7 @@ export async function setupWorkspaceMocks(
   const isArchived = options.isArchived ?? false;
   let files = options.initialFiles || [];
   let messages = options.initialMessages || [];
+  let meetings = options.initialMeetings || [];
 
   // Seed localStorage with valid auth token before page load
   await page.addInitScript(
@@ -345,6 +347,174 @@ export async function setupWorkspaceMocks(
           status: 201,
           message: "Message sent",
           data: newMsg,
+        }),
+      });
+      return;
+    }
+
+    await route.continue();
+  });
+
+  // Mock Active Meeting API
+  await page.route(/\/api\/v1\/projects\/100\/meetings\/active(\?.*)?$/, async (route) => {
+    const active = meetings.find((m: any) => m.status === "ACTIVE") || null;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        status: 200,
+        message: "Success",
+        data: active,
+      }),
+    });
+  });
+
+  // Mock Join Meeting API
+  await page.route(/\/api\/v1\/projects\/100\/meetings\/\d+\/join(\?.*)?$/, async (route) => {
+    const url = route.request().url();
+    const match = url.match(/\/meetings\/(\d+)\/join/);
+    const meetingId = match ? parseInt(match[1]) : 1;
+    const meeting = meetings.find((m: any) => m.id === meetingId) || {
+      id: meetingId,
+      projectId: 100,
+      title: "Sprint Planning",
+      status: "ACTIVE",
+      roomName: `tp-room-${meetingId}`,
+      startedAt: new Date().toISOString(),
+      hostName: user.fullName,
+      hostId: user.id,
+      recordingEnabled: false,
+      activeParticipantsCount: 1,
+      totalParticipantsCount: 1,
+      isHost: true,
+    };
+
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        status: 200,
+        message: "Joined successfully",
+        data: {
+          token: "mock-livekit-token-" + meetingId,
+          livekitUrl: "wss://taskpilot-collab-m3oqfj4g.livekit.cloud",
+          roomName: meeting.roomName,
+          identity: `user_${user.id}`,
+          participantName: user.fullName,
+          isHost: meeting.hostId === user.id || isManager,
+          meeting,
+        },
+      }),
+    });
+  });
+
+  // Mock Leave Meeting API
+  await page.route(/\/api\/v1\/projects\/100\/meetings\/\d+\/leave(\?.*)?$/, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        status: 200,
+        message: "Left successfully",
+        data: null,
+      }),
+    });
+  });
+
+  // Mock End Meeting API
+  await page.route(/\/api\/v1\/projects\/100\/meetings\/\d+\/end(\?.*)?$/, async (route) => {
+    const url = route.request().url();
+    const match = url.match(/\/meetings\/(\d+)\/end/);
+    const meetingId = match ? parseInt(match[1]) : 1;
+    const meeting = meetings.find((m: any) => m.id === meetingId);
+    if (meeting) {
+      meeting.status = "ENDED";
+      meeting.endedAt = new Date().toISOString();
+      meeting.durationSeconds = 120;
+    }
+
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        status: 200,
+        message: "Meeting ended",
+        data: meeting || null,
+      }),
+    });
+  });
+
+  // Mock Meeting Participants API
+  await page.route(/\/api\/v1\/projects\/100\/meetings\/\d+\/participants(\?.*)?$/, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        status: 200,
+        message: "Success",
+        data: [
+          {
+            id: 1,
+            meetingId: 1,
+            userId: user.id,
+            name: user.fullName,
+            role: "HOST",
+            joinedAt: new Date().toISOString(),
+            isActive: true,
+          },
+        ],
+      }),
+    });
+  });
+
+  // Mock Meetings List & Create API
+  await page.route(/\/api\/v1\/projects\/100\/meetings(\?.*)?$/, async (route) => {
+    const request = route.request();
+
+    if (request.method() === "GET") {
+      const url = new URL(request.url());
+      const statusParam = url.searchParams.get("status");
+      let filtered = [...meetings];
+      if (statusParam) {
+        filtered = filtered.filter((m: any) => m.status === statusParam);
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          status: 200,
+          message: "Success",
+          data: filtered,
+        }),
+      });
+      return;
+    }
+
+    if (request.method() === "POST") {
+      const postData = JSON.parse(request.postData() || "{}");
+      const newMeeting = {
+        id: meetings.length + 1,
+        projectId: 100,
+        hostId: user.id,
+        hostName: user.fullName,
+        title: postData.title,
+        description: postData.description || null,
+        roomName: `tp-proj-100-m-${Date.now()}`,
+        status: "ACTIVE",
+        recordingEnabled: !!postData.recordingEnabled,
+        startedAt: new Date().toISOString(),
+        activeParticipantsCount: 1,
+        totalParticipantsCount: 1,
+        isHost: true,
+      };
+      meetings.unshift(newMeeting);
+      await route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify({
+          status: 201,
+          message: "Meeting created",
+          data: newMeeting,
         }),
       });
       return;

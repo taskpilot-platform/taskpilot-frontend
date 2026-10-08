@@ -1,5 +1,5 @@
 import React, { forwardRef, useEffect, useMemo, useState, type ComponentPropsWithoutRef } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import {
   LayoutDashboard,
   FolderKanban,
@@ -29,7 +29,8 @@ import {
   LogOut,
   BookOpen,
   FolderOpen,
-  MessageSquare
+  MessageSquare,
+  Video
 } from "lucide-react";
 import { useLeaveProject } from "@/hooks/useLeaveProject";
 import { useTranslation } from "react-i18next";
@@ -69,12 +70,13 @@ import { TaskDetailSheet } from "@/components/tasks/TaskDetailSheet";
 import { ProjectKnowledgeTab } from "@/components/knowledge/ProjectKnowledgeTab";
 import { ProjectFilesTab } from "@/components/files/ProjectFilesTab";
 import { ProjectChatTab } from "@/components/chat/ProjectChatTab";
+import { ProjectMeetingsTab } from "@/components/meetings/ProjectMeetingsTab";
 import type { MyProject, Project, ProjectMember, ProjectSummary } from "@/types/project";
 import type { TaskDetailDto, TaskDto, TaskPriority, TaskStatus } from "@/types/task";
 import type { BacklogResponse, BoardResponse, SprintDto } from "@/types/sprint";
 import type { TimelineResponse, TimelineTaskDto } from "@/types/timeline";
 
-const VALID_TABS = ["overview", "board", "backlog", "timeline", "knowledge", "files", "chat"] as const;
+const VALID_TABS = ["overview", "board", "backlog", "timeline", "knowledge", "files", "chat", "meetings"] as const;
 type ViewMode = (typeof VALID_TABS)[number];
 type BacklogSortMode = "position" | "createdAt" | "priority";
 const VALID_TAB_SET = new Set<string>(VALID_TABS);
@@ -197,7 +199,9 @@ export default function ProjectWorkspacePage() {
   const confirm = useConfirm();
   const { projectId, tabId, taskId } = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const activeTab: ViewMode = isViewMode(tabId) ? tabId : "overview";
+  const initialJoinMeetingId = searchParams.get("join") ? Number(searchParams.get("join")) : null;
 
   const currentProjectId = Number(projectId);
   const currentTaskId = taskId ? Number(taskId) : null;
@@ -1155,6 +1159,9 @@ export default function ProjectWorkspacePage() {
             <Button type="button" variant={activeTab === "chat" ? "secondary" : "ghost"} className={`gap-2 shrink-0 ${activeTab === "chat" ? "bg-muted" : "hover:bg-muted/50"}`} onClick={() => navigate(`/projects/${currentProjectId}/chat`)}>
               <MessageSquare className="h-4 w-4" /> Chat
             </Button>
+            <Button type="button" variant={activeTab === "meetings" ? "secondary" : "ghost"} className={`gap-2 shrink-0 ${activeTab === "meetings" ? "bg-muted" : "hover:bg-muted/50"}`} onClick={() => navigate(`/projects/${currentProjectId}/meetings`)} data-testid="tab-meetings">
+              <Video className="h-4 w-4" /> Meetings
+            </Button>
           </div>
           <div className="relative md:w-72">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -1722,6 +1729,9 @@ export default function ProjectWorkspacePage() {
             )}
             {activeTab === "chat" && (
               <ProjectChatTab projectId={currentProjectId} isArchived={isArchived} currentUserId={myUserId} />
+            )}
+            {activeTab === "meetings" && (
+              <ProjectMeetingsTab projectId={currentProjectId} isArchived={isArchived} currentUserId={myUserId} initialJoinMeetingId={initialJoinMeetingId} />
             )}
           </>
         )}

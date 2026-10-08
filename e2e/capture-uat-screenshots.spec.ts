@@ -141,6 +141,42 @@ const REPORT_MESSAGES = [
 const TARGET_DIRS = [
   "/home/dptn/projects/taskpilot/taskpilot/docs/implementation/collab/assets",
   "/home/dptn/projects/taskpilot/report/src/assets/collab",
+  "/home/dptn/.gemini/antigravity-cli/brain/688d2ad8-0333-4407-b817-c25a8631f9d6/assets/collab",
+];
+
+const REPORT_MEETINGS = [
+  {
+    id: 1,
+    projectId: 100,
+    title: "Sprint Planning & LiveKit Review",
+    description: "Review LiveKit Cloud WebRTC integration and team velocity",
+    status: "ACTIVE",
+    roomName: "tp-proj-100-sprint-review",
+    startedAt: new Date(Date.now() - 15 * 60 * 1000).toISOString(),
+    hostName: "Alex Rivera",
+    hostId: 1,
+    recordingEnabled: true,
+    activeParticipantsCount: 1,
+    totalParticipantsCount: 1,
+    isHost: true,
+  },
+  {
+    id: 2,
+    projectId: 100,
+    title: "Phase 3 Retrospective",
+    description: "Project Files & Chat retrospectives",
+    status: "ENDED",
+    roomName: "tp-proj-100-p3-retro",
+    startedAt: new Date(Date.now() - 3600 * 1000).toISOString(),
+    endedAt: new Date(Date.now() - 1800 * 1000).toISOString(),
+    durationSeconds: 1800,
+    hostName: "Alex Rivera",
+    hostId: 1,
+    recordingEnabled: false,
+    activeParticipantsCount: 0,
+    totalParticipantsCount: 3,
+    isHost: true,
+  },
 ];
 
 async function saveScreenshot(page: any, filename: string) {
@@ -151,10 +187,11 @@ async function saveScreenshot(page: any, filename: string) {
 }
 
 test.describe("Capture UAT Report Screenshots", () => {
-  test("Capture all 10 high-resolution screenshots for thesis report", async ({ page }) => {
+  test("Capture all 17 high-resolution screenshots for thesis report", async ({ page }) => {
+    test.setTimeout(90000);
     // 1. Files Tab - Empty state
     await page.setViewportSize({ width: 1280, height: 800 });
-    await setupWorkspaceMocks(page, { initialFiles: [], initialMessages: [] });
+    await setupWorkspaceMocks(page, { initialFiles: [], initialMessages: [], initialMeetings: [] });
     await page.goto("/projects/100/files");
     await expect(page.getByRole("heading", { name: "Project Files" })).toBeVisible();
     await saveScreenshot(page, "01_project_files_empty_state.png");
@@ -206,11 +243,12 @@ test.describe("Capture UAT Report Screenshots", () => {
     await expect(page.getByText("Project Chat Room")).toBeVisible();
     await saveScreenshot(page, "08_project_chat_mobile_responsive.png");
 
-    // 9. Workspace Full Tabs Navigation Bar (Overview, Board, Backlog, Files, Chat)
+    // 9. Workspace Full Tabs Navigation Bar (Overview, Board, Backlog, Files, Chat, Meetings)
     await page.setViewportSize({ width: 1280, height: 800 });
     await page.goto("/projects/100/overview");
     await expect(page.getByRole("button", { name: /^Files$/i })).toBeVisible();
     await expect(page.getByRole("button", { name: /^Chat$/i })).toBeVisible();
+    await expect(page.locator('[data-testid="tab-meetings"]')).toBeVisible();
     await saveScreenshot(page, "09_workspace_tabs_navigation.png");
 
     // 10. Archived Project State (Upload & Delete buttons hidden, chat input disabled)
@@ -218,5 +256,56 @@ test.describe("Capture UAT Report Screenshots", () => {
     await page.goto("/projects/100/files");
     await expect(page.getByText("Upload File")).not.toBeVisible();
     await saveScreenshot(page, "10_project_files_archived_readonly.png");
+
+    // 11. Meetings Tab - Empty State
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await setupWorkspaceMocks(page, { initialMeetings: [] });
+    await page.goto("/projects/100/meetings");
+    await expect(page.locator('[data-testid="empty-meetings-view"]')).toBeVisible();
+    await saveScreenshot(page, "11_project_meetings_empty_state.png");
+
+    // 12. Meetings Tab - Create Meeting Modal Dialog
+    await page.locator('[data-testid="create-meeting-btn"]').click();
+    await expect(page.locator('[data-testid="create-meeting-dialog"]')).toBeVisible();
+    await page.locator('[data-testid="meeting-title-input"]').fill("Sprint Planning & LiveKit Review");
+    await page.locator('[data-testid="meeting-desc-input"]').fill("Review LiveKit Cloud WebRTC integration and team velocity");
+    await page.locator('[data-testid="meeting-rec-checkbox"]').click();
+    await saveScreenshot(page, "12_project_meetings_create_modal.png");
+    await page.locator('[data-testid="cancel-create-dialog-btn"]').click();
+
+    // 13. Meetings Tab - Active & Ended Meeting Cards View
+    await setupWorkspaceMocks(page, { initialMeetings: REPORT_MEETINGS });
+    await page.goto("/projects/100/meetings");
+    await expect(page.locator('[data-testid="active-meeting-banner"]')).toBeVisible();
+    await expect(page.locator('[data-testid="meeting-card-1"]')).toBeVisible();
+    await expect(page.locator('[data-testid="meeting-card-2"]')).toBeVisible();
+    await saveScreenshot(page, "13_project_meetings_dashboard_list.png");
+
+    // 14. Live Video Meeting Room - Immersive Stage & Video Grid
+    await page.locator('[data-testid="join-meeting-btn-1"]').click();
+    await expect(page.locator('[data-testid="live-meeting-room"]')).toBeVisible();
+    await expect(page.locator('[data-testid="video-grid"]')).toBeVisible();
+    await saveScreenshot(page, "14_project_meeting_live_room_desktop.png");
+
+    // 15. Live Video Meeting Room - In-Meeting Participants Drawer Open
+    await page.locator('[data-testid="toggle-participants-drawer-btn"]').click();
+    await expect(page.locator('[data-testid="participants-drawer"]')).toBeVisible();
+    await saveScreenshot(page, "15_project_meeting_participants_drawer.png");
+
+    // 16. Live Video Meeting Room - In-Meeting Chat Drawer Open
+    await page.locator('[data-testid="toggle-in-meeting-chat-btn"]').click();
+    await expect(page.locator('[data-testid="in-meeting-chat-drawer"]')).toBeVisible();
+    const chatDrawerInput = page.locator('[data-testid="in-meeting-chat-input"]');
+    await chatDrawerInput.fill("Chào cả nhóm! Âm thanh và hình ảnh WebRTC từ LiveKit Cloud rất mượt mà.");
+    await page.locator('[data-testid="in-meeting-chat-send-btn"]').click();
+    await expect(page.locator("text=Chào cả nhóm! Âm thanh và hình ảnh WebRTC từ LiveKit Cloud rất mượt mà.")).toBeVisible();
+    await saveScreenshot(page, "16_project_meeting_chat_drawer.png");
+
+    // 17. Live Video Meeting Room - Mobile Viewport (375x812)
+    await page.setViewportSize({ width: 375, height: 812 });
+    await expect(page.locator('[data-testid="live-meeting-room"]')).toBeVisible();
+    await expect(page.locator('[data-testid="toggle-mic-btn"]')).toBeVisible();
+    await expect(page.locator('[data-testid="toggle-cam-btn"]')).toBeVisible();
+    await saveScreenshot(page, "17_project_meeting_mobile_responsive.png");
   });
 });
