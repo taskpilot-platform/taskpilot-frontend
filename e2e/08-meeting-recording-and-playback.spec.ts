@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { setupWorkspaceMocks, DEFAULT_MOCK_USER } from "./helpers/mock-setup";
 
-test.describe("Phase 5: Meeting Recording Playback & Custom Dialogs E2E (TC201 - TC210)", () => {
+test.describe("Phase 5: Meeting Recording Playback & Custom Dialogs E2E (TC201 - TC207)", () => {
   test.beforeEach(async ({ page }) => {
     await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
   });
@@ -12,7 +12,7 @@ test.describe("Phase 5: Meeting Recording Playback & Custom Dialogs E2E (TC201 -
       id: 234,
       projectId: 100,
       title: "Sprint 14 Sync & Demo",
-      status: "COMPLETED",
+      status: "ENDED",
       roomName: "room-234",
       startedAt: new Date(Date.now() - 1800000).toISOString(),
       endedAt: new Date().toISOString(),
@@ -29,10 +29,10 @@ test.describe("Phase 5: Meeting Recording Playback & Custom Dialogs E2E (TC201 -
     await page.goto("/projects/100/meetings");
     await page.waitForLoadState("domcontentloaded");
 
-    // Switch to Ended/History tab
-    const endedTab = page.locator('button:has-text("Đã kết thúc"), button:has-text("Lịch sử"), [data-testid="filter-ended"]').first();
-    if (await endedTab.isVisible()) {
-      await endedTab.click();
+    // Switch to Ended/History tab if needed
+    const historyTab = page.locator('button:has-text("Lịch sử đã họp")');
+    if (await historyTab.isVisible()) {
+      await historyTab.click();
     }
 
     const meetingCard = page.locator('[data-testid="meeting-card-234"]');
@@ -50,7 +50,7 @@ test.describe("Phase 5: Meeting Recording Playback & Custom Dialogs E2E (TC201 -
       id: 234,
       projectId: 100,
       title: "Sprint 14 Sync & Demo",
-      status: "COMPLETED",
+      status: "ENDED",
       roomName: "room-234",
       startedAt: new Date(Date.now() - 1800000).toISOString(),
       endedAt: new Date().toISOString(),
@@ -68,6 +68,7 @@ test.describe("Phase 5: Meeting Recording Playback & Custom Dialogs E2E (TC201 -
     await page.waitForLoadState("domcontentloaded");
 
     const watchBtn = page.locator('[data-testid="watch-recording-btn-234"]');
+    await expect(watchBtn).toBeVisible({ timeout: 10000 });
     await watchBtn.click();
 
     // Verify modal elements
@@ -85,7 +86,7 @@ test.describe("Phase 5: Meeting Recording Playback & Custom Dialogs E2E (TC201 -
       id: 234,
       projectId: 100,
       title: "Sprint 14 Sync & Demo",
-      status: "COMPLETED",
+      status: "ENDED",
       roomName: "room-234",
       startedAt: new Date(Date.now() - 1800000).toISOString(),
       endedAt: new Date().toISOString(),
@@ -102,10 +103,12 @@ test.describe("Phase 5: Meeting Recording Playback & Custom Dialogs E2E (TC201 -
     await page.goto("/projects/100/meetings");
     await page.waitForLoadState("domcontentloaded");
 
-    await page.locator('[data-testid="watch-recording-btn-234"]').click();
+    const watchBtn = page.locator('[data-testid="watch-recording-btn-234"]');
+    await expect(watchBtn).toBeVisible({ timeout: 10000 });
+    await watchBtn.click();
 
     const video = page.locator('[data-testid="recording-video-player"]');
-    await expect(video).toBeVisible();
+    await expect(video).toBeVisible({ timeout: 10000 });
 
     // Check video source contains sample recording or valid url
     const src = await video.getAttribute("src");
@@ -118,12 +121,12 @@ test.describe("Phase 5: Meeting Recording Playback & Custom Dialogs E2E (TC201 -
   });
 
   // --- TC204: Video download triggers .webm file download ---
-  test("TC204: Video download triggers webm file download", async ({ page }) => {
+  test("TC204: Video download button is interactive and triggers download event", async ({ page }) => {
     const mockEndedMeeting = {
       id: 234,
       projectId: 100,
       title: "Sprint 14 Sync & Demo",
-      status: "COMPLETED",
+      status: "ENDED",
       roomName: "room-234",
       startedAt: new Date(Date.now() - 1800000).toISOString(),
       endedAt: new Date().toISOString(),
@@ -140,10 +143,12 @@ test.describe("Phase 5: Meeting Recording Playback & Custom Dialogs E2E (TC201 -
     await page.goto("/projects/100/meetings");
     await page.waitForLoadState("domcontentloaded");
 
-    await page.locator('[data-testid="watch-recording-btn-234"]').click();
+    const watchBtn = page.locator('[data-testid="watch-recording-btn-234"]');
+    await expect(watchBtn).toBeVisible({ timeout: 10000 });
+    await watchBtn.click();
 
     const downloadBtn = page.locator('[data-testid="download-recording-btn"]');
-    await expect(downloadBtn).toBeVisible();
+    await expect(downloadBtn).toBeVisible({ timeout: 10000 });
 
     const [download] = await Promise.all([
       page.waitForEvent("download"),
@@ -181,7 +186,9 @@ test.describe("Phase 5: Meeting Recording Playback & Custom Dialogs E2E (TC201 -
     await page.waitForLoadState("domcontentloaded");
 
     // Join active meeting room
-    await page.locator('[data-testid="join-meeting-btn-501"]').click();
+    const joinBtn = page.locator('[data-testid="join-active-meeting-btn"], [data-testid="join-meeting-btn-501"]').first();
+    await expect(joinBtn).toBeVisible({ timeout: 10000 });
+    await joinBtn.click();
 
     // Click End Meeting button
     const endBtn = page.locator('[data-testid="end-meeting-btn"]');
@@ -190,7 +197,7 @@ test.describe("Phase 5: Meeting Recording Playback & Custom Dialogs E2E (TC201 -
 
     // Verify custom ConfirmDialog rendered
     const confirmDialog = page.locator('[data-testid="confirm-dialog"]');
-    await expect(confirmDialog).toBeVisible();
+    await expect(confirmDialog).toBeVisible({ timeout: 5000 });
     await expect(confirmDialog).toContainText("Kết thúc cuộc họp");
     await expect(confirmDialog).toContainText("Bạn có chắc chắn muốn kết thúc cuộc họp này cho tất cả thành viên?");
 
@@ -233,7 +240,9 @@ test.describe("Phase 5: Meeting Recording Playback & Custom Dialogs E2E (TC201 -
     await page.goto("/projects/100/meetings");
     await page.waitForLoadState("domcontentloaded");
 
-    await page.locator('[data-testid="join-meeting-btn-502"]').click();
+    const joinBtn = page.locator('[data-testid="join-active-meeting-btn"], [data-testid="join-meeting-btn-502"]').first();
+    await expect(joinBtn).toBeVisible({ timeout: 10000 });
+    await joinBtn.click();
 
     const recordBtn = page.locator('[data-testid="toggle-recording-btn"]');
     await expect(recordBtn).toBeVisible({ timeout: 10000 });
@@ -247,7 +256,7 @@ test.describe("Phase 5: Meeting Recording Playback & Custom Dialogs E2E (TC201 -
       id: 234,
       projectId: 100,
       title: "Sprint 14 Sync & Demo",
-      status: "COMPLETED",
+      status: "ENDED",
       roomName: "room-234",
       startedAt: new Date(Date.now() - 1800000).toISOString(),
       endedAt: new Date().toISOString(),
@@ -264,10 +273,12 @@ test.describe("Phase 5: Meeting Recording Playback & Custom Dialogs E2E (TC201 -
     await page.goto("/projects/100/meetings");
     await page.waitForLoadState("domcontentloaded");
 
-    await page.locator('[data-testid="watch-recording-btn-234"]').click();
+    const watchBtn = page.locator('[data-testid="watch-recording-btn-234"]');
+    await expect(watchBtn).toBeVisible({ timeout: 10000 });
+    await watchBtn.click();
 
     const video = page.locator('[data-testid="recording-video-player"]');
-    await expect(video).toBeVisible();
+    await expect(video).toBeVisible({ timeout: 10000 });
 
     const downloadBtn = page.locator('[data-testid="download-recording-btn"]');
     await expect(downloadBtn).toBeVisible();

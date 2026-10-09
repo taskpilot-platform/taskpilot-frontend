@@ -239,8 +239,26 @@ export default function ProjectSettingsPage() {
 
   if (isLoading) {
     return (
-      <div className="flex-1 flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+      <div className="flex-1 overflow-y-auto bg-muted/5">
+        <div className="max-w-4xl mx-auto p-6 md:p-8 space-y-8 animate-pulse">
+          <div className="flex items-center gap-4">
+            <div className="w-9 h-9 rounded-md bg-muted" />
+            <div className="space-y-1.5 flex-1">
+              <div className="h-6 w-48 bg-muted rounded" />
+              <div className="h-4 w-72 bg-muted/60 rounded" />
+            </div>
+          </div>
+          <div className="rounded-xl border border-border/80 bg-card p-6 space-y-4">
+            <div className="h-5 w-36 bg-muted rounded" />
+            <div className="h-10 w-full bg-muted/40 rounded" />
+            <div className="h-20 w-full bg-muted/40 rounded" />
+          </div>
+          <div className="rounded-xl border border-border/80 bg-card p-6 space-y-4">
+            <div className="h-5 w-36 bg-muted rounded" />
+            <div className="h-12 w-full bg-muted/40 rounded" />
+            <div className="h-12 w-full bg-muted/40 rounded" />
+          </div>
+        </div>
       </div>
     );
   }
