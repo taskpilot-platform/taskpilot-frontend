@@ -35,10 +35,7 @@ export const knowledgeService = {
     return http
       .post<ApiResponse<ProjectDocument>>(
         `/v1/projects/${projectId}/documents`,
-        formData,
-        {
-          headers: { "Content-Type": "multipart/form-data" },
-        }
+        formData
       )
       .then((r) => r.data);
   },

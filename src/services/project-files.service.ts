@@ -43,10 +43,7 @@ export const projectFilesService = {
     return http
       .post<ApiResponse<ProjectFile>>(
         `/v1/projects/${projectId}/files`,
-        formData,
-        {
-          headers: { "Content-Type": "multipart/form-data" },
-        }
+        formData
       )
       .then((r) => r.data);
   },

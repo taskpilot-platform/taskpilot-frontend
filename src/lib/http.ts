@@ -21,6 +21,9 @@ http.interceptors.request.use((config) => {
   }
   const currentLang = localStorage.getItem("i18nextLng") || "vi";
   config.headers["Accept-Language"] = currentLang.startsWith("en") ? "en" : "vi";
+  if (config.data instanceof FormData) {
+    delete config.headers["Content-Type"];
+  }
   return config;
 });
 

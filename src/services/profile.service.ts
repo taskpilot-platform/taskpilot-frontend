@@ -13,9 +13,7 @@ export const profileService = {
     const formData = new FormData();
     formData.append("file", file);
     return http
-      .post<ApiResponse<UserProfile>>("/v1/users/me/avatar", formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-      })
+      .post<ApiResponse<UserProfile>>("/v1/users/me/avatar", formData)
       .then((r) => r.data);
   },
   changePassword: (payload: ChangePasswordRequest) => api.put<null>("/v1/users/me/password", payload),
