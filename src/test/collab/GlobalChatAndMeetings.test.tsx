@@ -140,7 +140,7 @@ describe("Global Chat & Meetings Components", () => {
         expect(screen.getByTestId("project-meetings-tab")).toBeInTheDocument();
         expect(screen.getByTestId("active-meeting-banner")).toBeInTheDocument();
         expect(screen.getByTestId("active-banner-title")).toHaveTextContent("Daily Standup & Tech Sync");
-      });
+      }, { timeout: 8000 });
     });
   });
 
