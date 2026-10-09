@@ -165,7 +165,7 @@ async function applyThemeAndLocale(page, theme, locale, wallpaper) {
   try {
     if (requiresAuth && targetRoute !== '/login' && targetRoute !== '/register') {
       console.log(`Logging in with ${TEST_EMAIL}...`);
-      await page.goto(`${APP_URL}/login`, { waitUntil: 'networkidle2' });
+      await page.goto(`${APP_URL}/login`, { waitUntil: 'domcontentloaded', timeout: 20000 });
       await applyThemeAndLocale(page, theme, locale, wallpaper);
       await page.type('input[type="email"]', TEST_EMAIL);
       await page.type('input[type="password"]', TEST_PASSWORD);
@@ -173,9 +173,9 @@ async function applyThemeAndLocale(page, theme, locale, wallpaper) {
     }
 
     console.log(`Auditing route: ${APP_URL}${targetRoute}...`);
-    await page.goto(`${APP_URL}${targetRoute}`, { waitUntil: 'networkidle2' });
+    await page.goto(`${APP_URL}${targetRoute}`, { waitUntil: 'domcontentloaded', timeout: 20000 });
     await applyThemeAndLocale(page, theme, locale, wallpaper);
-    await new Promise(resolve => setTimeout(resolve, 2500)); // Allow hydration and layout to settle
+    await new Promise(resolve => setTimeout(resolve, 3000)); // Allow hydration and layout to settle
 
     // Run contrast audit in browser context
     const auditResults = await page.evaluate(({ theme }) => {

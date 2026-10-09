@@ -12,6 +12,7 @@ import {
   Check,
   Send,
   X,
+  Disc,
 } from "lucide-react";
 import { Room, RoomEvent, Track, VideoPresets } from "livekit-client";
 import { toast } from "react-toastify";
@@ -19,7 +20,10 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import { meetingService } from "@/services/meeting.service";
+import { meetingRecordingStore } from "@/services/meetingRecordingStore";
+import { projectFilesService } from "@/services/project-files.service";
 import type { MeetingTokenResponse, ProjectMeetingDto } from "@/types/meeting";
 
 interface LiveMeetingRoomProps {
@@ -115,7 +119,7 @@ function ParticipantTile({
           fallbackStream = stream;
           if (videoRef.current) {
             videoRef.current.srcObject = stream;
-            videoRef.current.play().catch(() => {});
+            videoRef.current.play()?.catch(() => {});
             setHasVideoStream(true);
           }
         })
@@ -219,20 +223,41 @@ function ParticipantTile({
 // ---------------------------------------------------------------------------
 function ScreenShareViewer({
   room,
+  stream,
 }: {
   room: Room | null;
+  stream: MediaStream | null;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
+    // 1. Prioritize direct local display MediaStream
+    if (stream && videoRef.current) {
+      videoRef.current.srcObject = stream;
+      videoRef.current.play()?.catch(() => {});
+      return;
+    }
+
+    // 2. Fallback or remote LiveKit screen share track
     let track: any = null;
-    if (room && room.localParticipant) {
-      const pub = room.localParticipant.getTrackPublication(Track.Source.ScreenShare);
+    if (room) {
+      let pub: any = room.localParticipant?.getTrackPublication(Track.Source.ScreenShare);
+      if (!pub?.track) {
+        for (const remote of room.remoteParticipants.values()) {
+          const remotePub = remote.getTrackPublication(Track.Source.ScreenShare);
+          if (remotePub?.track && remotePub.isSubscribed) {
+            pub = remotePub;
+            break;
+          }
+        }
+      }
+
       if (pub?.track && videoRef.current) {
         track = pub.track;
         track.attach(videoRef.current);
       }
     }
+
     return () => {
       if (track && videoRef.current) {
         try {
@@ -240,14 +265,14 @@ function ScreenShareViewer({
         } catch {}
       }
     };
-  }, [room]);
+  }, [room, stream]);
 
   return (
-    <div className="w-full aspect-video max-h-[500px] bg-slate-950 rounded-xl overflow-hidden border border-emerald-500/40 shadow-xl relative mb-4">
+    <div className="w-full h-full min-h-[320px] max-h-[720px] bg-slate-950 rounded-2xl overflow-hidden border border-emerald-500/40 shadow-2xl relative flex items-center justify-center" data-testid="screen-share-viewer">
       <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-contain" />
-      <div className="absolute top-3 left-3 bg-background/85 backdrop-blur-md px-3 py-1.5 rounded-lg text-xs font-medium text-emerald-600 dark:text-emerald-400 border border-border shadow-sm flex items-center gap-2">
+      <div className="absolute top-3 left-3 bg-background/85 backdrop-blur-md px-3 py-1.5 rounded-lg text-xs font-semibold text-emerald-600 dark:text-emerald-400 border border-border shadow-md flex items-center gap-2">
         <ScreenShare className="w-4 h-4 text-emerald-500 animate-pulse" />
-        <span>Màn hình đang chia sẻ</span>
+        <span>Màn hình đang chia sẻ (Live HD)</span>
       </div>
     </div>
   );
@@ -263,6 +288,7 @@ export function LiveMeetingRoom({
   onLeave,
   onEndMeeting,
 }: LiveMeetingRoomProps) {
+  const confirm = useConfirm();
   const [tokenData, setTokenData] = useState<MeetingTokenResponse | null>(null);
   const [meeting, setMeeting] = useState<ProjectMeetingDto | null>(null);
   const [connectionState, setConnectionState] = useState<"connecting" | "connected" | "disconnected" | "error">("connecting");
@@ -272,6 +298,13 @@ export function LiveMeetingRoom({
   const [isMicOn, setIsMicOn] = useState(true);
   const [isCamOn, setIsCamOn] = useState(true);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
+  const [screenStream, setScreenStream] = useState<MediaStream | null>(null);
+
+  // Recording controls
+  const [isRecording, setIsRecording] = useState(false);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordedChunksRef = useRef<Blob[]>([]);
+  const recordingStartTimeRef = useRef<number>(0);
 
   // Drawers
   const [isParticipantsOpen, setIsParticipantsOpen] = useState(false);
@@ -517,6 +550,17 @@ export function LiveMeetingRoom({
   };
 
   const cleanupRoom = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
+      try {
+        mediaRecorderRef.current.stop();
+      } catch (e) {
+        console.warn("Error stopping media recorder", e);
+      }
+    }
+    if (screenStream) {
+      screenStream.getTracks().forEach((t) => t.stop());
+      setScreenStream(null);
+    }
     if (roomRef.current) {
       try {
         roomRef.current.disconnect();
@@ -524,6 +568,71 @@ export function LiveMeetingRoom({
         console.warn("Error disconnecting room", e);
       }
       roomRef.current = null;
+    }
+  };
+
+  // Recording management
+  const startRecording = (streamToRecord: MediaStream) => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
+      return;
+    }
+    try {
+      recordedChunksRef.current = [];
+      recordingStartTimeRef.current = Date.now();
+      const mime = typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported("video/webm;codecs=vp8,opus")
+        ? "video/webm;codecs=vp8,opus"
+        : typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported("video/webm")
+        ? "video/webm"
+        : "";
+
+      const options = mime ? { mimeType: mime } : undefined;
+      const recorder = new MediaRecorder(streamToRecord, options);
+
+      recorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) {
+          recordedChunksRef.current.push(e.data);
+        }
+      };
+
+      recorder.onstop = async () => {
+        const durationSec = Math.max(1, Math.round((Date.now() - recordingStartTimeRef.current) / 1000));
+        const blob = new Blob(recordedChunksRef.current, { type: recorder.mimeType || "video/webm" });
+        if (blob.size > 0) {
+          await meetingRecordingStore.saveRecording(meetingId, blob, {
+            title: meeting?.title || tokenData?.meeting?.title || `Cuộc họp #${meetingId}`,
+            projectId,
+            durationSeconds: durationSec,
+          });
+
+          // Attempt uploading to project files if connected
+          try {
+            const fileName = `meeting_${meetingId}_rec_${Date.now()}.webm`;
+            const file = new File([blob], fileName, { type: blob.type || "video/webm" });
+            await projectFilesService.uploadFile(projectId, file, `Bản ghi cuộc họp: ${meeting?.title || meetingId}`);
+          } catch {
+            // IndexedDB preserves copy
+          }
+        }
+      };
+
+      recorder.start(1000);
+      mediaRecorderRef.current = recorder;
+      setIsRecording(true);
+      toast.info("Đã bắt đầu ghi hình cuộc họp");
+    } catch (recErr) {
+      console.warn("Could not start MediaRecorder:", recErr);
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
+      try {
+        mediaRecorderRef.current.stop();
+        setIsRecording(false);
+        toast.success("Bản ghi hình cuộc họp đã được lưu vào Lịch sử cuộc họp");
+      } catch (err) {
+        console.warn("Stop recording error:", err);
+      }
     }
   };
 
@@ -561,22 +670,63 @@ export function LiveMeetingRoom({
 
   // Toggle Screen Share
   const toggleScreenShare = async () => {
-    const next = !isScreenSharing;
-    try {
-      if (roomRef.current?.localParticipant) {
-        await roomRef.current.localParticipant.setScreenShareEnabled(next);
+    if (isScreenSharing) {
+      if (screenStream) {
+        screenStream.getTracks().forEach((t) => t.stop());
+        setScreenStream(null);
       }
-      setIsScreenSharing(next);
-      toast.info(next ? "Đang chia sẻ màn hình" : "Đã dừng chia sẻ màn hình");
-    } catch (e: any) {
-      console.warn("Screen share error", e);
+      if (roomRef.current?.localParticipant) {
+        try {
+          await roomRef.current.localParticipant.setScreenShareEnabled(false);
+        } catch {}
+      }
       setIsScreenSharing(false);
-      toast.warning("Không thể chia sẻ màn hình trên thiết bị này");
+      toast.info("Đã dừng chia sẻ màn hình");
+    } else {
+      try {
+        const stream = await navigator.mediaDevices.getDisplayMedia({
+          video: true,
+          audio: true,
+        });
+
+        stream.getVideoTracks()[0].onended = () => {
+          if (roomRef.current?.localParticipant) {
+            void roomRef.current.localParticipant.setScreenShareEnabled(false);
+          }
+          setScreenStream(null);
+          setIsScreenSharing(false);
+          toast.info("Đã dừng chia sẻ màn hình");
+        };
+
+        setScreenStream(stream);
+        setIsScreenSharing(true);
+
+        if (roomRef.current?.localParticipant) {
+          try {
+            await roomRef.current.localParticipant.setScreenShareEnabled(true);
+          } catch {}
+        }
+
+        // Auto-record screen share if recording is enabled or desired
+        if ((meeting?.recordingEnabled || isRecording) && !mediaRecorderRef.current) {
+          startRecording(stream);
+        }
+
+        toast.info("Đang chia sẻ màn hình");
+      } catch (e: any) {
+        console.warn("Screen share cancel/error", e);
+        setIsScreenSharing(false);
+      }
     }
   };
 
   // Leave Meeting
   const handleLeave = async () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
+      try {
+        mediaRecorderRef.current.stop();
+      } catch {}
+    }
     try {
       await meetingService.leaveMeeting(projectId, meetingId);
     } catch (e) {
@@ -588,7 +738,20 @@ export function LiveMeetingRoom({
 
   // End Meeting for all (Host)
   const handleEndMeeting = async () => {
-    if (window.confirm("Bạn có chắc chắn muốn kết thúc cuộc họp này cho tất cả thành viên?")) {
+    const isConfirmed = await confirm({
+      title: "Kết thúc cuộc họp",
+      message: "Bạn có chắc chắn muốn kết thúc cuộc họp này cho tất cả thành viên?",
+      confirmText: "Kết thúc tất cả",
+      cancelText: "Hủy",
+      variant: "destructive",
+    });
+
+    if (isConfirmed) {
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
+        try {
+          mediaRecorderRef.current.stop();
+        } catch {}
+      }
       try {
         await meetingService.endMeeting(projectId, meetingId);
         toast.success("Cuộc họp đã kết thúc");
@@ -736,34 +899,50 @@ export function LiveMeetingRoom({
 
       {/* 2. Main Area: Video Grid & Side Drawers */}
       <div className="flex flex-1 overflow-hidden relative">
-        {/* Center Stage: Video Grid */}
-        <div className="flex-1 p-3 sm:p-5 overflow-y-auto flex flex-col items-center justify-center bg-muted/40">
-          {/* Optional Screen Share Viewer */}
-          {isScreenSharing && (
-            <ScreenShareViewer room={roomRef.current} />
-          )}
+        {/* Center Stage: Screen Share Spotlight OR Camera Grid */}
+        {isScreenSharing ? (
+          <div className="flex-1 p-3 sm:p-4 overflow-hidden flex flex-col gap-3 bg-muted/40">
+            {/* Screen Share Stage (Spotlight) */}
+            <div className="flex-1 w-full min-h-0 relative">
+              <ScreenShareViewer room={roomRef.current} stream={screenStream} />
+            </div>
 
-          <div
-            className={`w-full h-full max-h-[750px] grid gap-3 sm:gap-4 items-center justify-center ${
-              views.length <= 1
-                ? "grid-cols-1 max-w-4xl"
-                : views.length === 2
-                ? "grid-cols-1 md:grid-cols-2 max-w-5xl"
-                : views.length <= 4
-                ? "grid-cols-1 sm:grid-cols-2 max-w-5xl"
-                : "grid-cols-2 lg:grid-cols-3 max-w-6xl"
-            }`}
-            data-testid="video-grid"
-          >
-            {views.map((v) => (
-              <ParticipantTile
-                key={v.identity}
-                view={v}
-                room={roomRef.current}
-              />
-            ))}
+            {/* Filmstrip at the bottom */}
+            <div className="h-28 sm:h-32 flex gap-3 overflow-x-auto justify-center items-center py-1 shrink-0 px-2" data-testid="screen-share-filmstrip">
+              {views.map((v) => (
+                <div key={v.identity} className="h-full aspect-video shrink-0 max-w-[200px]">
+                  <ParticipantTile
+                    view={v}
+                    room={roomRef.current}
+                  />
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="flex-1 p-3 sm:p-5 overflow-y-auto flex flex-col items-center justify-center bg-muted/40">
+            <div
+              className={`w-full h-full max-h-[750px] grid gap-3 sm:gap-4 items-center justify-center ${
+                views.length <= 1
+                  ? "grid-cols-1 max-w-4xl"
+                  : views.length === 2
+                  ? "grid-cols-1 md:grid-cols-2 max-w-5xl"
+                  : views.length <= 4
+                  ? "grid-cols-1 sm:grid-cols-2 max-w-5xl"
+                  : "grid-cols-2 lg:grid-cols-3 max-w-6xl"
+              }`}
+              data-testid="video-grid"
+            >
+              {views.map((v) => (
+                <ParticipantTile
+                  key={v.identity}
+                  view={v}
+                  room={roomRef.current}
+                />
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Side Drawer: Participants List */}
         {isParticipantsOpen && (
@@ -912,6 +1091,38 @@ export function LiveMeetingRoom({
         >
           <ScreenShare className="w-4 h-4" />
           <span className="hidden sm:inline text-xs">{isScreenSharing ? "Dừng chia sẻ" : "Chia sẻ màn hình"}</span>
+        </Button>
+
+        {/* Recording Toggle */}
+        <Button
+          type="button"
+          size="sm"
+          variant={isRecording ? "destructive" : "outline"}
+          onClick={() => {
+            if (isRecording) {
+              stopRecording();
+            } else {
+              if (screenStream) {
+                startRecording(screenStream);
+              } else if (typeof navigator !== "undefined" && navigator.mediaDevices?.getDisplayMedia) {
+                navigator.mediaDevices.getDisplayMedia({ video: true, audio: true })
+                  .then((st) => startRecording(st))
+                  .catch(() => toast.warning("Chưa cấp quyền ghi hình màn hình"));
+              } else {
+                toast.warning("Trình duyệt không hỗ trợ ghi hình");
+              }
+            }
+          }}
+          className={`h-10 px-3 sm:px-4 rounded-xl gap-2 font-medium transition-all ${
+            isRecording
+              ? "bg-red-600 text-white hover:bg-red-500 shadow-sm animate-pulse"
+              : "border-border bg-background hover:bg-accent text-foreground"
+          }`}
+          title={isRecording ? "Dừng ghi hình" : "Bắt đầu ghi hình"}
+          data-testid="toggle-recording-btn"
+        >
+          <Disc className={`w-4 h-4 ${isRecording ? "text-white" : "text-red-500"}`} />
+          <span className="hidden sm:inline text-xs">{isRecording ? "Dừng ghi" : "Ghi hình"}</span>
         </Button>
 
         {/* Participants Drawer Toggle */}

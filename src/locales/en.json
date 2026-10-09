@@ -659,7 +659,21 @@
 		"turn_on_cam": "Turn On Camera",
 		"host_badge": "Host",
 		"you_badge": "You",
-		"type_chat_message": "Type a message..."
+		"type_chat_message": "Type a message...",
+		"watch_recording": "Watch Recording",
+		"duration_label": "Duration",
+		"recording_title": "Meeting Recording",
+		"loading_recording": "Loading recording...",
+		"demo_recording_badge": "Demo recording generated",
+		"no_local_recording": "No local recording found for this meeting",
+		"no_recording_desc": "Cloud recording is processing on the server or was captured by the host device. You can play a sample video or upload a video to preview.",
+		"play_sample": "Play sample preview video",
+		"upload_video": "Upload video file",
+		"download_video": "Download recording (.webm)"
+	},
+	"files": {
+		"delete_title": "Delete File",
+		"delete_confirm": "Are you sure you want to delete this file from the project?"
 	},
 	"chat": {
 		"title": "Team Discussion Channels",

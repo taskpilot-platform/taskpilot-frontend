@@ -659,7 +659,21 @@
 		"turn_on_cam": "Bật camera",
 		"host_badge": "Chủ phòng",
 		"you_badge": "Bạn",
-		"type_chat_message": "Nhập tin nhắn..."
+		"type_chat_message": "Nhập tin nhắn...",
+		"watch_recording": "Xem video ghi hình",
+		"duration_label": "Thời lượng",
+		"recording_title": "Bản ghi hình cuộc họp",
+		"loading_recording": "Đang tải video bản ghi...",
+		"demo_recording_badge": "Bản ghi demo vừa khởi tạo",
+		"no_local_recording": "Chưa tìm thấy bản ghi cục bộ của phiên họp này",
+		"no_recording_desc": "Bản ghi Cloud Recording đang được xử lý trên máy chủ hoặc được tạo bởi thiết bị của Host. Bạn có thể phát video mẫu hoặc tải lên video để kiểm thử ngay.",
+		"play_sample": "Phát video mô phỏng mẫu",
+		"upload_video": "Tải tệp video lên",
+		"download_video": "Tải video (.webm)"
+	},
+	"files": {
+		"delete_title": "Xóa tệp tin",
+		"delete_confirm": "Bạn có chắc chắn muốn xóa tệp tin này khỏi dự án?"
 	},
 	"chat": {
 		"title": "Kênh Trò Chuyện Nhóm",

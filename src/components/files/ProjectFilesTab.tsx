@@ -17,6 +17,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useConfirm } from "@/components/ui/confirm-dialog";
+import { useTranslation } from "react-i18next";
 import { projectFilesService } from "@/services/project-files.service";
 import { profileService } from "@/services/profile.service";
 import { getApiErrorMessage } from "@/lib/http";
@@ -35,6 +37,8 @@ export const ProjectFilesTab: React.FC<ProjectFilesTabProps> = ({
   isManager = false,
   currentUserId: propUserId,
 }) => {
+  const { t } = useTranslation();
+  const confirm = useConfirm();
   const [currentUserId, setCurrentUserId] = useState<number | null>(propUserId ?? null);
   const [files, setFiles] = useState<ProjectFile[]>([]);
   const [keyword, setKeyword] = useState("");
@@ -96,7 +100,14 @@ export const ProjectFilesTab: React.FC<ProjectFilesTabProps> = ({
   };
 
   const handleDelete = async (fileId: number) => {
-    if (!window.confirm("Are you sure you want to delete this file?")) return;
+    const isConfirmed = await confirm({
+      title: t("files.delete_title", { defaultValue: "Xóa tệp tin" }),
+      message: t("files.delete_confirm", { defaultValue: "Bạn có chắc chắn muốn xóa tệp tin này khỏi dự án?" }),
+      confirmText: t("common.delete", { defaultValue: "Xóa" }),
+      cancelText: t("common.cancel", { defaultValue: "Hủy" }),
+      variant: "destructive",
+    });
+    if (!isConfirmed) return;
     setDeletingId(fileId);
     try {
       await projectFilesService.deleteFile(projectId, fileId);

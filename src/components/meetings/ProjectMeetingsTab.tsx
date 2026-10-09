@@ -7,7 +7,9 @@ import {
   Users,
   History,
   Loader2,
+  Play,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { toast } from "react-toastify";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -20,6 +22,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { meetingService } from "@/services/meeting.service";
 import { LiveMeetingRoom } from "./LiveMeetingRoom";
+import { MeetingRecordingModal } from "./MeetingRecordingModal";
 import type { CreateMeetingRequest, ProjectMeetingDto } from "@/types/meeting";
 
 interface ProjectMeetingsTabProps {
@@ -35,10 +38,12 @@ export function ProjectMeetingsTab({
   currentUserId,
   initialJoinMeetingId,
 }: ProjectMeetingsTabProps) {
+  const { t } = useTranslation();
   const [meetings, setMeetings] = useState<ProjectMeetingDto[]>([]);
   const [activeMeeting, setActiveMeeting] = useState<ProjectMeetingDto | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [filter, setFilter] = useState<"ALL" | "ACTIVE" | "ENDED">("ALL");
+  const [selectedRecordingMeeting, setSelectedRecordingMeeting] = useState<ProjectMeetingDto | null>(null);
 
   // Active room view state
   const [joinedMeetingId, setJoinedMeetingId] = useState<number | null>(initialJoinMeetingId || null);
@@ -457,16 +462,27 @@ export function ProjectMeetingsTab({
                       data-testid={`join-meeting-btn-${m.id}`}
                     >
                       <Video className="w-4 h-4" />
-                      Tham gia phòng họp
+                      {t("meetings.join_room", { defaultValue: "Tham gia phòng họp" })}
                     </Button>
                   ) : (
-                    <Button
-                      variant="outline"
-                      className="w-full text-xs text-muted-foreground"
-                      disabled
-                    >
-                      Thời lượng: {formatDuration(m.durationSeconds)}
-                    </Button>
+                    <div className="space-y-1.5">
+                      <Button
+                        variant="outline"
+                        className={`w-full gap-2 text-xs font-semibold transition-all ${
+                          m.recordingEnabled
+                            ? "bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
+                            : "border-border hover:bg-accent text-foreground"
+                        }`}
+                        onClick={() => setSelectedRecordingMeeting(m)}
+                        data-testid={`watch-recording-btn-${m.id}`}
+                      >
+                        <Play className="w-3.5 h-3.5 fill-current text-emerald-500" />
+                        <span>{t("meetings.watch_recording", { defaultValue: "Xem video ghi hình" })}</span>
+                      </Button>
+                      <div className="text-center text-[11px] text-muted-foreground/70">
+                        {t("meetings.duration_label", { defaultValue: "Thời lượng" })}: {formatDuration(m.durationSeconds)}
+                      </div>
+                    </div>
                   )}
                 </div>
               </Card>
@@ -474,6 +490,13 @@ export function ProjectMeetingsTab({
           })}
         </div>
       )}
+
+      {/* Meeting Recording Playback Modal */}
+      <MeetingRecordingModal
+        isOpen={Boolean(selectedRecordingMeeting)}
+        onClose={() => setSelectedRecordingMeeting(null)}
+        meeting={selectedRecordingMeeting}
+      />
     </div>
   );
 }
