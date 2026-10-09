@@ -7,7 +7,6 @@ import {
   FolderKanban,
   Hash,
   ArrowRight,
-  Loader2,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -98,10 +97,22 @@ export default function GlobalChatPage() {
 
   if (isLoading) {
     return (
-      <div className="flex h-[calc(100vh-80px)] w-full items-center justify-center p-6" data-testid="global-chat-loading">
-        <div className="flex flex-col items-center gap-3">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          <p className="text-sm text-muted-foreground">Đang tải danh sách kênh trò chuyện...</p>
+      <div className="flex h-[calc(100vh-80px)] w-full overflow-hidden animate-pulse" data-testid="global-chat-loading">
+        <div className="w-80 border-r border-border p-4 space-y-4 shrink-0">
+          <div className="h-9 bg-muted rounded-md" />
+          <div className="space-y-2">
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="h-12 bg-muted/60 rounded-lg" />
+            ))}
+          </div>
+        </div>
+        <div className="flex-1 flex flex-col p-6 space-y-4">
+          <div className="h-8 w-48 bg-muted rounded" />
+          <div className="flex-1 bg-muted/20 rounded-lg p-4 space-y-3">
+            <div className="h-10 w-2/3 bg-muted/40 rounded" />
+            <div className="h-10 w-1/2 bg-muted/40 rounded ml-auto" />
+            <div className="h-10 w-3/5 bg-muted/40 rounded" />
+          </div>
         </div>
       </div>
     );

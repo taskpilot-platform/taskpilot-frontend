@@ -288,9 +288,19 @@ export default function CommentsPage() {
       </div>
 
       {isLoading ? (
-        <div className="flex items-center justify-center gap-2 rounded-lg border bg-card p-10 text-sm text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" />
-          {t("comments.loading", { defaultValue: "Loading comments..." })}
+        <div className="space-y-3 animate-pulse">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="rounded-xl border border-border/80 bg-card p-4 space-y-3">
+              <div className="flex items-center gap-3">
+                <div className="h-9 w-9 rounded-full bg-muted" />
+                <div className="space-y-1.5 flex-1">
+                  <div className="h-4 w-32 bg-muted rounded" />
+                  <div className="h-3 w-48 bg-muted/60 rounded" />
+                </div>
+              </div>
+              <div className="h-4 w-3/4 bg-muted/40 rounded" />
+            </div>
+          ))}
         </div>
       ) : comments.length === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-lg border border-dashed bg-card p-10 text-center">

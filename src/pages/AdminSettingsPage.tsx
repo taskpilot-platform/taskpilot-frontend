@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import {
-  Loader2,
   RefreshCw,
   Search,
   Settings,
@@ -662,9 +661,14 @@ export default function AdminSettingsPage() {
             </form>
 
             {isLoading ? (
-              <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                {t("dashboard.loading")}
+              <div className="space-y-3 py-2 animate-pulse">
+                {[1, 2, 3, 4, 5].map((i) => (
+                  <div key={i} className="flex items-center justify-between py-2.5 border-b border-border/40">
+                    <div className="h-4 w-40 bg-muted rounded" />
+                    <div className="h-4 w-48 bg-muted/60 rounded" />
+                    <div className="h-4 w-60 bg-muted/60 rounded" />
+                  </div>
+                ))}
               </div>
             ) : (
               <div className="overflow-x-auto">

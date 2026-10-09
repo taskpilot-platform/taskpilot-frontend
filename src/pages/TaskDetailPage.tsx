@@ -15,7 +15,7 @@ import { TaskDescriptionSection } from "@/components/tasks/TaskDescriptionSectio
 import { SubtaskTreeSection } from "@/components/tasks/SubtaskTreeSection";
 import { TaskMetadataSidebar } from "@/components/tasks/TaskMetadataSidebar";
 import { ActivityTimeline } from "@/components/tasks/ActivityTimeline";
-import { Loader2, ArrowLeft } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 
@@ -163,8 +163,24 @@ export default function TaskDetailPage() {
 
   if (isLoading) {
     return (
-      <div className="flex-1 flex items-center justify-center p-8">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      <div className="flex-1 bg-card overflow-y-auto animate-pulse">
+        <div className="max-w-5xl mx-auto p-6 md:p-8 space-y-6">
+          <div className="h-8 w-32 bg-muted rounded" />
+          <div className="flex items-center justify-between pb-4 border-b border-border/40">
+            <div className="h-6 w-48 bg-muted rounded" />
+            <div className="h-6 w-24 bg-muted/60 rounded" />
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-10 mt-6">
+            <div className="lg:col-span-2 space-y-6">
+              <div className="h-10 w-3/4 bg-muted rounded" />
+              <div className="h-28 bg-muted/50 rounded-lg" />
+              <div className="h-36 bg-muted/40 rounded-lg" />
+            </div>
+            <div className="space-y-6">
+              <div className="h-64 bg-muted/40 rounded-lg" />
+            </div>
+          </div>
+        </div>
       </div>
     );
   }

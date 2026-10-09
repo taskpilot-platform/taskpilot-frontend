@@ -1831,7 +1831,10 @@ export default function ProjectWorkspacePage() {
                   <Badge variant="outline" className="text-xs">{memberTasks.length}</Badge>
                 </h4>
                 {isLoadingMemberTasks ? (
-                  <div className="flex justify-center p-4"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
+                  <div className="space-y-2 p-1 animate-pulse">
+                    <div className="h-12 bg-muted/40 rounded-md" />
+                    <div className="h-12 bg-muted/40 rounded-md" />
+                  </div>
                 ) : (
                   <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
                     {memberTasks.length === 0 ? (

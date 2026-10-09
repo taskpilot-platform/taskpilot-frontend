@@ -3,7 +3,6 @@ import type { FormEvent } from "react";
 import {
   ChartColumn,
   Code,
-  Loader2,
   PlusCircle,
   RefreshCw,
   Search,
@@ -309,12 +308,20 @@ export default function MySkillsPage() {
       </Card>
 
       {isLoading ? (
-        <Card>
-          <CardContent className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            {t("skills.loading", { defaultValue: "Đang tải dữ liệu..." })}
-          </CardContent>
-        </Card>
+        <div className="grid gap-4 md:grid-cols-3 animate-pulse">
+          <div className="rounded-xl border border-border/80 bg-card p-6 space-y-3">
+            <div className="h-4 w-28 bg-muted rounded" />
+            <div className="h-8 w-16 bg-muted/60 rounded" />
+          </div>
+          <div className="rounded-xl border border-border/80 bg-card p-6 space-y-3">
+            <div className="h-4 w-28 bg-muted rounded" />
+            <div className="h-8 w-16 bg-muted/60 rounded" />
+          </div>
+          <div className="rounded-xl border border-border/80 bg-card p-6 space-y-3">
+            <div className="h-4 w-28 bg-muted rounded" />
+            <div className="h-8 w-16 bg-muted/60 rounded" />
+          </div>
+        </div>
       ) : activeTab === "overview" ? (
         <div className="grid gap-4 md:grid-cols-3">
           <Card>

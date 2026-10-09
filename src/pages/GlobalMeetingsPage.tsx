@@ -4,7 +4,6 @@ import { useTranslation } from "react-i18next";
 import {
   Video,
   FolderKanban,
-  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -113,12 +112,23 @@ export default function GlobalMeetingsPage() {
 
   if (isLoading) {
     return (
-      <div
-        className="flex flex-col items-center justify-center min-h-[60vh] gap-3 text-muted-foreground"
-        data-testid="meetings-loading"
-      >
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-        <p className="text-sm font-medium">Đang tải danh sách cuộc họp...</p>
+      <div className="flex flex-col flex-1 h-full min-h-0 space-y-6 animate-pulse" data-testid="meetings-loading">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-border/60">
+          <div className="space-y-2">
+            <div className="h-8 w-48 bg-muted rounded" />
+            <div className="h-4 w-72 bg-muted/60 rounded" />
+          </div>
+          <div className="h-9 w-52 bg-muted rounded" />
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="h-44 bg-muted/30 rounded-xl border border-border/40 p-4 space-y-3">
+              <div className="h-5 w-3/4 bg-muted rounded" />
+              <div className="h-4 w-1/2 bg-muted/60 rounded" />
+              <div className="h-16 bg-muted/20 rounded mt-4" />
+            </div>
+          ))}
+        </div>
       </div>
     );
   }

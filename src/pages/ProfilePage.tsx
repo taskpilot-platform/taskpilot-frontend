@@ -215,12 +215,24 @@ export default function ProfilePage() {
       </div>
 
       {isLoading ? (
-        <Card>
-          <CardContent className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            {t("profile.loading")}
-          </CardContent>
-        </Card>
+        <div className="grid gap-4 lg:grid-cols-3 animate-pulse">
+          <div className="space-y-4">
+            <div className="rounded-xl border border-border/80 bg-card p-6 flex flex-col items-center gap-4">
+              <div className="h-24 w-24 rounded-full bg-muted" />
+              <div className="h-5 w-36 bg-muted rounded" />
+              <div className="h-4 w-48 bg-muted/60 rounded" />
+            </div>
+          </div>
+          <div className="lg:col-span-2 space-y-4">
+            <div className="rounded-xl border border-border/80 bg-card p-6 space-y-6">
+              <div className="h-6 w-44 bg-muted rounded" />
+              <div className="space-y-4">
+                <div className="h-10 w-full bg-muted/40 rounded" />
+                <div className="h-10 w-full bg-muted/40 rounded" />
+              </div>
+            </div>
+          </div>
+        </div>
       ) : activeTab === "profile" ? (
         <div className="grid gap-4 lg:grid-cols-3">
           <Card className="lg:col-span-1">

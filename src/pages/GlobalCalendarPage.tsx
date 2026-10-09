@@ -4,7 +4,6 @@ import { useTranslation } from "react-i18next";
 import {
   CalendarDays,
   FolderKanban,
-  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -136,12 +135,25 @@ export default function GlobalCalendarPage() {
 
   if (isLoading) {
     return (
-      <div
-        className="flex flex-col items-center justify-center min-h-[60vh] gap-3 text-muted-foreground"
-        data-testid="calendar-loading"
-      >
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-        <p className="text-sm font-medium">{t("calendar.loading", { defaultValue: "Đang tải lịch trình làm việc & cuộc họp..." })}</p>
+      <div className="flex flex-col flex-1 h-full min-h-0 space-y-6 animate-pulse" data-testid="calendar-loading">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-border/60">
+          <div className="space-y-2">
+            <div className="h-8 w-56 bg-muted rounded" />
+            <div className="h-4 w-80 bg-muted/60 rounded" />
+          </div>
+          <div className="h-9 w-52 bg-muted rounded" />
+        </div>
+        <div className="flex-1 min-h-[400px] rounded-xl border border-border/40 p-6 space-y-4">
+          <div className="flex justify-between items-center pb-4 border-b border-border/40">
+            <div className="h-6 w-32 bg-muted rounded" />
+            <div className="h-8 w-24 bg-muted/60 rounded" />
+          </div>
+          <div className="grid grid-cols-7 gap-2 pt-2">
+            {[...Array(35)].map((_, i) => (
+              <div key={i} className="h-20 bg-muted/20 rounded-md border border-border/20 p-1.5" />
+            ))}
+          </div>
+        </div>
       </div>
     );
   }

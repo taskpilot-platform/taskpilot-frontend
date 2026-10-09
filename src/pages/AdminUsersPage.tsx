@@ -3,7 +3,6 @@ import type { FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Key,
-  Loader2,
   PlusCircle,
   RefreshCw,
   Search,
@@ -225,9 +224,16 @@ export default function AdminUsersPage() {
             </form>
 
             {isLoading ? (
-              <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                {t("dashboard.loading")}
+              <div className="space-y-3 py-2 animate-pulse">
+                {[1, 2, 3, 4, 5].map((i) => (
+                  <div key={i} className="flex items-center justify-between py-2.5 border-b border-border/40">
+                    <div className="h-4 w-12 bg-muted rounded" />
+                    <div className="h-4 w-44 bg-muted/60 rounded" />
+                    <div className="h-4 w-32 bg-muted/60 rounded" />
+                    <div className="h-5 w-16 bg-muted/40 rounded" />
+                    <div className="h-5 w-20 bg-muted/40 rounded" />
+                  </div>
+                ))}
               </div>
             ) : (
               <>
