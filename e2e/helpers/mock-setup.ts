@@ -54,6 +54,32 @@ export async function setupWorkspaceMocks(
     { token: VALID_MOCK_JWT, userData: user }
   );
 
+  // Mock Notifications stream & APIs (SSE & REST)
+  await page.route("**/notifications/**", async (route) => {
+    const url = route.request().url();
+    if (url.includes("/stream")) {
+      await route.fulfill({
+        status: 200,
+        headers: {
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache",
+          Connection: "keep-alive",
+        },
+        body: "event: notification.unread-count\ndata: 0\n\n",
+      });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        status: 200,
+        message: "Success",
+        data: { content: [], unreadCount: 0, totalElements: 0 },
+      }),
+    });
+  });
+
   // Mock Profile API
   await page.route("**/api/v1/users/me", async (route) => {
     await route.fulfill({
