@@ -14,7 +14,13 @@
 		"copilot": "Copilot",
 		"logout": "Đăng xuất",
 		"logging_out": "Đang đăng xuất...",
-		"logout_success": "Đăng xuất thành công"
+		"logout_success": "Đăng xuất thành công",
+		"context_switcher": "Chuyển ngữ cảnh",
+		"context_workspace": "Không gian làm việc",
+		"context_workspace_desc": "Dự án, họp nhóm & xử lý công việc",
+		"context_admin": "Quản trị hệ thống",
+		"context_admin_desc": "Người dùng, kỹ năng & cấu hình hệ thống",
+		"context_active": "Ngữ cảnh hiện tại:"
 	},
 	"notifications": {
 		"title": "Thông báo",

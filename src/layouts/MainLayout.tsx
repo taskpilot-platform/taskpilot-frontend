@@ -17,6 +17,7 @@ import { profileService } from "@/services/profile.service";
 import { notificationService } from "@/services/notification.service";
 import { authStorage, projectStorage } from "@/lib/storage";
 import { oneSignalLogin } from "@/lib/onesignal";
+import { NavContextSwitcher, type NavigationContext } from "@/components/navigation/NavContextSwitcher";
 
 const NOTIFICATION_BLINK_MS = 3000;
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL?.trim() || "";
@@ -151,6 +152,42 @@ export default function MainLayout() {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [unreadCount, setUnreadCount] = useState(0);
   const [isNotificationBlinking, setIsNotificationBlinking] = useState(false);
+  const [navContext, setNavContext] = useState<NavigationContext>(() => {
+    const saved = localStorage.getItem("navContext") as NavigationContext | null;
+    if (saved === "ADMIN_SYSTEM" || saved === "WORKSPACE") {
+      return saved;
+    }
+    return location.pathname.startsWith("/admin") ? "ADMIN_SYSTEM" : "WORKSPACE";
+  });
+
+  useEffect(() => {
+    if (location.pathname.startsWith("/admin")) {
+      setNavContext("ADMIN_SYSTEM");
+      localStorage.setItem("navContext", "ADMIN_SYSTEM");
+      localStorage.setItem("lastAdminPath", location.pathname);
+    } else {
+      if (
+        !location.pathname.startsWith("/login") &&
+        !location.pathname.startsWith("/profile") &&
+        !location.pathname.startsWith("/my-skills")
+      ) {
+        localStorage.setItem("lastWorkspacePath", location.pathname);
+      }
+    }
+  }, [location.pathname]);
+
+  const handleContextChange = (nextCtx: NavigationContext) => {
+    setNavContext(nextCtx);
+    localStorage.setItem("navContext", nextCtx);
+
+    if (nextCtx === "ADMIN_SYSTEM") {
+      const lastAdmin = localStorage.getItem("lastAdminPath") || "/admin/users";
+      navigate(lastAdmin);
+    } else {
+      const lastWorkspace = localStorage.getItem("lastWorkspacePath") || "/";
+      navigate(lastWorkspace);
+    }
+  };
 
   useEffect(() => {
     const fetchProfile = () => {
@@ -268,6 +305,17 @@ export default function MainLayout() {
                 </h2>
               </div>
 
+              {/* Context Switcher for Multi-Role users */}
+              <NavContextSwitcher
+                currentContext={navContext}
+                onContextChange={(ctx) => {
+                  handleContextChange(ctx);
+                  setIsMobileNavOpen(false);
+                }}
+                isMobile={true}
+                userRole={userRole}
+              />
+
               {/* Navigation - same items as desktop but always expanded */}
               <nav className="space-y-2 w-full flex-1">
                 {/* Language toggle */}
@@ -280,49 +328,72 @@ export default function MainLayout() {
                   <span>{i18n.language === "vi" ? "Tiếng Việt" : "English"}</span>
                 </Button>
 
-                {/* All NavLinks - use onClick to close sheet after navigation */}
-                <NavLink to="/" onClick={() => setIsMobileNavOpen(false)} className={({isActive}) => `flex items-center gap-2 rounded-md px-3 py-2 transition-colors ${isActive ? "bg-accent font-medium" : "hover:bg-accent"}`} title={t("layout.dashboard")}>
-                  <LayoutDashboard className="h-4 w-4 shrink-0" />
-                  <span>{t("layout.dashboard")}</span>
-                </NavLink>
-                
-                <NavLink to={projectStorage.getLastProjectId() ? `/projects/${projectStorage.getLastProjectId()}` : "/projects"} onClick={() => setIsMobileNavOpen(false)} className={({isActive}) => `flex items-center gap-2 rounded-md px-3 py-2 transition-colors ${isActive ? "bg-accent font-medium" : "hover:bg-accent"}`} title={t("layout.projects")}>
-                  <FolderKanban className="h-4 w-4 shrink-0" />
-                  <span>{t("layout.projects")}</span>
-                </NavLink>
+                {navContext === "ADMIN_SYSTEM" ? (
+                  <>
+                    <div className="px-2 py-1">
+                      <p className="text-[11px] font-semibold tracking-wider uppercase text-muted-foreground">
+                        {t("layout.context_admin", { defaultValue: "Quản trị hệ thống" })}
+                      </p>
+                    </div>
+                    <NavLink to="/admin/users" onClick={() => setIsMobileNavOpen(false)} className={({isActive}) => `flex items-center gap-2 rounded-md px-3 py-2 transition-colors ${isActive ? "bg-accent font-medium text-primary" : "hover:bg-accent"}`} title={t("admin.users_title")} data-testid="nav-admin-users-mobile">
+                      <Users className="h-4 w-4 shrink-0" />
+                      <span>{t("admin.users_title")}</span>
+                    </NavLink>
+                    <NavLink to="/admin/skills" onClick={() => setIsMobileNavOpen(false)} className={({isActive}) => `flex items-center gap-2 rounded-md px-3 py-2 transition-colors ${isActive ? "bg-accent font-medium text-primary" : "hover:bg-accent"}`} title={t("admin.global_skills")} data-testid="nav-admin-skills-mobile">
+                      <Code className="h-4 w-4 shrink-0" />
+                      <span>{t("admin.global_skills")}</span>
+                    </NavLink>
+                    <NavLink to="/admin/settings" onClick={() => setIsMobileNavOpen(false)} className={({isActive}) => `flex items-center gap-2 rounded-md px-3 py-2 transition-colors ${isActive ? "bg-accent font-medium text-primary" : "hover:bg-accent"}`} title={t("admin.system_settings.title", { defaultValue: "Cấu hình AI & Hệ thống" })} data-testid="nav-admin-settings-mobile">
+                      <Settings className="h-4 w-4 shrink-0" />
+                      <span className="truncate">{t("admin.system_settings.title", { defaultValue: "Cấu hình AI & Hệ thống" })}</span>
+                    </NavLink>
+                  </>
+                ) : (
+                  <>
+                    <NavLink to="/" onClick={() => setIsMobileNavOpen(false)} className={({isActive}) => `flex items-center gap-2 rounded-md px-3 py-2 transition-colors ${isActive ? "bg-accent font-medium" : "hover:bg-accent"}`} title={t("layout.dashboard")}>
+                      <LayoutDashboard className="h-4 w-4 shrink-0" />
+                      <span>{t("layout.dashboard")}</span>
+                    </NavLink>
+                    
+                    <NavLink to={projectStorage.getLastProjectId() ? `/projects/${projectStorage.getLastProjectId()}` : "/projects"} onClick={() => setIsMobileNavOpen(false)} className={({isActive}) => `flex items-center gap-2 rounded-md px-3 py-2 transition-colors ${isActive ? "bg-accent font-medium" : "hover:bg-accent"}`} title={t("layout.projects")}>
+                      <FolderKanban className="h-4 w-4 shrink-0" />
+                      <span>{t("layout.projects")}</span>
+                    </NavLink>
 
-                <NavLink to="/notifications" onClick={() => setIsMobileNavOpen(false)} className={({isActive}) => `flex items-center gap-2 rounded-md px-3 py-2 transition-colors ${isActive ? "bg-accent font-medium" : isNotificationBlinking ? "bg-amber-100 text-amber-900 hover:bg-amber-100 dark:bg-amber-900/30 dark:text-amber-200" : "hover:bg-accent"}`} title={t("layout.notifications")}>
-                  <Bell className={`h-4 w-4 shrink-0 ${isNotificationBlinking ? "animate-pulse" : ""}`} />
-                  <div className="flex items-center gap-2">
-                    <span>{t("layout.notifications")}</span>
-                    {unreadCount > 0 && <Badge className={isNotificationBlinking ? "animate-pulse bg-amber-500 text-amber-950" : ""}>{unreadCount > 99 ? "99+" : unreadCount}</Badge>}
-                  </div>
-                </NavLink>
+                    <NavLink to="/notifications" onClick={() => setIsMobileNavOpen(false)} className={({isActive}) => `flex items-center gap-2 rounded-md px-3 py-2 transition-colors ${isActive ? "bg-accent font-medium" : isNotificationBlinking ? "bg-amber-100 text-amber-900 hover:bg-amber-100 dark:bg-amber-900/30 dark:text-amber-200" : "hover:bg-accent"}`} title={t("layout.notifications")}>
+                      <Bell className={`h-4 w-4 shrink-0 ${isNotificationBlinking ? "animate-pulse" : ""}`} />
+                      <div className="flex items-center gap-2">
+                        <span>{t("layout.notifications")}</span>
+                        {unreadCount > 0 && <Badge className={isNotificationBlinking ? "animate-pulse bg-amber-500 text-amber-950" : ""}>{unreadCount > 99 ? "99+" : unreadCount}</Badge>}
+                      </div>
+                    </NavLink>
 
-                <NavLink to="/comments" onClick={() => setIsMobileNavOpen(false)} className={({isActive}) => `flex items-center gap-2 rounded-md px-3 py-2 transition-colors ${isActive ? "bg-accent font-medium" : "hover:bg-accent"}`} title={t("layout.comments", { defaultValue: "Comments" })}>
-                  <MessageSquare className="h-4 w-4 shrink-0" />
-                  <span>{t("layout.comments", { defaultValue: "Comments" })}</span>
-                </NavLink>
+                    <NavLink to="/comments" onClick={() => setIsMobileNavOpen(false)} className={({isActive}) => `flex items-center gap-2 rounded-md px-3 py-2 transition-colors ${isActive ? "bg-accent font-medium" : "hover:bg-accent"}`} title={t("layout.comments", { defaultValue: "Comments" })}>
+                      <MessageSquare className="h-4 w-4 shrink-0" />
+                      <span>{t("layout.comments", { defaultValue: "Comments" })}</span>
+                    </NavLink>
 
-                <NavLink to="/chat" onClick={() => setIsMobileNavOpen(false)} className={({isActive}) => `flex items-center gap-2 rounded-md px-3 py-2 transition-colors ${isActive ? "bg-accent font-medium text-emerald-800 dark:text-emerald-300" : "hover:bg-accent"}`} title={t("layout.chat", { defaultValue: "Chat" })} data-testid="nav-chat-mobile">
-                  <MessagesSquare className="h-4 w-4 shrink-0" />
-                  <span>{t("layout.chat", { defaultValue: "Chat" })}</span>
-                </NavLink>
+                    <NavLink to="/chat" onClick={() => setIsMobileNavOpen(false)} className={({isActive}) => `flex items-center gap-2 rounded-md px-3 py-2 transition-colors ${isActive ? "bg-accent font-medium text-emerald-800 dark:text-emerald-300" : "hover:bg-accent"}`} title={t("layout.chat", { defaultValue: "Chat" })} data-testid="nav-chat-mobile">
+                      <MessagesSquare className="h-4 w-4 shrink-0" />
+                      <span>{t("layout.chat", { defaultValue: "Chat" })}</span>
+                    </NavLink>
 
-                <NavLink to="/meetings" onClick={() => setIsMobileNavOpen(false)} className={({isActive}) => `flex items-center gap-2 rounded-md px-3 py-2 transition-colors ${isActive ? "bg-accent font-medium text-blue-600 dark:text-blue-400" : "hover:bg-accent"}`} title={t("layout.meetings", { defaultValue: "Cuộc họp" })} data-testid="nav-meetings-mobile">
-                  <Video className="h-4 w-4 shrink-0" />
-                  <span>{t("layout.meetings", { defaultValue: "Cuộc họp" })}</span>
-                </NavLink>
+                    <NavLink to="/meetings" onClick={() => setIsMobileNavOpen(false)} className={({isActive}) => `flex items-center gap-2 rounded-md px-3 py-2 transition-colors ${isActive ? "bg-accent font-medium text-blue-600 dark:text-blue-400" : "hover:bg-accent"}`} title={t("layout.meetings", { defaultValue: "Cuộc họp" })} data-testid="nav-meetings-mobile">
+                      <Video className="h-4 w-4 shrink-0" />
+                      <span>{t("layout.meetings", { defaultValue: "Cuộc họp" })}</span>
+                    </NavLink>
 
-                <NavLink to="/calendar" onClick={() => setIsMobileNavOpen(false)} className={({isActive}) => `flex items-center gap-2 rounded-md px-3 py-2 transition-colors ${isActive ? "bg-accent font-medium text-amber-800 dark:text-amber-300" : "hover:bg-accent"}`} title={t("layout.calendar", { defaultValue: "Lịch" })} data-testid="nav-calendar-mobile">
-                  <CalendarDays className="h-4 w-4 shrink-0" />
-                  <span>{t("layout.calendar", { defaultValue: "Lịch" })}</span>
-                </NavLink>
+                    <NavLink to="/calendar" onClick={() => setIsMobileNavOpen(false)} className={({isActive}) => `flex items-center gap-2 rounded-md px-3 py-2 transition-colors ${isActive ? "bg-accent font-medium text-amber-800 dark:text-amber-300" : "hover:bg-accent"}`} title={t("layout.calendar", { defaultValue: "Lịch" })} data-testid="nav-calendar-mobile">
+                      <CalendarDays className="h-4 w-4 shrink-0" />
+                      <span>{t("layout.calendar", { defaultValue: "Lịch" })}</span>
+                    </NavLink>
 
-                <NavLink to="/copilot" onClick={() => setIsMobileNavOpen(false)} className={({isActive}) => `flex items-center gap-2 rounded-md px-3 py-2 transition-colors ${isActive ? "bg-accent font-medium text-indigo-600" : "hover:bg-accent text-indigo-600/80"}`} title={t("layout.copilot", { defaultValue: "Copilot AI Chat" })}>
-                  <Bot className="h-4 w-4 shrink-0" />
-                  <span>{t("layout.copilot", { defaultValue: "Copilot" })}</span>
-                </NavLink>
+                    <NavLink to="/copilot" onClick={() => setIsMobileNavOpen(false)} className={({isActive}) => `flex items-center gap-2 rounded-md px-3 py-2 transition-colors ${isActive ? "bg-accent font-medium text-indigo-600" : "hover:bg-accent text-indigo-600/80"}`} title={t("layout.copilot", { defaultValue: "Copilot AI Chat" })}>
+                      <Bot className="h-4 w-4 shrink-0" />
+                      <span>{t("layout.copilot", { defaultValue: "Copilot" })}</span>
+                    </NavLink>
+                  </>
+                )}
               </nav>
 
               {/* Bottom section */}
@@ -337,24 +408,6 @@ export default function MainLayout() {
                     <ShieldCheck className="h-4 w-4 shrink-0" />
                     <span>{t("layout.my_skills")}</span>
                   </NavLink>
-
-                  {userRole === "ADMIN" && (
-                    <div className="pt-2">
-                      <p className="px-3 text-xs font-semibold uppercase text-muted-foreground">Admin</p>
-                      <NavLink to="/admin/users" onClick={() => setIsMobileNavOpen(false)} className={({isActive}) => `mt-2 flex items-center gap-2 rounded-md px-3 py-2 transition-colors ${isActive ? "bg-accent font-medium" : "hover:bg-accent"}`} title={t("admin.users_title")}>
-                        <Users className="h-4 w-4 shrink-0" />
-                        <span>{t("admin.users_title")}</span>
-                      </NavLink>
-                      <NavLink to="/admin/skills" onClick={() => setIsMobileNavOpen(false)} className={({isActive}) => `mt-1 flex items-center gap-2 rounded-md px-3 py-2 transition-colors ${isActive ? "bg-accent font-medium" : "hover:bg-accent"}`} title={t("admin.global_skills")}>
-                        <Code className="h-4 w-4 shrink-0" />
-                        <span>{t("admin.global_skills")}</span>
-                      </NavLink>
-                      <NavLink to="/admin/settings" onClick={() => setIsMobileNavOpen(false)} className={({isActive}) => `mt-1 flex items-center gap-2 rounded-md px-3 py-2 transition-colors ${isActive ? "bg-accent font-medium" : "hover:bg-accent"}`} title={t("admin.system_settings.title", { defaultValue: "Cấu hình AI & Hệ thống" })}>
-                        <Settings className="h-4 w-4 shrink-0" />
-                        <span className="truncate">{t("admin.system_settings.title", { defaultValue: "Cấu hình AI & Hệ thống" })}</span>
-                      </NavLink>
-                    </div>
-                  )}
                 </div>
 
                 <Button onClick={() => { setIsMobileNavOpen(false); void handleLogout(); }} variant="outline" className="w-full gap-2" disabled={isLoading} title={isLoading ? t("layout.logging_out") : t("layout.logout")}>
@@ -423,6 +476,14 @@ export default function MainLayout() {
           </div>
         </div>
 
+        {/* Context Switcher for Multi-Role users */}
+        <NavContextSwitcher
+          currentContext={navContext}
+          onContextChange={handleContextChange}
+          isCollapsed={isCollapsed}
+          userRole={userRole}
+        />
+
         <nav className="space-y-2 w-full">
           {isCollapsed && (
             <Button variant="ghost" size="icon" onClick={toggleLanguage} title={t("layout.change_lang", { defaultValue: "Change Language" })} className="mb-4 w-full flex justify-center">
@@ -433,114 +494,168 @@ export default function MainLayout() {
               />
             </Button>
           )}
-          <NavLink
-            to="/"
-            className={({ isActive }) =>
-              `flex items-center gap-2 rounded-md ${isCollapsed ? 'justify-center px-0' : 'px-3'} py-2 transition-colors ${isActive ? "bg-accent font-medium" : "hover:bg-accent"
-              }`
-            }
-            title={t("layout.dashboard")}
-          >
-            <LayoutDashboard className="h-4 w-4 shrink-0" />
-            {!isCollapsed && <span>{t("layout.dashboard")}</span>}
-          </NavLink>
-          <NavLink
-            to={projectStorage.getLastProjectId() ? `/projects/${projectStorage.getLastProjectId()}` : "/projects"}
-            className={({ isActive }) =>
-              `flex items-center gap-2 rounded-md ${isCollapsed ? 'justify-center px-0' : 'px-3'} py-2 transition-colors ${isActive ? "bg-accent font-medium" : "hover:bg-accent"
-              }`
-            }
-            title={t("layout.projects")}
-          >
-            <FolderKanban className="h-4 w-4 shrink-0" />
-            {!isCollapsed && <span>{t("layout.projects")}</span>}
-          </NavLink>
 
-          <NavLink
-            to="/notifications"
-            className={({ isActive }) =>
-              `flex items-center gap-2 rounded-md ${isCollapsed ? "justify-center px-0" : "px-3"} py-2 transition-colors ${isActive
-                ? "bg-accent font-medium"
-                : isNotificationBlinking
-                  ? "bg-amber-100 text-amber-900 hover:bg-amber-100 dark:bg-amber-900/30 dark:text-amber-200"
-                  : "hover:bg-accent"
-              }`
-            }
-            title={t("layout.notifications")}
-          >
-            <Bell className={`h-4 w-4 shrink-0 ${isNotificationBlinking ? "animate-pulse" : ""}`} />
-            {!isCollapsed && (
-              <div className="flex items-center gap-2">
-                <span>{t("layout.notifications")}</span>
-                {unreadCount > 0 && (
-                  <Badge className={isNotificationBlinking ? "animate-pulse bg-amber-500 text-amber-950" : ""}>
-                    {unreadCount > 99 ? "99+" : unreadCount}
-                  </Badge>
+          {navContext === "ADMIN_SYSTEM" ? (
+            <>
+              {!isCollapsed && (
+                <div className="px-2 py-1 mb-1">
+                  <p className="text-[11px] font-semibold tracking-wider uppercase text-muted-foreground">
+                    {t("layout.context_admin", { defaultValue: "Quản trị hệ thống" })}
+                  </p>
+                </div>
+              )}
+              <NavLink
+                to="/admin/users"
+                className={({ isActive }) =>
+                  `flex items-center gap-2 rounded-md ${isCollapsed ? 'justify-center px-0' : 'px-3'} py-2 transition-colors ${
+                    isActive ? "bg-accent font-medium text-primary" : "hover:bg-accent"
+                  }`
+                }
+                title={t("admin.users_title")}
+                data-testid="nav-admin-users"
+              >
+                <Users className="h-4 w-4 shrink-0" />
+                {!isCollapsed && <span>{t("admin.users_title")}</span>}
+              </NavLink>
+              <NavLink
+                to="/admin/skills"
+                className={({ isActive }) =>
+                  `flex items-center gap-2 rounded-md ${isCollapsed ? 'justify-center px-0' : 'px-3'} py-2 transition-colors ${
+                    isActive ? "bg-accent font-medium text-primary" : "hover:bg-accent"
+                  }`
+                }
+                title={t("admin.global_skills")}
+                data-testid="nav-admin-skills"
+              >
+                <Code className="h-4 w-4 shrink-0" />
+                {!isCollapsed && <span>{t("admin.global_skills")}</span>}
+              </NavLink>
+              <NavLink
+                to="/admin/settings"
+                className={({ isActive }) =>
+                  `flex items-center gap-2 rounded-md ${isCollapsed ? 'justify-center px-0' : 'px-3'} py-2 transition-colors ${
+                    isActive ? "bg-accent font-medium text-primary" : "hover:bg-accent"
+                  }`
+                }
+                title={t("admin.system_settings.title", { defaultValue: "Cấu hình AI & Hệ thống" })}
+                data-testid="nav-admin-settings"
+              >
+                <Settings className="h-4 w-4 shrink-0" />
+                {!isCollapsed && <span className="truncate">{t("admin.system_settings.title", { defaultValue: "Cấu hình AI & Hệ thống" })}</span>}
+              </NavLink>
+            </>
+          ) : (
+            <>
+              <NavLink
+                to="/"
+                className={({ isActive }) =>
+                  `flex items-center gap-2 rounded-md ${isCollapsed ? 'justify-center px-0' : 'px-3'} py-2 transition-colors ${isActive ? "bg-accent font-medium" : "hover:bg-accent"
+                  }`
+                }
+                title={t("layout.dashboard")}
+              >
+                <LayoutDashboard className="h-4 w-4 shrink-0" />
+                {!isCollapsed && <span>{t("layout.dashboard")}</span>}
+              </NavLink>
+              <NavLink
+                to={projectStorage.getLastProjectId() ? `/projects/${projectStorage.getLastProjectId()}` : "/projects"}
+                className={({ isActive }) =>
+                  `flex items-center gap-2 rounded-md ${isCollapsed ? 'justify-center px-0' : 'px-3'} py-2 transition-colors ${isActive ? "bg-accent font-medium" : "hover:bg-accent"
+                  }`
+                }
+                title={t("layout.projects")}
+              >
+                <FolderKanban className="h-4 w-4 shrink-0" />
+                {!isCollapsed && <span>{t("layout.projects")}</span>}
+              </NavLink>
+
+              <NavLink
+                to="/notifications"
+                className={({ isActive }) =>
+                  `flex items-center gap-2 rounded-md ${isCollapsed ? "justify-center px-0" : "px-3"} py-2 transition-colors ${isActive
+                    ? "bg-accent font-medium"
+                    : isNotificationBlinking
+                      ? "bg-amber-100 text-amber-900 hover:bg-amber-100 dark:bg-amber-900/30 dark:text-amber-200"
+                      : "hover:bg-accent"
+                  }`
+                }
+                title={t("layout.notifications")}
+              >
+                <Bell className={`h-4 w-4 shrink-0 ${isNotificationBlinking ? "animate-pulse" : ""}`} />
+                {!isCollapsed && (
+                  <div className="flex items-center gap-2">
+                    <span>{t("layout.notifications")}</span>
+                    {unreadCount > 0 && (
+                      <Badge className={isNotificationBlinking ? "animate-pulse bg-amber-500 text-amber-950" : ""}>
+                        {unreadCount > 99 ? "99+" : unreadCount}
+                      </Badge>
+                    )}
+                  </div>
                 )}
-              </div>
-            )}
-            {isCollapsed && unreadCount > 0 && (
-              <span className={`h-2 w-2 rounded-full bg-amber-500 ${isNotificationBlinking ? "animate-ping" : ""}`} />
-            )}
-          </NavLink>
-          <NavLink
-            to="/comments"
-            className={({ isActive }) =>
-              `flex items-center gap-2 rounded-md ${isCollapsed ? 'justify-center px-0' : 'px-3'} py-2 transition-colors ${isActive ? "bg-accent font-medium" : "hover:bg-accent"
-              }`
-            }
-            title={t("layout.comments", { defaultValue: "Comments" })}
-          >
-            <MessageSquare className="h-4 w-4 shrink-0" />
-            {!isCollapsed && <span>{t("layout.comments", { defaultValue: "Comments" })}</span>}
-          </NavLink>
-          <NavLink
-            to="/chat"
-            className={({ isActive }) =>
-              `flex items-center gap-2 rounded-md ${isCollapsed ? 'justify-center px-0' : 'px-3'} py-2 transition-colors ${isActive ? "bg-accent font-medium text-emerald-800 dark:text-emerald-300" : "hover:bg-accent"
-              }`
-            }
-            title={t("layout.chat", { defaultValue: "Chat" })}
-            data-testid="nav-chat"
-          >
-            <MessagesSquare className="h-4 w-4 shrink-0" />
-            {!isCollapsed && <span>{t("layout.chat", { defaultValue: "Chat" })}</span>}
-          </NavLink>
-          <NavLink
-            to="/meetings"
-            className={({ isActive }) =>
-              `flex items-center gap-2 rounded-md ${isCollapsed ? 'justify-center px-0' : 'px-3'} py-2 transition-colors ${isActive ? "bg-accent font-medium text-blue-600 dark:text-blue-400" : "hover:bg-accent"
-              }`
-            }
-            title={t("layout.meetings", { defaultValue: "Cuộc họp" })}
-            data-testid="nav-meetings"
-          >
-            <Video className="h-4 w-4 shrink-0" />
-            {!isCollapsed && <span>{t("layout.meetings", { defaultValue: "Cuộc họp" })}</span>}
-          </NavLink>
-          <NavLink
-            to="/calendar"
-            className={({ isActive }) =>
-              `flex items-center gap-2 rounded-md ${isCollapsed ? 'justify-center px-0' : 'px-3'} py-2 transition-colors ${isActive ? "bg-accent font-medium text-amber-800 dark:text-amber-300" : "hover:bg-accent"
-              }`
-            }
-            title={t("layout.calendar", { defaultValue: "Lịch" })}
-            data-testid="nav-calendar"
-          >
-            <CalendarDays className="h-4 w-4 shrink-0" />
-            {!isCollapsed && <span>{t("layout.calendar", { defaultValue: "Lịch" })}</span>}
-          </NavLink>
-          <NavLink
-            to="/copilot"
-            className={({ isActive }) =>
-              `flex items-center gap-2 rounded-md ${isCollapsed ? 'justify-center px-0' : 'px-3'} py-2 transition-colors ${isActive ? "bg-accent font-medium text-indigo-600" : "hover:bg-accent text-indigo-600/80"
-              }`
-            }
-            title={t("layout.copilot", { defaultValue: "Copilot AI Chat" })}
-          >
-            <Bot className="h-4 w-4 shrink-0" />
-            {!isCollapsed && <span>{t("layout.copilot", { defaultValue: "Copilot" })}</span>}
-          </NavLink>
+                {isCollapsed && unreadCount > 0 && (
+                  <span className={`h-2 w-2 rounded-full bg-amber-500 ${isNotificationBlinking ? "animate-ping" : ""}`} />
+                )}
+              </NavLink>
+              <NavLink
+                to="/comments"
+                className={({ isActive }) =>
+                  `flex items-center gap-2 rounded-md ${isCollapsed ? 'justify-center px-0' : 'px-3'} py-2 transition-colors ${isActive ? "bg-accent font-medium" : "hover:bg-accent"
+                  }`
+                }
+                title={t("layout.comments", { defaultValue: "Comments" })}
+              >
+                <MessageSquare className="h-4 w-4 shrink-0" />
+                {!isCollapsed && <span>{t("layout.comments", { defaultValue: "Comments" })}</span>}
+              </NavLink>
+              <NavLink
+                to="/chat"
+                className={({ isActive }) =>
+                  `flex items-center gap-2 rounded-md ${isCollapsed ? 'justify-center px-0' : 'px-3'} py-2 transition-colors ${isActive ? "bg-accent font-medium text-emerald-800 dark:text-emerald-300" : "hover:bg-accent"
+                  }`
+                }
+                title={t("layout.chat", { defaultValue: "Chat" })}
+                data-testid="nav-chat"
+              >
+                <MessagesSquare className="h-4 w-4 shrink-0" />
+                {!isCollapsed && <span>{t("layout.chat", { defaultValue: "Chat" })}</span>}
+              </NavLink>
+              <NavLink
+                to="/meetings"
+                className={({ isActive }) =>
+                  `flex items-center gap-2 rounded-md ${isCollapsed ? 'justify-center px-0' : 'px-3'} py-2 transition-colors ${isActive ? "bg-accent font-medium text-blue-600 dark:text-blue-400" : "hover:bg-accent"
+                  }`
+                }
+                title={t("layout.meetings", { defaultValue: "Cuộc họp" })}
+                data-testid="nav-meetings"
+              >
+                <Video className="h-4 w-4 shrink-0" />
+                {!isCollapsed && <span>{t("layout.meetings", { defaultValue: "Cuộc họp" })}</span>}
+              </NavLink>
+              <NavLink
+                to="/calendar"
+                className={({ isActive }) =>
+                  `flex items-center gap-2 rounded-md ${isCollapsed ? 'justify-center px-0' : 'px-3'} py-2 transition-colors ${isActive ? "bg-accent font-medium text-amber-800 dark:text-amber-300" : "hover:bg-accent"
+                  }`
+                }
+                title={t("layout.calendar", { defaultValue: "Lịch" })}
+                data-testid="nav-calendar"
+              >
+                <CalendarDays className="h-4 w-4 shrink-0" />
+                {!isCollapsed && <span>{t("layout.calendar", { defaultValue: "Lịch" })}</span>}
+              </NavLink>
+              <NavLink
+                to="/copilot"
+                className={({ isActive }) =>
+                  `flex items-center gap-2 rounded-md ${isCollapsed ? 'justify-center px-0' : 'px-3'} py-2 transition-colors ${isActive ? "bg-accent font-medium text-indigo-600" : "hover:bg-accent text-indigo-600/80"
+                  }`
+                }
+                title={t("layout.copilot", { defaultValue: "Copilot AI Chat" })}
+              >
+                <Bot className="h-4 w-4 shrink-0" />
+                {!isCollapsed && <span>{t("layout.copilot", { defaultValue: "Copilot" })}</span>}
+              </NavLink>
+            </>
+          )}
         </nav>
 
         <div className="mt-auto">
@@ -572,46 +687,6 @@ export default function MainLayout() {
               <ShieldCheck className="h-4 w-4 shrink-0" />
               {!isCollapsed && <span>{t("layout.my_skills")}</span>}
             </NavLink>
-
-            {userRole === "ADMIN" && (
-              <div className="pt-2">
-                {!isCollapsed && <p className="px-3 text-xs font-semibold uppercase text-muted-foreground">Admin</p>}
-                {isCollapsed && <div className="mx-auto my-2 block h-px w-8 bg-border" />}
-                <NavLink
-                  to="/admin/users"
-                  className={({ isActive }) =>
-                    `mt-2 flex items-center gap-2 rounded-md ${isCollapsed ? 'justify-center px-0' : 'px-3'} py-2 transition-colors ${isActive ? "bg-accent font-medium" : "hover:bg-accent"
-                    }`
-                  }
-                  title={t("admin.users_title")}
-                >
-                  <Users className="h-4 w-4 shrink-0" />
-                  {!isCollapsed && <span>{t("admin.users_title")}</span>}
-                </NavLink>
-                <NavLink
-                  to="/admin/skills"
-                  className={({ isActive }) =>
-                    `mt-1 flex items-center gap-2 rounded-md ${isCollapsed ? 'justify-center px-0' : 'px-3'} py-2 transition-colors ${isActive ? "bg-accent font-medium" : "hover:bg-accent"
-                    }`
-                  }
-                  title={t("admin.global_skills")}
-                >
-                  <Code className="h-4 w-4 shrink-0" />
-                  {!isCollapsed && <span>{t("admin.global_skills")}</span>}
-                </NavLink>
-                <NavLink
-                  to="/admin/settings"
-                  className={({ isActive }) =>
-                    `mt-1 flex items-center gap-2 rounded-md ${isCollapsed ? 'justify-center px-0' : 'px-3'} py-2 transition-colors ${isActive ? "bg-accent font-medium" : "hover:bg-accent"
-                    }`
-                  }
-                  title={t("admin.system_settings.title", { defaultValue: "Cấu hình AI & Hệ thống" })}
-                >
-                  <Settings className="h-4 w-4 shrink-0" />
-                  {!isCollapsed && <span className="truncate">{t("admin.system_settings.title", { defaultValue: "Cấu hình AI & Hệ thống" })}</span>}
-                </NavLink>
-              </div>
-            )}
           </div>
 
           <Button

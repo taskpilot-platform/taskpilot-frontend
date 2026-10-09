@@ -14,7 +14,13 @@
 		"copilot": "Copilot",
 		"logout": "Logout",
 		"logging_out": "Logging out...",
-		"logout_success": "Logged out successfully"
+		"logout_success": "Logged out successfully",
+		"context_switcher": "Switch Context",
+		"context_workspace": "Workspace",
+		"context_workspace_desc": "Projects, meetings & team execution",
+		"context_admin": "System Admin",
+		"context_admin_desc": "Users, skills & platform config",
+		"context_active": "Active Context:"
 	},
 	"notifications": {
 		"title": "Notifications",
