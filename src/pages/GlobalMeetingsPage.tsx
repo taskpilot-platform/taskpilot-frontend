@@ -217,6 +217,7 @@ export default function GlobalMeetingsPage() {
             isArchived={selectedProject?.status === "ARCHIVED"}
             currentUserId={currentUserId}
             initialJoinMeetingId={initialJoinMeetingId}
+            hideHeader={true}
           />
         </div>
       )}

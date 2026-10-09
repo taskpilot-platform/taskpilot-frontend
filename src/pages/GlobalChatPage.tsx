@@ -198,13 +198,13 @@ export default function GlobalChatPage() {
           {/* Channel items list */}
           <div className="flex-1 overflow-y-auto p-2 space-y-1">
             <div className="px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center justify-between">
-              <span>Danh sách dự án</span>
+              <span>{t("chat.project_list", { defaultValue: "Danh sách dự án" })}</span>
               <span className="text-[10px] bg-muted px-1.5 py-0.2 rounded-md font-normal">{filteredProjects.length}</span>
             </div>
 
             {filteredProjects.length === 0 ? (
               <div className="py-8 text-center text-xs text-muted-foreground">
-                Không tìm thấy dự án phù hợp
+                {t("chat.no_projects_found", { defaultValue: "Không tìm thấy dự án phù hợp" })}
               </div>
             ) : (
               filteredProjects.map((p) => {

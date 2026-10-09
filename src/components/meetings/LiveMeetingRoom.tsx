@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { Room, RoomEvent, Track, VideoPresets } from "livekit-client";
 import { toast } from "react-toastify";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -65,6 +66,7 @@ function ParticipantTile({
   view: ParticipantView;
   room: Room | null;
 }) {
+  const { t } = useTranslation();
   const videoRef = useRef<HTMLVideoElement>(null);
   const [hasVideoStream, setHasVideoStream] = useState(false);
 
@@ -211,7 +213,7 @@ function ParticipantTile({
       {/* Speaking indicator label */}
       {view.isSpeaking && (
         <div className="absolute top-2.5 left-2.5 bg-emerald-500 text-white text-[10px] px-2 py-0.5 rounded-md font-semibold tracking-wide uppercase shadow-sm z-10">
-          Đang nói
+          {t("meetings.speaking", { defaultValue: "Đang nói" })}
         </div>
       )}
     </div>
@@ -228,6 +230,7 @@ function ScreenShareViewer({
   room: Room | null;
   stream: MediaStream | null;
 }) {
+  const { t } = useTranslation();
   const videoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
@@ -272,7 +275,7 @@ function ScreenShareViewer({
       <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-contain" />
       <div className="absolute top-3 left-3 bg-background/85 backdrop-blur-md px-3 py-1.5 rounded-lg text-xs font-semibold text-emerald-600 dark:text-emerald-400 border border-border shadow-md flex items-center gap-2">
         <ScreenShare className="w-4 h-4 text-emerald-500 animate-pulse" />
-        <span>Màn hình đang chia sẻ (Live HD)</span>
+        <span>{t("meetings.screen_share_live", { defaultValue: "Màn hình đang chia sẻ (Live HD)" })}</span>
       </div>
     </div>
   );
@@ -288,6 +291,7 @@ export function LiveMeetingRoom({
   onLeave,
   onEndMeeting,
 }: LiveMeetingRoomProps) {
+  const { t } = useTranslation();
   const confirm = useConfirm();
   const [tokenData, setTokenData] = useState<MeetingTokenResponse | null>(null);
   const [meeting, setMeeting] = useState<ProjectMeetingDto | null>(null);
@@ -618,7 +622,7 @@ export function LiveMeetingRoom({
       recorder.start(1000);
       mediaRecorderRef.current = recorder;
       setIsRecording(true);
-      toast.info("Đã bắt đầu ghi hình cuộc họp");
+      toast.info(t("meetings.recording_started", { defaultValue: "Đã bắt đầu ghi hình cuộc họp" }));
     } catch (recErr) {
       console.warn("Could not start MediaRecorder:", recErr);
     }
@@ -629,7 +633,7 @@ export function LiveMeetingRoom({
       try {
         mediaRecorderRef.current.stop();
         setIsRecording(false);
-        toast.success("Bản ghi hình cuộc họp đã được lưu vào Lịch sử cuộc họp");
+        toast.success(t("meetings.recording_saved", { defaultValue: "Bản ghi hình cuộc họp đã được lưu vào Lịch sử cuộc họp" }));
       } catch (err) {
         console.warn("Stop recording error:", err);
       }
@@ -681,7 +685,7 @@ export function LiveMeetingRoom({
         } catch {}
       }
       setIsScreenSharing(false);
-      toast.info("Đã dừng chia sẻ màn hình");
+      toast.info(t("meetings.screen_share_stopped", { defaultValue: "Đã dừng chia sẻ màn hình" }));
     } else {
       try {
         const stream = await navigator.mediaDevices.getDisplayMedia({
@@ -695,7 +699,7 @@ export function LiveMeetingRoom({
           }
           setScreenStream(null);
           setIsScreenSharing(false);
-          toast.info("Đã dừng chia sẻ màn hình");
+          toast.info(t("meetings.screen_share_stopped", { defaultValue: "Đã dừng chia sẻ màn hình" }));
         };
 
         setScreenStream(stream);
@@ -712,7 +716,7 @@ export function LiveMeetingRoom({
           startRecording(stream);
         }
 
-        toast.info("Đang chia sẻ màn hình");
+        toast.info(t("meetings.screen_sharing_active", { defaultValue: "Đang chia sẻ màn hình" }));
       } catch (e: any) {
         console.warn("Screen share cancel/error", e);
         setIsScreenSharing(false);
@@ -755,10 +759,10 @@ export function LiveMeetingRoom({
   // End Meeting for all (Host)
   const handleEndMeeting = async () => {
     const isConfirmed = await confirm({
-      title: "Kết thúc cuộc họp",
-      message: "Bạn có chắc chắn muốn kết thúc cuộc họp này cho tất cả thành viên?",
-      confirmText: "Kết thúc tất cả",
-      cancelText: "Hủy",
+      title: t("meetings.end_meeting_confirm_title", { defaultValue: "Kết thúc cuộc họp" }),
+      message: t("meetings.end_meeting_confirm_desc", { defaultValue: "Bạn có chắc chắn muốn kết thúc cuộc họp này cho tất cả thành viên?" }),
+      confirmText: t("meetings.end_meeting_for_all", { defaultValue: "Kết thúc tất cả" }),
+      cancelText: t("meetings.cancel", { defaultValue: "Hủy" }),
       variant: "destructive",
     });
 
@@ -787,7 +791,7 @@ export function LiveMeetingRoom({
       }
       try {
         await meetingService.endMeeting(projectId, meetingId);
-        toast.success("Cuộc họp đã kết thúc");
+        toast.success(t("meetings.end_meeting_success", { defaultValue: "Cuộc họp đã kết thúc" }));
       } catch (e) {
         console.warn("End meeting error", e);
       }
@@ -805,7 +809,7 @@ export function LiveMeetingRoom({
     const link = `${window.location.origin}/projects/${projectId}/meetings?join=${meetingId}`;
     navigator.clipboard.writeText(link).then(() => {
       setCopiedLink(true);
-      toast.success("Đã sao chép liên kết cuộc họp");
+      toast.success(t("meetings.copy_link_success", { defaultValue: "Đã sao chép liên kết cuộc họp" }));
       setTimeout(() => setCopiedLink(false), 2000);
     });
   };
@@ -817,7 +821,7 @@ export function LiveMeetingRoom({
 
     const newMsg: InMeetingMessage = {
       id: "msg-" + Date.now(),
-      senderName: tokenData?.participantName || "Bạn",
+      senderName: tokenData?.participantName || t("meetings.you_badge", { defaultValue: "Bạn" }),
       senderId: currentUserId,
       content: chatInput.trim(),
       time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
@@ -855,10 +859,10 @@ export function LiveMeetingRoom({
         <div className="w-16 h-16 rounded-full bg-destructive/10 text-destructive flex items-center justify-center mb-4">
           <PhoneOff className="w-8 h-8" />
         </div>
-        <h3 className="text-xl font-bold mb-2">Không thể tham gia cuộc họp</h3>
-        <p className="text-muted-foreground max-w-md mb-6">{errorMessage || "Cuộc họp đã kết thúc hoặc bạn không có quyền truy cập."}</p>
+        <h3 className="text-xl font-bold mb-2">{t("meetings.error_cannot_join", { defaultValue: "Không thể tham gia cuộc họp" })}</h3>
+        <p className="text-muted-foreground max-w-md mb-6">{errorMessage || t("meetings.error_cannot_join_desc", { defaultValue: "Cuộc họp đã kết thúc hoặc bạn không có quyền truy cập." })}</p>
         <Button onClick={onLeave} variant="default" data-testid="back-to-meetings-btn">
-          Quay lại danh sách cuộc họp
+          {t("meetings.back_to_meetings", { defaultValue: "Quay lại danh sách cuộc họp" })}
         </Button>
       </div>
     );
@@ -875,7 +879,7 @@ export function LiveMeetingRoom({
               <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
             </span>
             <h2 className="font-semibold text-base sm:text-lg text-foreground truncate max-w-[200px] sm:max-w-md" data-testid="meeting-title">
-              {meeting?.title || tokenData?.meeting?.title || tokenDataRef.current?.meeting?.title || "Cuộc họp trực tuyến"}
+              {meeting?.title || tokenData?.meeting?.title || tokenDataRef.current?.meeting?.title || t("meetings.title", { defaultValue: "Cuộc họp trực tuyến" })}
             </h2>
           </div>
           <Badge variant="outline" className="bg-muted text-foreground border-border text-xs gap-1 font-mono" data-testid="meeting-timer">
@@ -899,7 +903,7 @@ export function LiveMeetingRoom({
             data-testid="copy-meeting-link-btn"
           >
             {copiedLink ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
-            <span className="hidden sm:inline">{copiedLink ? "Đã chép" : "Sao chép link"}</span>
+            <span className="hidden sm:inline">{copiedLink ? t("meetings.copied", { defaultValue: "Đã chép" }) : t("meetings.copy_link", { defaultValue: "Sao chép link" })}</span>
           </Button>
 
           {tokenData?.isHost && (
@@ -912,7 +916,7 @@ export function LiveMeetingRoom({
               data-testid="end-meeting-btn"
             >
               <PhoneOff className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Kết thúc tất cả</span>
+              <span className="hidden sm:inline">{t("meetings.end_meeting_for_all", { defaultValue: "Kết thúc tất cả" })}</span>
             </Button>
           )}
 
@@ -925,7 +929,7 @@ export function LiveMeetingRoom({
             data-testid="leave-meeting-btn"
           >
             <PhoneOff className="w-3.5 h-3.5 text-destructive" />
-            <span>Rời phòng</span>
+            <span>{t("meetings.leave_room", { defaultValue: "Rời phòng" })}</span>
           </Button>
         </div>
       </div>
@@ -983,7 +987,7 @@ export function LiveMeetingRoom({
             <div className="flex items-center justify-between p-3.5 border-b border-border">
               <div className="flex items-center gap-2">
                 <Users className="w-4 h-4 text-emerald-500" />
-                <h3 className="font-semibold text-sm">Người tham gia ({views.length})</h3>
+                <h3 className="font-semibold text-sm">{t("meetings.participants", { defaultValue: "Người tham gia" })} ({views.length})</h3>
               </div>
               <Button size="icon" variant="ghost" className="h-7 w-7 text-muted-foreground hover:text-foreground" onClick={() => setIsParticipantsOpen(false)}>
                 <X className="w-4 h-4" />
@@ -1004,7 +1008,7 @@ export function LiveMeetingRoom({
                         {p.isHost && <span className="text-[10px] bg-amber-500/10 text-amber-600 dark:text-amber-400 px-1 rounded border border-amber-500/30">Host</span>}
                       </div>
                       <div className="text-[10px] text-muted-foreground">
-                        {p.isSpeaking ? "Đang nói" : p.isMuted ? "Đã tắt mic" : "Đang mở mic"}
+                        {p.isSpeaking ? t("meetings.speaking", { defaultValue: "Đang nói" }) : p.isMuted ? t("meetings.muted", { defaultValue: "Đã tắt mic" }) : t("meetings.unmuted", { defaultValue: "Đang mở mic" })}
                       </div>
                     </div>
                   </div>
@@ -1024,7 +1028,7 @@ export function LiveMeetingRoom({
             <div className="flex items-center justify-between p-3.5 border-b border-border">
               <div className="flex items-center gap-2">
                 <MessageSquare className="w-4 h-4 text-emerald-500" />
-                <h3 className="font-semibold text-sm">Tin nhắn trong cuộc họp</h3>
+                <h3 className="font-semibold text-sm">{t("meetings.in_meeting_chat", { defaultValue: "Tin nhắn trong cuộc họp" })}</h3>
               </div>
               <Button size="icon" variant="ghost" className="h-7 w-7 text-muted-foreground hover:text-foreground" onClick={() => setIsChatOpen(false)}>
                 <X className="w-4 h-4" />
@@ -1035,7 +1039,7 @@ export function LiveMeetingRoom({
               {messages.length === 0 ? (
                 <div className="text-center py-10 text-muted-foreground text-xs">
                   <MessageSquare className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                  Chưa có tin nhắn nào trong cuộc họp.
+                  {t("meetings.empty_in_meeting_chat", { defaultValue: "Chưa có tin nhắn nào trong cuộc họp." })}
                 </div>
               ) : (
                 messages.map((m) => (
@@ -1059,7 +1063,7 @@ export function LiveMeetingRoom({
 
             <form onSubmit={handleSendMessage} className="p-2.5 border-t border-border flex gap-1.5">
               <Input
-                placeholder="Nhắn tin cho mọi người..."
+                placeholder={t("meetings.type_message_placeholder", { defaultValue: "Nhắn tin cho mọi người..." })}
                 value={chatInput}
                 onChange={(e) => setChatInput(e.target.value)}
                 className="text-xs h-9"
@@ -1089,7 +1093,7 @@ export function LiveMeetingRoom({
           data-testid="toggle-mic-btn"
         >
           {isMicOn ? <Mic className="w-4 h-4 text-emerald-500" /> : <MicOff className="w-4 h-4" />}
-          <span className="hidden sm:inline text-xs">{isMicOn ? "Tắt mic" : "Bật mic"}</span>
+          <span className="hidden sm:inline text-xs">{isMicOn ? t("meetings.mic_off", { defaultValue: "Tắt mic" }) : t("meetings.mic_on", { defaultValue: "Bật mic" })}</span>
         </Button>
 
         {/* Cam Toggle */}
@@ -1106,7 +1110,7 @@ export function LiveMeetingRoom({
           data-testid="toggle-cam-btn"
         >
           {isCamOn ? <Video className="w-4 h-4 text-emerald-500" /> : <VideoOff className="w-4 h-4" />}
-          <span className="hidden sm:inline text-xs">{isCamOn ? "Tắt camera" : "Bật camera"}</span>
+          <span className="hidden sm:inline text-xs">{isCamOn ? t("meetings.cam_off", { defaultValue: "Tắt camera" }) : t("meetings.cam_on", { defaultValue: "Bật camera" })}</span>
         </Button>
 
         {/* Screen Share */}
@@ -1123,7 +1127,7 @@ export function LiveMeetingRoom({
           data-testid="toggle-screen-share-btn"
         >
           <ScreenShare className="w-4 h-4" />
-          <span className="hidden sm:inline text-xs">{isScreenSharing ? "Dừng chia sẻ" : "Chia sẻ màn hình"}</span>
+          <span className="hidden sm:inline text-xs">{isScreenSharing ? t("meetings.stop_share", { defaultValue: "Dừng chia sẻ" }) : t("meetings.share_screen", { defaultValue: "Chia sẻ màn hình" })}</span>
         </Button>
 
         {/* Recording Toggle */}
@@ -1140,9 +1144,9 @@ export function LiveMeetingRoom({
               } else if (typeof navigator !== "undefined" && navigator.mediaDevices?.getDisplayMedia) {
                 navigator.mediaDevices.getDisplayMedia({ video: true, audio: true })
                   .then((st) => startRecording(st))
-                  .catch(() => toast.warning("Chưa cấp quyền ghi hình màn hình"));
+                  .catch(() => toast.warning(t("meetings.no_permission_record", { defaultValue: "Chưa cấp quyền ghi hình màn hình" })));
               } else {
-                toast.warning("Trình duyệt không hỗ trợ ghi hình");
+                toast.warning(t("meetings.browser_unsupported_record", { defaultValue: "Trình duyệt không hỗ trợ ghi hình" }));
               }
             }
           }}
@@ -1151,11 +1155,11 @@ export function LiveMeetingRoom({
               ? "bg-red-600 text-white hover:bg-red-500 shadow-sm animate-pulse"
               : "border-border bg-background hover:bg-accent text-foreground"
           }`}
-          title={isRecording ? "Dừng ghi hình" : "Bắt đầu ghi hình"}
+          title={isRecording ? t("meetings.stop_record", { defaultValue: "Dừng ghi" }) : t("meetings.record", { defaultValue: "Ghi hình" })}
           data-testid="toggle-recording-btn"
         >
           <Disc className={`w-4 h-4 ${isRecording ? "text-white" : "text-red-500"}`} />
-          <span className="hidden sm:inline text-xs">{isRecording ? "Dừng ghi" : "Ghi hình"}</span>
+          <span className="hidden sm:inline text-xs">{isRecording ? t("meetings.stop_record", { defaultValue: "Dừng ghi" }) : t("meetings.record", { defaultValue: "Ghi hình" })}</span>
         </Button>
 
         {/* Participants Drawer Toggle */}
@@ -1175,7 +1179,7 @@ export function LiveMeetingRoom({
           data-testid="toggle-participants-drawer-btn"
         >
           <Users className="w-4 h-4" />
-          <span className="hidden sm:inline text-xs">Thành viên ({views.length})</span>
+          <span className="hidden sm:inline text-xs">{t("meetings.participants", { defaultValue: "Thành viên" })} ({views.length})</span>
         </Button>
 
         {/* Chat Drawer Toggle */}
@@ -1195,7 +1199,7 @@ export function LiveMeetingRoom({
           data-testid="toggle-in-meeting-chat-btn"
         >
           <MessageSquare className="w-4 h-4" />
-          <span className="hidden sm:inline text-xs">Trò chuyện</span>
+          <span className="hidden sm:inline text-xs">{t("meetings.chat", { defaultValue: "Trò chuyện" })}</span>
           {messages.length > 0 && !isChatOpen && (
             <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
           )}

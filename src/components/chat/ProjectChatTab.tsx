@@ -152,10 +152,10 @@ export const ProjectChatTab: React.FC<ProjectChatTabProps> = ({
         <div>
           <h2 className="text-xl font-bold tracking-tight text-foreground flex items-center gap-2">
             <MessageSquare className="h-6 w-6 text-primary" />
-            Project Chat Room
+            {t("chat.chat_room_title", { defaultValue: "Phòng Trò Chuyện Dự Án" })}
           </h2>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Real-time team messaging and discussions
+            {t("chat.chat_room_subtitle", { defaultValue: "Trao đổi và thảo luận nhóm theo thời gian thực" })}
           </p>
         </div>
 

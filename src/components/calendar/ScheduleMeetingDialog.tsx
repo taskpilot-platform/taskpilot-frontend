@@ -9,6 +9,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { toast } from "react-toastify";
+import { useTranslation } from "react-i18next";
 import {
   Dialog,
   DialogContent,
@@ -44,6 +45,7 @@ export function ScheduleMeetingDialog({
   onMeetingCreated,
   defaultDate,
 }: ScheduleMeetingDialogProps) {
+  const { t } = useTranslation();
   const [meetingMode, setMeetingMode] = useState<"SCHEDULED" | "INSTANT">("SCHEDULED");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -59,7 +61,7 @@ export function ScheduleMeetingDialog({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) {
-      toast.error("Vui lòng nhập tiêu đề cuộc họp");
+      toast.error(t("calendar.title_required", { defaultValue: "Vui lòng nhập tiêu đề cuộc họp" }));
       return;
     }
 
@@ -70,7 +72,7 @@ export function ScheduleMeetingDialog({
 
       if (meetingMode === "SCHEDULED") {
         if (!date || !startTime) {
-          toast.error("Vui lòng chọn ngày và giờ bắt đầu");
+          toast.error(t("calendar.datetime_required", { defaultValue: "Vui lòng chọn ngày và giờ bắt đầu" }));
           setIsSubmitting(false);
           return;
         }
@@ -91,8 +93,8 @@ export function ScheduleMeetingDialog({
       const created = await meetingService.createMeeting(projectId, payload);
       toast.success(
         meetingMode === "INSTANT"
-          ? "Đã tạo cuộc họp tức thì! Đang kết nối..."
-          : "Đã lên lịch cuộc họp thành công vào Lịch!"
+          ? t("calendar.instant_created", { defaultValue: "Đã tạo cuộc họp tức thì! Đang kết nối..." })
+          : t("calendar.create_success", { defaultValue: "Đã lên lịch cuộc họp thành công vào Lịch!" })
       );
 
       onOpenChange(false);
@@ -101,7 +103,7 @@ export function ScheduleMeetingDialog({
       onMeetingCreated(created, meetingMode === "INSTANT");
     } catch (err: any) {
       console.error("Create meeting error:", err);
-      toast.error(err?.response?.data?.message || "Không thể tạo cuộc họp");
+      toast.error(err?.response?.data?.message || t("calendar.create_error", { defaultValue: "Không thể tạo cuộc họp" }));
     } finally {
       setIsSubmitting(false);
     }
@@ -116,11 +118,11 @@ export function ScheduleMeetingDialog({
               <CalendarIcon className="w-4 h-4" />
             </div>
             <DialogTitle className="text-lg">
-              {meetingMode === "SCHEDULED" ? "Lên lịch cuộc họp (Teams / Outlook)" : "Họp ngay (Meet Now)"}
+              {meetingMode === "SCHEDULED" ? t("calendar.schedule_dialog_title", { defaultValue: "Lên lịch cuộc họp" }) : t("calendar.type_instant", { defaultValue: "Họp ngay (Meet Now)" })}
             </DialogTitle>
           </div>
           <DialogDescription className="text-xs">
-            Lên lịch họp với các thành viên trong dự án, thiết lập thời gian và đồng bộ tự động vào Calendar.
+            {t("calendar.schedule_dialog_desc", { defaultValue: "Lên lịch họp với các thành viên trong dự án, thiết lập thời gian và đồng bộ tự động vào Calendar." })}
           </DialogDescription>
         </DialogHeader>
 
@@ -137,7 +139,7 @@ export function ScheduleMeetingDialog({
             data-testid="mode-scheduled-tab"
           >
             <Clock className="w-3.5 h-3.5" />
-            Lên lịch cuộc họp
+            {t("calendar.type_scheduled", { defaultValue: "Lên lịch cuộc họp" })}
           </button>
           <button
             type="button"
@@ -150,7 +152,7 @@ export function ScheduleMeetingDialog({
             data-testid="mode-instant-tab"
           >
             <Radio className="w-3.5 h-3.5 animate-pulse text-emerald-500" />
-            Họp tức thì (Meet Now)
+            {t("calendar.type_instant", { defaultValue: "Họp tức thì (Meet Now)" })}
           </button>
         </div>
 
@@ -158,11 +160,11 @@ export function ScheduleMeetingDialog({
           {/* Title */}
           <div className="space-y-1.5">
             <Label htmlFor="sched-meeting-title" className="text-xs font-semibold">
-              Tiêu đề cuộc họp <span className="text-destructive">*</span>
+              {t("calendar.meeting_title", { defaultValue: "Tiêu đề cuộc họp" })} <span className="text-destructive">*</span>
             </Label>
             <Input
               id="sched-meeting-title"
-              placeholder="VD: Sprint Planning, Daily Standup, Review Architecture..."
+              placeholder={t("calendar.meeting_title_placeholder", { defaultValue: "VD: Sprint Planning, Daily Standup, Review Architecture..." })}
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               className="text-xs sm:text-sm h-9"
@@ -176,7 +178,7 @@ export function ScheduleMeetingDialog({
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3 bg-muted/40 rounded-xl border border-border/60">
               <div className="space-y-1">
                 <Label htmlFor="sched-date" className="text-[11px] font-medium text-muted-foreground flex items-center gap-1">
-                  <CalendarIcon className="w-3 h-3 text-primary" /> Ngày họp
+                  <CalendarIcon className="w-3 h-3 text-primary" /> {t("calendar.meeting_date", { defaultValue: "Ngày họp" })}
                 </Label>
                 <Input
                   id="sched-date"
@@ -191,7 +193,7 @@ export function ScheduleMeetingDialog({
 
               <div className="space-y-1">
                 <Label htmlFor="sched-start" className="text-[11px] font-medium text-muted-foreground flex items-center gap-1">
-                  <Clock className="w-3 h-3 text-emerald-500" /> Bắt đầu
+                  <Clock className="w-3 h-3 text-emerald-500" /> {t("calendar.start_time", { defaultValue: "Bắt đầu" })}
                 </Label>
                 <Input
                   id="sched-start"
@@ -206,7 +208,7 @@ export function ScheduleMeetingDialog({
 
               <div className="space-y-1">
                 <Label htmlFor="sched-end" className="text-[11px] font-medium text-muted-foreground flex items-center gap-1">
-                  <Clock className="w-3 h-3 text-muted-foreground" /> Kết thúc
+                  <Clock className="w-3 h-3 text-muted-foreground" /> {t("calendar.end_time", { defaultValue: "Kết thúc" })}
                 </Label>
                 <Input
                   id="sched-end"
@@ -223,11 +225,11 @@ export function ScheduleMeetingDialog({
           {/* Description */}
           <div className="space-y-1.5">
             <Label htmlFor="sched-meeting-desc" className="text-xs font-semibold">
-              Mục tiêu / Agenda (Tùy chọn)
+              {t("calendar.meeting_desc", { defaultValue: "Mục tiêu / Agenda (Tùy chọn)" })}
             </Label>
             <Textarea
               id="sched-meeting-desc"
-              placeholder="Nội dung thảo luận, tài liệu chuẩn bị, đường link tham khảo..."
+              placeholder={t("calendar.meeting_desc_placeholder", { defaultValue: "Nội dung thảo luận, tài liệu chuẩn bị, đường link tham khảo..." })}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               className="text-xs resize-none h-18"
@@ -241,11 +243,11 @@ export function ScheduleMeetingDialog({
               <div className="flex items-center justify-between text-muted-foreground">
                 <span className="flex items-center gap-1.5 font-medium">
                   <Users className="w-3.5 h-3.5 text-primary" />
-                  Trợ lý điều phối (Scheduling Assistant):
+                  {t("calendar.scheduling_assistant", { defaultValue: "Trợ lý điều phối (Scheduling Assistant):" })}
                 </span>
                 <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1">
                   <CheckCircle2 className="w-3 h-3" />
-                  {projectMembers.length} thành viên sẵn sàng
+                  {t("calendar.members_ready", { count: projectMembers.length, defaultValue: `${projectMembers.length} thành viên sẵn sàng` })}
                 </span>
               </div>
               <div className="flex flex-wrap gap-1.5 pt-1">
@@ -256,7 +258,7 @@ export function ScheduleMeetingDialog({
                 ))}
                 {projectMembers.length > 6 && (
                   <span className="text-[10px] text-muted-foreground self-center">
-                    +{projectMembers.length - 6} người khác
+                    +{projectMembers.length - 6} {t("calendar.others", { defaultValue: "người khác" })}
                   </span>
                 )}
               </div>
@@ -272,7 +274,7 @@ export function ScheduleMeetingDialog({
               data-testid="schedule-meeting-rec-checkbox"
             />
             <Label htmlFor="sched-rec" className="text-xs cursor-pointer font-normal">
-              Bật tính năng ghi âm & lưu trữ cuộc họp (Cloud Recording)
+              {t("calendar.enable_recording", { defaultValue: "Bật tính năng ghi âm & lưu trữ cuộc họp (Cloud Recording)" })}
             </Label>
           </div>
 
@@ -283,7 +285,7 @@ export function ScheduleMeetingDialog({
               size="sm"
               onClick={() => onOpenChange(false)}
             >
-              Hủy
+              {t("calendar.cancel", { defaultValue: "Hủy" })}
             </Button>
             <Button
               type="submit"
@@ -296,12 +298,12 @@ export function ScheduleMeetingDialog({
               {meetingMode === "INSTANT" ? (
                 <>
                   <Video className="w-3.5 h-3.5" />
-                  Bắt đầu & Tham gia ngay
+                  {t("meetings.create_and_join", { defaultValue: "Bắt đầu & Tham gia ngay" })}
                 </>
               ) : (
                 <>
                   <CalendarIcon className="w-3.5 h-3.5" />
-                  Lên lịch cuộc họp
+                  {t("calendar.create_scheduled_btn", { defaultValue: "Lên lịch cuộc họp" })}
                 </>
               )}
             </Button>

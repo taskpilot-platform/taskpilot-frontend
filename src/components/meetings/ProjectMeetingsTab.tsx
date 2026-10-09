@@ -30,6 +30,7 @@ interface ProjectMeetingsTabProps {
   isArchived: boolean;
   currentUserId: number | null;
   initialJoinMeetingId?: number | null;
+  hideHeader?: boolean;
 }
 
 export function ProjectMeetingsTab({
@@ -37,8 +38,9 @@ export function ProjectMeetingsTab({
   isArchived,
   currentUserId,
   initialJoinMeetingId,
+  hideHeader = false,
 }: ProjectMeetingsTabProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [meetings, setMeetings] = useState<ProjectMeetingDto[]>([]);
   const [activeMeeting, setActiveMeeting] = useState<ProjectMeetingDto | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -64,7 +66,7 @@ export function ProjectMeetingsTab({
       setActiveMeeting(active);
     } catch (err: any) {
       console.warn("Failed to load meetings", err);
-      toast.error("Không thể tải danh sách cuộc họp");
+      toast.error(t("meetings.load_error", { defaultValue: "Không thể tải danh sách cuộc họp" }));
     } finally {
       setIsLoading(false);
     }
@@ -77,7 +79,7 @@ export function ProjectMeetingsTab({
   const handleCreateMeeting = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) {
-      toast.error("Vui lòng nhập tiêu đề cuộc họp");
+      toast.error(t("meetings.title_required", { defaultValue: "Vui lòng nhập tiêu đề cuộc họp" }));
       return;
     }
 
@@ -89,7 +91,7 @@ export function ProjectMeetingsTab({
         recordingEnabled,
       };
       const created = await meetingService.createMeeting(projectId, payload);
-      toast.success("Đã tạo cuộc họp thành công!");
+      toast.success(t("meetings.create_success", { defaultValue: "Đã tạo cuộc họp thành công!" }));
       setIsCreateOpen(false);
       setTitle("");
       setDescription("");
@@ -101,7 +103,7 @@ export function ProjectMeetingsTab({
       }
     } catch (err: any) {
       console.error("Create meeting error:", err);
-      toast.error(err?.response?.data?.message || "Không thể tạo cuộc họp");
+      toast.error(err?.response?.data?.message || t("meetings.create_error", { defaultValue: "Không thể tạo cuộc họp" }));
     } finally {
       setIsSubmitting(false);
     }
@@ -118,21 +120,22 @@ export function ProjectMeetingsTab({
   };
 
   const formatDuration = (secs?: number | null) => {
-    if (!secs || secs <= 0) return "< 1 phút";
+    if (!secs || secs <= 0) return t("meetings.duration_under_minute", { defaultValue: "< 1 phút" });
     const m = Math.floor(secs / 60);
     const s = secs % 60;
-    if (m === 0) return `${s} giây`;
+    if (m === 0) return t("meetings.duration_seconds", { count: s, defaultValue: `${s} giây` });
     if (m >= 60) {
       const h = Math.floor(m / 60);
-      return `${h} giờ ${m % 60} phút`;
+      return t("meetings.duration_hours_minutes", { hours: h, minutes: m % 60, defaultValue: `${h} giờ ${m % 60} phút` });
     }
-    return `${m} phút`;
+    return t("meetings.duration_minutes", { count: m, defaultValue: `${m} phút` });
   };
 
   const formatDate = (iso: string) => {
     try {
       const d = new Date(iso);
-      return d.toLocaleDateString("vi-VN", {
+      const locale = i18n.language?.startsWith("en") ? "en-US" : "vi-VN";
+      return d.toLocaleDateString(locale, {
         day: "2-digit",
         month: "2-digit",
         year: "numeric",
@@ -174,14 +177,18 @@ export function ProjectMeetingsTab({
               <div className="flex items-center gap-2">
                 <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 gap-1.5 px-2.5 py-0.5">
                   <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
-                  Đang diễn ra
+                  {t("meetings.status_active", { defaultValue: "Đang diễn ra" })}
                 </Badge>
                 <h3 className="text-xl font-bold tracking-tight text-foreground" data-testid="active-banner-title">
                   {activeMeeting.title}
                 </h3>
               </div>
               <p className="text-sm text-muted-foreground">
-                Tạo bởi <span className="font-medium text-foreground">{activeMeeting.hostName}</span> lúc {formatDate(activeMeeting.startedAt)}
+                {t("meetings.created_by_at", {
+                  host: activeMeeting.hostName,
+                  time: formatDate(activeMeeting.startedAt),
+                  defaultValue: `Tạo bởi ${activeMeeting.hostName} lúc ${formatDate(activeMeeting.startedAt)}`,
+                })}
               </p>
             </div>
 
@@ -192,7 +199,7 @@ export function ProjectMeetingsTab({
               data-testid="join-active-meeting-btn"
             >
               <Video className="w-5 h-5" />
-              Tham gia ngay
+              {t("meetings.join_now", { defaultValue: "Tham gia ngay" })}
             </Button>
           </CardHeader>
 
@@ -205,13 +212,17 @@ export function ProjectMeetingsTab({
       )}
 
       {/* 2. Controls & Actions Header */}
-      <div className="flex items-center justify-between flex-wrap gap-4">
-        <div>
-          <h2 className="text-2xl font-bold tracking-tight">Họp trực tuyến</h2>
-          <p className="text-sm text-muted-foreground">
-            Tổ chức phòng họp video & audio thời gian thực với các thành viên dự án
-          </p>
-        </div>
+      <div className={`flex items-center ${hideHeader ? "justify-end" : "justify-between"} flex-wrap gap-4`}>
+        {!hideHeader && (
+          <div>
+            <h2 className="text-2xl font-bold tracking-tight">
+              {t("meetings.tab_title", { defaultValue: "Họp trực tuyến" })}
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              {t("meetings.tab_subtitle", { defaultValue: "Tổ chức phòng họp video & audio thời gian thực với các thành viên dự án" })}
+            </p>
+          </div>
+        )}
 
         <div className="flex items-center gap-2">
           <Button
@@ -223,7 +234,7 @@ export function ProjectMeetingsTab({
             data-testid="refresh-meetings-btn"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? "animate-spin" : ""}`} />
-            <span className="hidden sm:inline">Làm mới</span>
+            <span className="hidden sm:inline">{t("meetings.refresh", { defaultValue: "Làm mới" })}</span>
           </Button>
 
           <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
@@ -235,7 +246,7 @@ export function ProjectMeetingsTab({
                 data-testid="create-meeting-btn"
               >
                 <PlusCircle className="w-4 h-4" />
-                <span>Bắt đầu cuộc họp mới</span>
+                <span>{t("meetings.new_meeting", { defaultValue: "Bắt đầu cuộc họp mới" })}</span>
               </Button>
             </DialogTrigger>
             <DialogContent className="sm:max-w-md" data-testid="create-meeting-dialog">
@@ -243,21 +254,21 @@ export function ProjectMeetingsTab({
                 <DialogHeader>
                   <DialogTitle className="flex items-center gap-2">
                     <Video className="w-5 h-5 text-emerald-500" />
-                    Bắt đầu cuộc họp mới
+                    {t("meetings.create_modal_title", { defaultValue: "Bắt đầu cuộc họp mới" })}
                   </DialogTitle>
                   <DialogDescription>
-                    Tạo phòng họp trực tuyến tức thì và mời các thành viên tham gia.
+                    {t("meetings.create_modal_desc", { defaultValue: "Tạo phòng họp trực tuyến tức thì và mời các thành viên tham gia." })}
                   </DialogDescription>
                 </DialogHeader>
 
                 <div className="space-y-4 py-4">
                   <div className="space-y-1.5">
                     <Label htmlFor="meeting-title" className="text-xs font-semibold">
-                      Tiêu đề cuộc họp <span className="text-destructive">*</span>
+                      {t("meetings.meeting_title", { defaultValue: "Tiêu đề cuộc họp" })} <span className="text-destructive">*</span>
                     </Label>
                     <Input
                       id="meeting-title"
-                      placeholder="Ví dụ: Daily Scrum, Sprint Review, Thảo luận kiến trúc..."
+                      placeholder={t("meetings.meeting_title_placeholder", { defaultValue: "Ví dụ: Daily Scrum, Sprint Review, Thảo luận kiến trúc..." })}
                       value={title}
                       onChange={(e) => setTitle(e.target.value)}
                       required
@@ -267,11 +278,11 @@ export function ProjectMeetingsTab({
 
                   <div className="space-y-1.5">
                     <Label htmlFor="meeting-desc" className="text-xs font-semibold">
-                      Mô tả / Mục tiêu cuộc họp
+                      {t("meetings.meeting_desc", { defaultValue: "Mô tả / Mục tiêu cuộc họp" })}
                     </Label>
                     <Textarea
                       id="meeting-desc"
-                      placeholder="Ghi chú nội dung chính cần bàn trong buổi họp..."
+                      placeholder={t("meetings.meeting_desc_placeholder", { defaultValue: "Ghi chú nội dung chính cần bàn trong buổi họp..." })}
                       value={description}
                       onChange={(e) => setDescription(e.target.value)}
                       rows={3}
@@ -287,7 +298,7 @@ export function ProjectMeetingsTab({
                       data-testid="meeting-rec-checkbox"
                     />
                     <Label htmlFor="meeting-rec" className="text-xs cursor-pointer font-medium">
-                      Bật ghi hình cuộc họp (Lưu trữ vào kho tệp dự án)
+                      {t("meetings.auto_recording", { defaultValue: "Bật ghi hình cuộc họp (Lưu trữ vào kho tệp dự án)" })}
                     </Label>
                   </div>
                 </div>
@@ -300,7 +311,7 @@ export function ProjectMeetingsTab({
                     disabled={isSubmitting}
                     data-testid="cancel-create-dialog-btn"
                   >
-                    Hủy
+                    {t("meetings.cancel", { defaultValue: "Hủy" })}
                   </Button>
                   <Button
                     type="submit"
@@ -311,12 +322,12 @@ export function ProjectMeetingsTab({
                     {isSubmitting ? (
                       <>
                         <Loader2 className="w-4 h-4 animate-spin" />
-                        Đang tạo...
+                        {t("meetings.starting", { defaultValue: "Đang tạo..." })}
                       </>
                     ) : (
                       <>
                         <Video className="w-4 h-4" />
-                        Tạo & Tham gia ngay
+                        {t("meetings.create_and_join", { defaultValue: "Tạo & Tham gia ngay" })}
                       </>
                     )}
                   </Button>
@@ -335,7 +346,7 @@ export function ProjectMeetingsTab({
           onClick={() => setFilter("ALL")}
           className="text-xs h-8"
         >
-          Tất cả ({meetings.length})
+          {t("meetings.filter_all", { defaultValue: "Tất cả" })} ({meetings.length})
         </Button>
         <Button
           size="sm"
@@ -344,7 +355,7 @@ export function ProjectMeetingsTab({
           className="text-xs h-8 gap-1"
         >
           <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-          Đang diễn ra ({meetings.filter((m) => m.status === "ACTIVE").length})
+          {t("meetings.filter_active", { defaultValue: "Đang diễn ra" })} ({meetings.filter((m) => m.status === "ACTIVE").length})
         </Button>
         <Button
           size="sm"
@@ -353,7 +364,7 @@ export function ProjectMeetingsTab({
           className="text-xs h-8 gap-1"
         >
           <History className="w-3.5 h-3.5 text-muted-foreground" />
-          Lịch sử đã họp ({meetings.filter((m) => m.status === "ENDED").length})
+          {t("meetings.filter_history", { defaultValue: "Lịch sử đã họp" })} ({meetings.filter((m) => m.status === "ENDED").length})
         </Button>
       </div>
 
@@ -361,14 +372,14 @@ export function ProjectMeetingsTab({
       {isLoading ? (
         <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
           <Loader2 className="w-8 h-8 animate-spin mb-3 text-primary" />
-          <p className="text-sm">Đang tải danh sách cuộc họp...</p>
+          <p className="text-sm">{t("meetings.loading_list", { defaultValue: "Đang tải danh sách cuộc họp..." })}</p>
         </div>
       ) : filteredMeetings.length === 0 ? (
         <div className="text-center py-16 px-4 border-2 border-dashed rounded-xl bg-muted/20" data-testid="empty-meetings-view">
           <Video className="w-12 h-12 mx-auto text-muted-foreground/40 mb-3" />
-          <h3 className="font-semibold text-lg mb-1">Chưa có cuộc họp nào</h3>
+          <h3 className="font-semibold text-lg mb-1">{t("meetings.empty_title", { defaultValue: "Chưa có cuộc họp nào" })}</h3>
           <p className="text-sm text-muted-foreground max-w-md mx-auto mb-6">
-            Bắt đầu cuộc họp video/audio trực tuyến để thảo luận công việc thời gian thực với đồng đội.
+            {t("meetings.empty_desc", { defaultValue: "Bắt đầu cuộc họp video/audio trực tuyến để thảo luận công việc thời gian thực với đồng đội." })}
           </p>
           <Button
             onClick={() => setIsCreateOpen(true)}
@@ -377,7 +388,7 @@ export function ProjectMeetingsTab({
             data-testid="empty-start-meeting-btn"
           >
             <PlusCircle className="w-4 h-4" />
-            Bắt đầu cuộc họp đầu tiên
+            {t("meetings.start_first", { defaultValue: "Bắt đầu cuộc họp đầu tiên" })}
           </Button>
         </div>
       ) : (
@@ -406,10 +417,10 @@ export function ProjectMeetingsTab({
                       {isActive ? (
                         <>
                           <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                          Đang diễn ra
+                          {t("meetings.status_active", { defaultValue: "Đang diễn ra" })}
                         </>
                       ) : (
-                        "Đã kết thúc"
+                        t("meetings.ended", { defaultValue: "Đã kết thúc" })
                       )}
                     </Badge>
 
@@ -449,7 +460,7 @@ export function ProjectMeetingsTab({
 
                     <div className="flex items-center gap-1">
                       <Users className="w-3.5 h-3.5" />
-                      <span>{isActive ? `${m.activeParticipantsCount} đang họp` : formatDuration(m.durationSeconds)}</span>
+                      <span>{isActive ? t("meetings.in_meeting_count", { count: m.activeParticipantsCount, defaultValue: `${m.activeParticipantsCount} đang họp` }) : formatDuration(m.durationSeconds)}</span>
                     </div>
                   </div>
                 </CardContent>
