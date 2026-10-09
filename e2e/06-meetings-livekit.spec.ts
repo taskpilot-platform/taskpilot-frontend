@@ -529,10 +529,14 @@ test.describe("Phase 4: LiveKit Video Meeting & Collaboration (TC101 - TC130)", 
 
     await page.locator('[data-testid="join-meeting-btn-1"]').click();
 
-    // Auto-accept window.confirm
+    // Auto-accept window.confirm if present
     page.on("dialog", (d) => d.accept());
 
     await page.locator('[data-testid="end-meeting-btn"]').click();
+    const confirmBtn = page.locator('[data-testid="confirm-action-btn"]');
+    if (await confirmBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+      await confirmBtn.click();
+    }
     await expect(page.locator('[data-testid="project-meetings-tab"]')).toBeVisible();
   });
 

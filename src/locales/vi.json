@@ -665,6 +665,7 @@
 		"recording_title": "Bản ghi hình cuộc họp",
 		"loading_recording": "Đang tải video bản ghi...",
 		"demo_recording_badge": "Bản ghi demo vừa khởi tạo",
+		"sample_recording_badge": "Bản ghi mẫu chính thức (Enterprise HD)",
 		"no_local_recording": "Chưa tìm thấy bản ghi cục bộ của phiên họp này",
 		"no_recording_desc": "Bản ghi Cloud Recording đang được xử lý trên máy chủ hoặc được tạo bởi thiết bị của Host. Bạn có thể phát video mẫu hoặc tải lên video để kiểm thử ngay.",
 		"play_sample": "Phát video mô phỏng mẫu",

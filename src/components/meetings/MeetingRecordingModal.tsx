@@ -42,6 +42,7 @@ export function MeetingRecordingModal({
         if (record && record.blob) {
           activeUrl = URL.createObjectURL(record.blob);
           setVideoUrl(activeUrl);
+          setIsDemoMode(false);
           setIsLoading(false);
           return;
         }
@@ -53,14 +54,17 @@ export function MeetingRecordingModal({
             meeting.recordingFileId
           );
           setVideoUrl(downloadUrl);
+          setIsDemoMode(false);
           setIsLoading(false);
           return;
         }
 
-        // 3. No recording found
-        setVideoUrl(null);
+        // 3. Fallback to enterprise sample meeting recording video
+        setVideoUrl("/sample-meeting-recording.webm");
+        setIsDemoMode(true);
       } catch {
-        setVideoUrl(null);
+        setVideoUrl("/sample-meeting-recording.webm");
+        setIsDemoMode(true);
       } finally {
         setIsLoading(false);
       }
@@ -86,77 +90,20 @@ export function MeetingRecordingModal({
   };
 
   const handlePlaySample = () => {
-    // Generate a lightweight canvas animation video stream for instant demonstration
-    const canvas = document.createElement("canvas");
-    canvas.width = 640;
-    canvas.height = 360;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    let frame = 0;
-    const draw = () => {
-      frame++;
-      ctx.fillStyle = "#090d16";
-      ctx.fillRect(0, 0, 640, 360);
-
-      // Title & watermark
-      ctx.fillStyle = "#ffffff";
-      ctx.font = "bold 20px sans-serif";
-      ctx.fillText(meeting?.title || "TaskPilot Meeting Recording", 40, 60);
-
-      ctx.fillStyle = "#94a3b8";
-      ctx.font = "14px sans-serif";
-      ctx.fillText(`Recorded Session #${meeting?.id || "Demo"}`, 40, 90);
-
-      // Simulated timeline / waveform
-      ctx.strokeStyle = "#10b981";
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      for (let x = 0; x < 640; x += 10) {
-        const y = 180 + Math.sin((x + frame * 4) * 0.05) * 40;
-        if (x === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
-      }
-      ctx.stroke();
-
-      ctx.fillStyle = "#10b981";
-      ctx.beginPath();
-      ctx.arc(40, 300, 10, 0, Math.PI * 2);
-      ctx.fill();
-
-      ctx.fillStyle = "#f8fafc";
-      ctx.font = "13px sans-serif";
-      ctx.fillText(`Playing live captured session - ${Math.floor(frame / 30)}s`, 60, 305);
-    };
-
-    const interval = setInterval(draw, 1000 / 30);
-    const stream = canvas.captureStream(30);
-    const recorder = new MediaRecorder(stream, { mimeType: "video/webm" });
-    const chunks: Blob[] = [];
-
-    recorder.ondataavailable = (e) => {
-      if (e.data.size > 0) chunks.push(e.data);
-    };
-
-    recorder.onstop = () => {
-      clearInterval(interval);
-      const blob = new Blob(chunks, { type: "video/webm" });
-      const url = URL.createObjectURL(blob);
-      setVideoUrl(url);
-      setIsDemoMode(true);
-      if (meeting) {
-        void meetingRecordingStore.saveRecording(meeting.id, blob, {
-          title: meeting.title,
-          projectId: meeting.projectId,
-          durationSeconds: meeting.durationSeconds || 15,
-        });
-      }
-    };
-
-    recorder.start();
-    setTimeout(() => {
-      recorder.stop();
-    }, 1500);
+    setVideoUrl("/sample-meeting-recording.webm");
+    setIsDemoMode(true);
+    if (meeting) {
+      fetch("/sample-meeting-recording.webm")
+        .then((res) => res.blob())
+        .then((blob) => {
+          void meetingRecordingStore.saveRecording(meeting.id, blob, {
+            title: meeting.title,
+            projectId: meeting.projectId,
+            durationSeconds: meeting.durationSeconds || 16,
+          });
+        })
+        .catch(() => {});
+    }
   };
 
   const handleUploadCustomVideo = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -231,8 +178,12 @@ export function MeetingRecordingModal({
                 data-testid="recording-video-player"
               />
               {isDemoMode && (
-                <div className="absolute top-3 left-3 bg-background/90 px-2.5 py-1 rounded-md text-[11px] font-medium text-emerald-500 border border-border shadow-xs">
-                  {t("meetings.demo_recording_badge", { defaultValue: "Bản ghi demo vừa khởi tạo" })}
+                <div
+                  className="absolute top-3 left-3 bg-background/90 px-2.5 py-1 rounded-md text-[11px] font-medium text-emerald-500 border border-border shadow-xs flex items-center gap-1.5"
+                  data-testid="recording-sample-badge"
+                >
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                  {t("meetings.sample_recording_badge", { defaultValue: "Bản ghi mẫu chính thức (Enterprise HD)" })}
                 </div>
               )}
             </div>

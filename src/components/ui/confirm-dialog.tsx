@@ -50,7 +50,10 @@ export const ConfirmProvider: React.FC<{ children: React.ReactNode }> = ({ child
     <ConfirmContext.Provider value={{ confirm }}>
       {children}
       <Dialog open={isOpen} onOpenChange={(open) => { if (!open) handleCancel(); }}>
-        <DialogContent className="sm:max-w-[440px] overflow-hidden border border-border/80 shadow-lg bg-card p-6 rounded-xl">
+        <DialogContent
+          className="sm:max-w-[440px] overflow-hidden border border-border/80 shadow-lg bg-card p-6 rounded-xl"
+          data-testid="confirm-dialog"
+        >
           <div className="flex gap-4 items-start">
             <div className={`p-2.5 rounded-lg border border-border/50 flex-shrink-0 ${
               options?.variant === "destructive" 
@@ -83,6 +86,7 @@ export const ConfirmProvider: React.FC<{ children: React.ReactNode }> = ({ child
               variant="outline"
               onClick={handleCancel}
               className="px-4 py-2 border-border/60 hover:bg-muted text-sm font-medium transition-all active:scale-[0.98] rounded-lg w-full sm:w-auto"
+              data-testid="confirm-cancel-btn"
             >
               {options?.cancelText || "Hủy"}
             </Button>
@@ -96,6 +100,7 @@ export const ConfirmProvider: React.FC<{ children: React.ReactNode }> = ({ child
                   ? "bg-amber-600 hover:bg-amber-500 text-white"
                   : "bg-primary hover:bg-primary/95 text-primary-foreground"
               }`}
+              data-testid="confirm-action-btn"
             >
               {options?.confirmText || (isDestructive ? "Xóa" : "Xác nhận")}
             </Button>

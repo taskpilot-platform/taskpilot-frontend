@@ -87,7 +87,9 @@ describe("Meeting Recording and Screen Sharing Features", () => {
       await waitFor(() => {
         expect(screen.getByText("Sprint Review Session")).toBeInTheDocument();
         expect(screen.getByText("Admin")).toBeInTheDocument();
-        expect(screen.getByTestId("play-sample-recording-btn")).toBeInTheDocument();
+        expect(
+          screen.queryByTestId("recording-video-player") || screen.queryByTestId("play-sample-recording-btn")
+        ).toBeInTheDocument();
       });
     });
 

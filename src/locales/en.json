@@ -665,6 +665,7 @@
 		"recording_title": "Meeting Recording",
 		"loading_recording": "Loading recording...",
 		"demo_recording_badge": "Demo recording generated",
+		"sample_recording_badge": "Official Sample Recording (Enterprise HD)",
 		"no_local_recording": "No local recording found for this meeting",
 		"no_recording_desc": "Cloud recording is processing on the server or was captured by the host device. You can play a sample video or upload a video to preview.",
 		"play_sample": "Play sample preview video",
