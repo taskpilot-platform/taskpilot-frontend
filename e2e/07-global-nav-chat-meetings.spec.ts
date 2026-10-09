@@ -102,6 +102,32 @@ test.describe("Global Navigation: Chat & Video Meetings Tabs", () => {
         }),
       });
     });
+
+    await page.route("**/api/v1/projects/200/members**", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          status: 200,
+          message: "Success",
+          data: [
+            { userId: 1, fullName: "Alex Rivera", email: "alex@taskpilot.local", role: "MEMBER" },
+          ],
+        }),
+      });
+    });
+
+    await page.route("**/api/v1/projects/200/chat/messages**", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          status: 200,
+          message: "Success",
+          data: { content: [], totalElements: 0, totalPages: 1, number: 0, size: 50 },
+        }),
+      });
+    });
   });
 
   // --- 1. Global Navigation Bar ---

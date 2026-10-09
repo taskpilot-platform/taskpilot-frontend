@@ -146,7 +146,7 @@ export const ProjectChatTab: React.FC<ProjectChatTabProps> = ({
   };
 
   return (
-    <div className="space-y-4 py-4">
+    <div className="space-y-4 py-4" data-testid="project-chat-tab">
       {/* Header bar */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
