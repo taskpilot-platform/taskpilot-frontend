@@ -89,7 +89,7 @@ export function DynamicFormRenderer({
   };
 
   return (
-    <div className="mt-3 rounded-lg border border-border/60 bg-background/55 p-3 shadow-lg backdrop-blur-[28px] backdrop-saturate-150">
+    <div className="mt-3 rounded-xl border border-border/80 bg-card p-3.5 shadow-sm">
       <div className="mb-3">
         <div className="text-sm font-semibold text-foreground">{spec.title || "Bổ sung thông tin"}</div>
         {spec.description && (

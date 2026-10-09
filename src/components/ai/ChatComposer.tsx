@@ -59,7 +59,7 @@ export const ChatComposer = memo(function ChatComposer({ placeholder, modelName,
             }
           }}
           placeholder={placeholder}
-          className="min-h-[96px] flex-1 resize-none rounded-2xl border border-white/20 dark:border-white/10 pr-14 text-base bg-white/10 dark:bg-black/10 backdrop-blur-xl backdrop-saturate-150 text-black dark:text-white placeholder:text-black/60 dark:placeholder:text-white/60 focus:bg-white/20 dark:focus:bg-black/20 transition-all shadow-sm"
+          className="min-h-[96px] flex-1 resize-none rounded-xl border border-border/80 pr-14 text-sm bg-background/80 focus:bg-background text-foreground placeholder:text-muted-foreground focus:border-primary/50 transition-colors shadow-sm"
         />
         {isStreaming ? (
           <div className="group absolute bottom-1.5 right-1.5">
@@ -96,17 +96,17 @@ export const ChatComposer = memo(function ChatComposer({ placeholder, modelName,
           </Button>
         )}
       </form>
-      <div className="mt-2 flex justify-between items-center text-xs text-neutral-600 dark:text-neutral-300 font-semibold px-1">
+      <div className="mt-2 flex justify-between items-center text-xs text-muted-foreground font-medium px-1">
         {/* Model badge – bottom-left of composer */}
         {modelName && modelName !== "TaskPilot AI" ? (
-          <div className="flex items-center gap-1 rounded-full border border-black/10 dark:border-white/10 bg-black/5 dark:bg-white/5 px-2 py-0.5 text-[11px] font-semibold text-neutral-500 dark:text-neutral-400 select-none">
-            <Bot className="w-3 h-3 shrink-0 text-primary/70" />
+          <div className="flex items-center gap-1.5 rounded-md border border-border/80 bg-muted/50 px-2 py-0.5 text-[11px] font-mono text-muted-foreground select-none">
+            <Bot className="w-3 h-3 shrink-0 text-primary" />
             <span className="truncate max-w-[160px]">{modelName}</span>
           </div>
         ) : (
           <div />
         )}
-        <div>
+        <div className="font-mono text-[11px]">
           {value.length}/{maxChars}
         </div>
       </div>

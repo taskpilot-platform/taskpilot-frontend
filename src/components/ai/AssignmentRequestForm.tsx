@@ -131,7 +131,7 @@ export function AssignmentRequestForm({
   };
 
   return (
-    <div className="mt-3 rounded-lg border border-border/60 bg-background/55 p-3 shadow-lg backdrop-blur-[28px] backdrop-saturate-150">
+    <div className="mt-3 rounded-xl border border-border/80 bg-card p-3.5 shadow-sm">
       <div className="mb-3 flex items-start gap-2">
         <div className="mt-0.5 flex h-7 w-7 items-center justify-center rounded-md bg-primary/10 text-primary">
           <ListChecks className="h-4 w-4" />

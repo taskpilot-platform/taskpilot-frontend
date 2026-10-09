@@ -38,7 +38,7 @@ export function TaskDetailSheet({
   if (!taskDetail) {
     return (
       <Sheet open={isOpen} onOpenChange={onOpenChange}>
-        <SheetContent className="w-full sm:max-w-3xl overflow-y-auto sm:border-l sm:shadow-2xl bg-card p-0">
+        <SheetContent className="w-full sm:max-w-3xl overflow-y-auto sm:border-l border-border/80 sm:shadow-xl bg-card p-0">
            {/* Empty state while loading/null */}
         </SheetContent>
       </Sheet>
@@ -49,7 +49,7 @@ export function TaskDetailSheet({
 
   return (
     <Sheet open={isOpen} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full sm:max-w-3xl overflow-y-auto sm:border-l sm:shadow-2xl bg-card p-6 md:p-8 flex flex-col gap-0 border-l border-border/40">
+      <SheetContent className="w-full sm:max-w-3xl overflow-y-auto sm:border-l sm:shadow-xl bg-card p-6 md:p-8 flex flex-col gap-0 border-l border-border/80">
         <SheetTitle className="sr-only">{task.title}</SheetTitle>
         <SheetDescription className="sr-only">Task details for {task.title}</SheetDescription>
         

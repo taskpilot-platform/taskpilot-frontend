@@ -380,14 +380,14 @@ export default function AiChatPage() {
         >
           {messages.length === 0 && !currentStreamMsg && (
             <div className="flex flex-col items-center justify-center h-full text-center space-y-4 p-4">
-              <div className="bg-background/20 backdrop-blur-[40px] backdrop-saturate-150 p-4 sm:p-8 rounded-3xl border border-border/30 shadow-xl flex flex-col items-center max-w-lg w-full">
-                <div className="h-16 w-16 bg-primary/20 text-primary rounded-full flex items-center justify-center mb-4">
-                  <Bot className="w-8 h-8" />
+              <div className="rounded-xl border border-border/80 bg-card p-6 sm:p-8 shadow-sm flex flex-col items-center max-w-md w-full">
+                <div className="h-10 w-10 rounded-lg border border-border/60 bg-muted/40 text-primary flex items-center justify-center mb-3">
+                  <Bot className="w-5 h-5" />
                 </div>
-                <h3 className="text-xl font-bold text-foreground drop-shadow-sm sm:text-2xl">
+                <h3 className="text-lg sm:text-xl font-semibold tracking-tight text-foreground">
                   {t("copilot.welcome_title")}
                 </h3>
-                <p className="text-foreground/90 font-medium mt-3 leading-relaxed drop-shadow-sm text-xs sm:text-sm">
+                <p className="text-xs sm:text-sm text-muted-foreground mt-2 leading-relaxed">
                   {t("copilot.welcome_desc")}
                 </p>
               </div>
@@ -434,7 +434,7 @@ export default function AiChatPage() {
           <div ref={messagesEndRef} />
         </div>
 
-        <div className="p-4 border-t border-border/40 bg-background/10 backdrop-blur-[40px] backdrop-saturate-150 relative z-10">
+        <div className="p-4 border-t border-border/80 bg-card/90 relative z-10">
           <ChatComposer
             placeholder={
               t("copilot.input_placeholder") + (!isMobile ? " (Enter để gửi, Shift+Enter để xuống dòng)" : "")

@@ -50,9 +50,9 @@ export const ConfirmProvider: React.FC<{ children: React.ReactNode }> = ({ child
     <ConfirmContext.Provider value={{ confirm }}>
       {children}
       <Dialog open={isOpen} onOpenChange={(open) => { if (!open) handleCancel(); }}>
-        <DialogContent className="sm:max-w-[440px] overflow-hidden border-border/40 shadow-2xl backdrop-blur-lg bg-card/95 p-6 rounded-xl">
+        <DialogContent className="sm:max-w-[440px] overflow-hidden border border-border/80 shadow-lg bg-card p-6 rounded-xl">
           <div className="flex gap-4 items-start">
-            <div className={`p-3 rounded-full flex-shrink-0 ${
+            <div className={`p-2.5 rounded-lg border border-border/50 flex-shrink-0 ${
               options?.variant === "destructive" 
                 ? "bg-red-500/10 text-red-500 dark:bg-red-500/20" 
                 : options?.variant === "warning"

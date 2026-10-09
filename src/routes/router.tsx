@@ -24,6 +24,9 @@ import AdminSettingsPage from "@/pages/AdminSettingsPage";
 import AiChatPage from "@/pages/AiChatPage";
 import NotificationsPage from "@/pages/NotificationsPage";
 import CommentsPage from "@/pages/CommentsPage";
+import GlobalChatPage from "@/pages/GlobalChatPage";
+import GlobalMeetingsPage from "@/pages/GlobalMeetingsPage";
+import GlobalCalendarPage from "@/pages/GlobalCalendarPage";
 
 // Import Guard
 import ProtectedRoute from "./ProtectedRoute";
@@ -111,6 +114,30 @@ export const router = createBrowserRouter([
       // Thêm các route khác của TaskPilot vào đây sau:
       // { path: "/tasks", element: <TasksPage /> },
 
+      {
+        path: "/chat",
+        element: <GlobalChatPage />,
+      },
+      {
+        path: "/chat/:projectId",
+        element: <GlobalChatPage />,
+      },
+      {
+        path: "/meetings",
+        element: <GlobalMeetingsPage />,
+      },
+      {
+        path: "/meetings/:projectId",
+        element: <GlobalMeetingsPage />,
+      },
+      {
+        path: "/calendar",
+        element: <GlobalCalendarPage />,
+      },
+      {
+        path: "/calendar/:projectId",
+        element: <GlobalCalendarPage />,
+      },
       {
         path: "/copilot",
         element: <AiChatPage />,

@@ -319,22 +319,26 @@ export default function ProjectsPage() {
                       projects.map((project) => (
                         <TableRow
                           key={project.id}
-                          className="cursor-pointer hover:bg-accent/40 transition-colors"
+                          className="cursor-pointer hover:bg-muted/40 transition-colors group"
                           onClick={() => navigate(`/projects/${project.id}/overview`)}
                         >
                           <TableCell>
-                            <div className="font-medium">{project.name}</div>
-                            <div className="text-xs text-muted-foreground">ID: {project.id}</div>
+                            <div className="font-semibold text-foreground group-hover:text-primary transition-colors">{project.name}</div>
+                            <div className="text-xs font-mono text-muted-foreground mt-0.5">PRJ-{project.id}</div>
                           </TableCell>
                           <TableCell>
-                            <Badge variant={project.myRole === "MANAGER" ? "default" : "secondary"}>
+                            <Badge variant={project.myRole === "MANAGER" ? "default" : "secondary"} className="text-xs font-mono font-medium border-border/70">
                               {project.myRole}
                             </Badge>
                           </TableCell>
                           <TableCell>
-                            <Badge variant="outline">{project.status}</Badge>
+                            <Badge variant="outline" className="text-xs font-mono font-medium border-border/70">
+                              {project.status}
+                            </Badge>
                           </TableCell>
-                          <TableCell>{new Date(project.joinedAt).toLocaleDateString("vi-VN")}</TableCell>
+                          <TableCell className="font-mono text-xs text-muted-foreground">
+                            {new Date(project.joinedAt).toLocaleDateString("vi-VN")}
+                          </TableCell>
                         </TableRow>
                       ))
                     )}

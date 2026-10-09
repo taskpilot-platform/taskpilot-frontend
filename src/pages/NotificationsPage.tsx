@@ -304,7 +304,7 @@ export default function NotificationsPage() {
           {isModalLoading ? (
             <div className="flex items-center justify-center p-8 text-sm text-muted-foreground">
               <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-              Đang tải chi tiết thông báo...
+              {t("notifications.loading_detail", { defaultValue: "Đang tải chi tiết thông báo..." })}
             </div>
           ) : activeModalNotification ? (
             <>
@@ -312,9 +312,9 @@ export default function NotificationsPage() {
                 <div className="flex items-center gap-2">
                   <Badge variant="outline">{activeModalNotification.type}</Badge>
                   {activeModalNotification.isRead ? (
-                    <span className="text-xs text-muted-foreground">Đã đọc</span>
+                    <span className="text-xs text-muted-foreground">{t("notifications.read", { defaultValue: "Đã đọc" })}</span>
                   ) : (
-                    <Badge variant="default">Mới</Badge>
+                    <Badge variant="default">{t("notifications.new_badge", { defaultValue: "Mới" })}</Badge>
                   )}
                 </div>
                 <DialogTitle className="mt-2 text-xl font-bold">{activeModalNotification.title}</DialogTitle>
@@ -331,11 +331,11 @@ export default function NotificationsPage() {
                 {activeModalNotification.linkAction && (
                   <Button type="button" className="gap-2" onClick={() => void handleActionClick()}>
                     <ExternalLink className="h-4 w-4" />
-                    Chuyển tới công việc / dự án
+                    {t("notifications.go_to_target", { defaultValue: "Chuyển tới công việc / dự án" })}
                   </Button>
                 )}
                 <Button type="button" variant="outline" onClick={handleCloseModal}>
-                  Đóng
+                  {t("notifications.close", { defaultValue: "Đóng" })}
                 </Button>
               </DialogFooter>
             </>

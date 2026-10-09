@@ -13,7 +13,7 @@ import {
   Send,
   X,
 } from "lucide-react";
-import { Room, RoomEvent, VideoPresets } from "livekit-client";
+import { Room, RoomEvent, Track, VideoPresets } from "livekit-client";
 import { toast } from "react-toastify";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -48,9 +48,214 @@ interface ParticipantView {
   isMuted: boolean;
   isCameraOff: boolean;
   avatarUrl?: string;
-  videoTrack?: MediaStreamTrack;
+  track?: any;
 }
 
+// ---------------------------------------------------------------------------
+// Participant Video Tile Component (Real LiveKit Track / Direct WebCam Feed)
+// ---------------------------------------------------------------------------
+function ParticipantTile({
+  view,
+  room,
+}: {
+  view: ParticipantView;
+  room: Room | null;
+}) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [hasVideoStream, setHasVideoStream] = useState(false);
+
+  useEffect(() => {
+    let attachedTrack: any = null;
+    let fallbackStream: MediaStream | null = null;
+    let isCancelled = false;
+
+    if (view.isCameraOff) {
+      if (videoRef.current) {
+        videoRef.current.srcObject = null;
+      }
+      setHasVideoStream(false);
+      return;
+    }
+
+    // 1. Try LiveKit track first
+    if (room) {
+      if (view.isLocal) {
+        const pub = room.localParticipant.getTrackPublication(Track.Source.Camera);
+        if (pub?.track) {
+          attachedTrack = pub.track;
+          if (videoRef.current) {
+            attachedTrack.attach(videoRef.current);
+            setHasVideoStream(true);
+          }
+        }
+      } else {
+        const remote = room.remoteParticipants.get(view.identity);
+        if (remote) {
+          const pub = remote.getTrackPublication(Track.Source.Camera);
+          if (pub?.track && pub.isSubscribed) {
+            attachedTrack = pub.track;
+            if (videoRef.current) {
+              attachedTrack.attach(videoRef.current);
+              setHasVideoStream(true);
+            }
+          }
+        }
+      }
+    }
+
+    // 2. Fallback to direct local camera stream if local and no LiveKit track yet
+    if (view.isLocal && !attachedTrack && typeof navigator !== "undefined" && navigator.mediaDevices?.getUserMedia) {
+      navigator.mediaDevices
+        .getUserMedia({ video: { width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false })
+        .then((stream) => {
+          if (isCancelled) {
+            stream.getTracks().forEach((t) => t.stop());
+            return;
+          }
+          fallbackStream = stream;
+          if (videoRef.current) {
+            videoRef.current.srcObject = stream;
+            videoRef.current.play().catch(() => {});
+            setHasVideoStream(true);
+          }
+        })
+        .catch((err) => {
+          console.warn("Direct webcam acquisition fallback error:", err);
+          setHasVideoStream(false);
+        });
+    }
+
+    return () => {
+      isCancelled = true;
+      if (attachedTrack && videoRef.current) {
+        try {
+          attachedTrack.detach(videoRef.current);
+        } catch {}
+      }
+      if (fallbackStream) {
+        fallbackStream.getTracks().forEach((t) => t.stop());
+      }
+    };
+  }, [view.isCameraOff, view.isLocal, view.identity, room]);
+
+  return (
+    <div
+      className={`relative bg-slate-900 border rounded-xl overflow-hidden aspect-video flex flex-col items-center justify-center transition-all duration-200 shadow-md ${
+        view.isSpeaking
+          ? "border-emerald-500 ring-2 ring-emerald-500/50 shadow-emerald-950/40"
+          : "border-border/60 hover:border-border"
+      }`}
+      data-testid={`participant-tile-${view.identity}`}
+    >
+      {/* Video or Avatar Placeholder */}
+      {!view.isCameraOff ? (
+        <div className="w-full h-full relative overflow-hidden bg-slate-950 flex items-center justify-center">
+          <video
+            ref={videoRef}
+            autoPlay
+            playsInline
+            muted={view.isLocal}
+            className={`w-full h-full object-cover transition-opacity duration-300 ${
+              hasVideoStream ? "opacity-100" : "opacity-0"
+            }`}
+          />
+          {!hasVideoStream && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-br from-slate-900 to-slate-950">
+              <Avatar className="w-20 h-20 sm:w-24 sm:h-24 border-2 border-emerald-500/40 shadow-xl">
+                <AvatarFallback className="bg-emerald-950 text-emerald-300 font-bold text-2xl sm:text-3xl">
+                  {view.name.slice(0, 2).toUpperCase()}
+                </AvatarFallback>
+              </Avatar>
+              <span className="mt-2 text-xs text-emerald-400 font-medium flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                HD Camera Active
+              </span>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="w-full h-full flex flex-col items-center justify-center p-4 bg-muted/60 dark:bg-slate-900/80">
+          <Avatar className="w-20 h-20 sm:w-24 sm:h-24 border-2 border-muted-foreground/30 shadow-xl">
+            <AvatarFallback className="bg-muted text-muted-foreground font-bold text-2xl sm:text-3xl">
+              {view.name.slice(0, 2).toUpperCase()}
+            </AvatarFallback>
+          </Avatar>
+          <span className="mt-2 text-xs text-muted-foreground font-medium">Camera đã tắt</span>
+        </div>
+      )}
+
+      {/* Badges Overlay */}
+      <div className="absolute bottom-2.5 left-2.5 right-2.5 flex items-center justify-between pointer-events-none z-10">
+        <div className="flex items-center gap-1.5 bg-background/85 dark:bg-slate-950/80 backdrop-blur-md px-2.5 py-1 rounded-lg text-xs font-medium text-foreground border border-border/80 shadow-sm">
+          {view.isHost && (
+            <Badge variant="outline" className="bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30 px-1 py-0 text-[10px] font-normal">
+              Host
+            </Badge>
+          )}
+          <span className="truncate max-w-[120px] sm:max-w-[180px]">{view.name}</span>
+        </div>
+
+        <div className="bg-background/85 dark:bg-slate-950/80 backdrop-blur-md p-1.5 rounded-lg border border-border/80 shadow-sm">
+          {view.isMuted ? (
+            <MicOff className="w-3.5 h-3.5 text-red-500" />
+          ) : (
+            <Mic className="w-3.5 h-3.5 text-emerald-500" />
+          )}
+        </div>
+      </div>
+
+      {/* Speaking indicator label */}
+      {view.isSpeaking && (
+        <div className="absolute top-2.5 left-2.5 bg-emerald-500 text-white text-[10px] px-2 py-0.5 rounded-md font-semibold tracking-wide uppercase shadow-sm z-10">
+          Đang nói
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Screen Share Viewer Component
+// ---------------------------------------------------------------------------
+function ScreenShareViewer({
+  room,
+}: {
+  room: Room | null;
+}) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    let track: any = null;
+    if (room && room.localParticipant) {
+      const pub = room.localParticipant.getTrackPublication(Track.Source.ScreenShare);
+      if (pub?.track && videoRef.current) {
+        track = pub.track;
+        track.attach(videoRef.current);
+      }
+    }
+    return () => {
+      if (track && videoRef.current) {
+        try {
+          track.detach(videoRef.current);
+        } catch {}
+      }
+    };
+  }, [room]);
+
+  return (
+    <div className="w-full aspect-video max-h-[500px] bg-slate-950 rounded-xl overflow-hidden border border-emerald-500/40 shadow-xl relative mb-4">
+      <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-contain" />
+      <div className="absolute top-3 left-3 bg-background/85 backdrop-blur-md px-3 py-1.5 rounded-lg text-xs font-medium text-emerald-600 dark:text-emerald-400 border border-border shadow-sm flex items-center gap-2">
+        <ScreenShare className="w-4 h-4 text-emerald-500 animate-pulse" />
+        <span>Màn hình đang chia sẻ</span>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Main LiveMeetingRoom Component
+// ---------------------------------------------------------------------------
 export function LiveMeetingRoom({
   projectId,
   meetingId,
@@ -239,7 +444,7 @@ export function LiveMeetingRoom({
       const livekitUrl = activeTokenData?.livekitUrl || "wss://taskpilot-collab-m3oqfj4g.livekit.cloud";
       await room.connect(livekitUrl, token);
 
-      // Attempt publishing local camera & mic (wrapped for fallback in headless/no-device environments)
+      // Attempt publishing local camera & mic
       try {
         await room.localParticipant.enableCameraAndMicrophone();
         setIsMicOn(true);
@@ -252,7 +457,6 @@ export function LiveMeetingRoom({
       updateParticipantViews(activeTokenData);
     } catch (err: any) {
       console.warn("LiveKit Room connection fallback mode active:", err?.message || err);
-      // Fallback: If WebRTC connection fails due to firewall/offline mock, enter simulated connected state
       setConnectionState("connected");
       setupFallbackViews(activeTokenData);
     }
@@ -465,24 +669,24 @@ export function LiveMeetingRoom({
   }
 
   return (
-    <div className="flex flex-col h-[calc(100vh-140px)] min-h-[600px] w-full bg-slate-950 text-slate-100 rounded-xl overflow-hidden border border-slate-800 shadow-2xl relative" data-testid="live-meeting-room">
+    <div className="flex flex-col h-[calc(100vh-140px)] min-h-[600px] w-full bg-card text-card-foreground rounded-xl overflow-hidden border border-border shadow-xl relative" data-testid="live-meeting-room">
       {/* 1. Header Bar */}
-      <div className="flex items-center justify-between px-4 py-3 bg-slate-900/90 border-b border-slate-800/80 backdrop-blur z-20">
+      <div className="flex items-center justify-between px-5 py-3.5 bg-card border-b border-border z-20 shadow-sm">
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
             <span className="flex h-3 w-3 relative">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
               <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
             </span>
-            <h2 className="font-semibold text-base sm:text-lg text-slate-100 truncate max-w-[200px] sm:max-w-md" data-testid="meeting-title">
+            <h2 className="font-semibold text-base sm:text-lg text-foreground truncate max-w-[200px] sm:max-w-md" data-testid="meeting-title">
               {meeting?.title || tokenData?.meeting?.title || tokenDataRef.current?.meeting?.title || "Cuộc họp trực tuyến"}
             </h2>
           </div>
-          <Badge variant="outline" className="bg-slate-800/80 text-emerald-400 border-slate-700 text-xs gap-1 font-mono" data-testid="meeting-timer">
+          <Badge variant="outline" className="bg-muted text-foreground border-border text-xs gap-1 font-mono" data-testid="meeting-timer">
             {formatTime(elapsedSeconds)}
           </Badge>
           {(meeting?.recordingEnabled ?? tokenData?.meeting?.recordingEnabled ?? tokenDataRef.current?.meeting?.recordingEnabled) && (
-            <Badge variant="outline" className="bg-red-950/60 text-red-400 border-red-800/60 text-xs gap-1">
+            <Badge variant="outline" className="bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/30 text-xs gap-1 font-medium">
               <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse"></span>
               REC
             </Badge>
@@ -493,12 +697,12 @@ export function LiveMeetingRoom({
           <Button
             type="button"
             size="sm"
-            variant="ghost"
+            variant="outline"
             onClick={copyInviteLink}
-            className="text-slate-300 hover:text-white hover:bg-slate-800 text-xs gap-1.5"
+            className="border-border hover:bg-accent text-xs gap-1.5"
             data-testid="copy-meeting-link-btn"
           >
-            {copiedLink ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+            {copiedLink ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
             <span className="hidden sm:inline">{copiedLink ? "Đã chép" : "Sao chép link"}</span>
           </Button>
 
@@ -508,7 +712,7 @@ export function LiveMeetingRoom({
               size="sm"
               variant="destructive"
               onClick={handleEndMeeting}
-              className="bg-red-700 hover:bg-red-600 text-xs gap-1 font-medium"
+              className="bg-destructive hover:bg-destructive/90 text-destructive-foreground text-xs gap-1 font-medium"
               data-testid="end-meeting-btn"
             >
               <PhoneOff className="w-3.5 h-3.5" />
@@ -521,10 +725,10 @@ export function LiveMeetingRoom({
             size="sm"
             variant="outline"
             onClick={handleLeave}
-            className="border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs gap-1"
+            className="border-border hover:bg-destructive/10 hover:text-destructive text-xs gap-1"
             data-testid="leave-meeting-btn"
           >
-            <PhoneOff className="w-3.5 h-3.5 text-red-400" />
+            <PhoneOff className="w-3.5 h-3.5 text-destructive" />
             <span>Rời phòng</span>
           </Button>
         </div>
@@ -533,7 +737,12 @@ export function LiveMeetingRoom({
       {/* 2. Main Area: Video Grid & Side Drawers */}
       <div className="flex flex-1 overflow-hidden relative">
         {/* Center Stage: Video Grid */}
-        <div className="flex-1 p-3 sm:p-4 overflow-y-auto flex items-center justify-center">
+        <div className="flex-1 p-3 sm:p-5 overflow-y-auto flex flex-col items-center justify-center bg-muted/40">
+          {/* Optional Screen Share Viewer */}
+          {isScreenSharing && (
+            <ScreenShareViewer room={roomRef.current} />
+          )}
+
           <div
             className={`w-full h-full max-h-[750px] grid gap-3 sm:gap-4 items-center justify-center ${
               views.length <= 1
@@ -547,106 +756,49 @@ export function LiveMeetingRoom({
             data-testid="video-grid"
           >
             {views.map((v) => (
-              <div
+              <ParticipantTile
                 key={v.identity}
-                className={`relative bg-slate-900 border rounded-xl overflow-hidden aspect-video flex flex-col items-center justify-center transition-all duration-200 shadow-md ${
-                  v.isSpeaking
-                    ? "border-emerald-500 ring-2 ring-emerald-500/50 shadow-emerald-950/40"
-                    : "border-slate-800 hover:border-slate-700"
-                }`}
-                data-testid={`participant-tile-${v.identity}`}
-              >
-                {/* Video or Avatar Placeholder */}
-                {!v.isCameraOff ? (
-                  <div className="w-full h-full bg-slate-900 flex items-center justify-center relative overflow-hidden">
-                    <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-slate-900 to-slate-950">
-                      <Avatar className="w-20 h-20 sm:w-24 sm:h-24 border-2 border-emerald-500/40 shadow-xl">
-                        <AvatarFallback className="bg-emerald-950 text-emerald-300 font-bold text-2xl sm:text-3xl">
-                          {v.name.slice(0, 2).toUpperCase()}
-                        </AvatarFallback>
-                      </Avatar>
-                      <span className="mt-2 text-xs text-emerald-400 font-medium flex items-center gap-1">
-                        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                        HD Camera Active
-                      </span>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex flex-col items-center justify-center p-4">
-                    <Avatar className="w-20 h-20 sm:w-24 sm:h-24 border-2 border-slate-700 shadow-xl">
-                      <AvatarFallback className="bg-slate-800 text-slate-300 font-bold text-2xl sm:text-3xl">
-                        {v.name.slice(0, 2).toUpperCase()}
-                      </AvatarFallback>
-                    </Avatar>
-                    <span className="mt-2 text-xs text-slate-400">Camera đã tắt</span>
-                  </div>
-                )}
-
-                {/* Badges Overlay */}
-                <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between pointer-events-none">
-                  <div className="flex items-center gap-1.5 bg-slate-950/80 backdrop-blur-sm px-2.5 py-1 rounded-md text-xs font-medium text-slate-200 border border-slate-800/80">
-                    {v.isHost && (
-                      <Badge variant="outline" className="bg-amber-950/80 text-amber-300 border-amber-800/80 px-1 py-0 text-[10px] font-normal">
-                        Host
-                      </Badge>
-                    )}
-                    <span className="truncate max-w-[120px] sm:max-w-[180px]">{v.name}</span>
-                  </div>
-
-                  <div className="bg-slate-950/80 backdrop-blur-sm p-1.5 rounded-md border border-slate-800/80">
-                    {v.isMuted ? (
-                      <MicOff className="w-3.5 h-3.5 text-red-400" />
-                    ) : (
-                      <Mic className="w-3.5 h-3.5 text-emerald-400" />
-                    )}
-                  </div>
-                </div>
-
-                {/* Speaking indicator label */}
-                {v.isSpeaking && (
-                  <div className="absolute top-2 left-2 bg-emerald-500/90 text-white text-[10px] px-2 py-0.5 rounded font-semibold tracking-wide uppercase">
-                    Đang nói
-                  </div>
-                )}
-              </div>
+                view={v}
+                room={roomRef.current}
+              />
             ))}
           </div>
         </div>
 
         {/* Side Drawer: Participants List */}
         {isParticipantsOpen && (
-          <div className="w-72 sm:w-80 bg-slate-900 border-l border-slate-800 flex flex-col z-10 transition-all shadow-xl" data-testid="participants-drawer">
-            <div className="flex items-center justify-between p-3.5 border-b border-slate-800">
+          <div className="w-72 sm:w-80 bg-card border-l border-border flex flex-col z-10 transition-all shadow-xl" data-testid="participants-drawer">
+            <div className="flex items-center justify-between p-3.5 border-b border-border">
               <div className="flex items-center gap-2">
-                <Users className="w-4 h-4 text-emerald-400" />
+                <Users className="w-4 h-4 text-emerald-500" />
                 <h3 className="font-semibold text-sm">Người tham gia ({views.length})</h3>
               </div>
-              <Button size="icon" variant="ghost" className="h-7 w-7 text-slate-400 hover:text-white" onClick={() => setIsParticipantsOpen(false)}>
+              <Button size="icon" variant="ghost" className="h-7 w-7 text-muted-foreground hover:text-foreground" onClick={() => setIsParticipantsOpen(false)}>
                 <X className="w-4 h-4" />
               </Button>
             </div>
             <div className="flex-1 overflow-y-auto p-2 space-y-1">
               {views.map((p) => (
-                <div key={p.identity} className="flex items-center justify-between p-2 rounded-lg hover:bg-slate-800/70 text-xs">
+                <div key={p.identity} className="flex items-center justify-between p-2 rounded-lg hover:bg-accent text-xs transition-colors">
                   <div className="flex items-center gap-2">
                     <Avatar className="w-7 h-7">
-                      <AvatarFallback className="bg-slate-800 text-slate-300 text-xs">
+                      <AvatarFallback className="bg-muted text-muted-foreground text-xs font-semibold">
                         {p.name.slice(0, 2).toUpperCase()}
                       </AvatarFallback>
                     </Avatar>
                     <div>
                       <div className="font-medium flex items-center gap-1.5">
                         <span className="truncate max-w-[130px]">{p.name}</span>
-                        {p.isHost && <span className="text-[10px] bg-amber-950/60 text-amber-400 px-1 rounded border border-amber-900/60">Host</span>}
+                        {p.isHost && <span className="text-[10px] bg-amber-500/10 text-amber-600 dark:text-amber-400 px-1 rounded border border-amber-500/30">Host</span>}
                       </div>
-                      <div className="text-[10px] text-slate-400">
+                      <div className="text-[10px] text-muted-foreground">
                         {p.isSpeaking ? "Đang nói" : p.isMuted ? "Đã tắt mic" : "Đang mở mic"}
                       </div>
                     </div>
                   </div>
-                  <div className="flex items-center gap-1 text-slate-400">
-                    {p.isMuted ? <MicOff className="w-3.5 h-3.5 text-red-400" /> : <Mic className="w-3.5 h-3.5 text-emerald-400" />}
-                    {p.isCameraOff ? <VideoOff className="w-3.5 h-3.5 text-slate-500" /> : <Video className="w-3.5 h-3.5 text-emerald-400" />}
+                  <div className="flex items-center gap-1 text-muted-foreground">
+                    {p.isMuted ? <MicOff className="w-3.5 h-3.5 text-destructive" /> : <Mic className="w-3.5 h-3.5 text-emerald-500" />}
+                    {p.isCameraOff ? <VideoOff className="w-3.5 h-3.5 text-muted-foreground/60" /> : <Video className="w-3.5 h-3.5 text-emerald-500" />}
                   </div>
                 </div>
               ))}
@@ -656,33 +808,33 @@ export function LiveMeetingRoom({
 
         {/* Side Drawer: In-Meeting Realtime Chat */}
         {isChatOpen && (
-          <div className="w-72 sm:w-80 bg-slate-900 border-l border-slate-800 flex flex-col z-10 transition-all shadow-xl" data-testid="in-meeting-chat-drawer">
-            <div className="flex items-center justify-between p-3.5 border-b border-slate-800">
+          <div className="w-72 sm:w-80 bg-card border-l border-border flex flex-col z-10 transition-all shadow-xl" data-testid="in-meeting-chat-drawer">
+            <div className="flex items-center justify-between p-3.5 border-b border-border">
               <div className="flex items-center gap-2">
-                <MessageSquare className="w-4 h-4 text-emerald-400" />
+                <MessageSquare className="w-4 h-4 text-emerald-500" />
                 <h3 className="font-semibold text-sm">Tin nhắn trong cuộc họp</h3>
               </div>
-              <Button size="icon" variant="ghost" className="h-7 w-7 text-slate-400 hover:text-white" onClick={() => setIsChatOpen(false)}>
+              <Button size="icon" variant="ghost" className="h-7 w-7 text-muted-foreground hover:text-foreground" onClick={() => setIsChatOpen(false)}>
                 <X className="w-4 h-4" />
               </Button>
             </div>
 
             <div className="flex-1 overflow-y-auto p-3 space-y-3">
               {messages.length === 0 ? (
-                <div className="text-center py-10 text-slate-500 text-xs">
+                <div className="text-center py-10 text-muted-foreground text-xs">
                   <MessageSquare className="w-8 h-8 mx-auto mb-2 opacity-30" />
                   Chưa có tin nhắn nào trong cuộc họp.
                 </div>
               ) : (
                 messages.map((m) => (
                   <div key={m.id} className={`flex flex-col text-xs ${m.isSelf ? "items-end" : "items-start"}`}>
-                    <div className="flex items-center gap-1.5 text-[10px] text-slate-400 mb-0.5">
+                    <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground mb-0.5">
                       <span className="font-medium">{m.senderName}</span>
                       <span>{m.time}</span>
                     </div>
                     <div
                       className={`px-3 py-1.5 rounded-lg max-w-[85%] break-words leading-relaxed ${
-                        m.isSelf ? "bg-emerald-600 text-white rounded-tr-none" : "bg-slate-800 text-slate-100 rounded-tl-none border border-slate-700"
+                        m.isSelf ? "bg-primary text-primary-foreground rounded-tr-none shadow-sm" : "bg-muted text-foreground rounded-tl-none border border-border/80"
                       }`}
                     >
                       {m.content}
@@ -693,16 +845,16 @@ export function LiveMeetingRoom({
               <div ref={chatBottomRef} />
             </div>
 
-            <form onSubmit={handleSendMessage} className="p-2.5 border-t border-slate-800 flex gap-1.5">
+            <form onSubmit={handleSendMessage} className="p-2.5 border-t border-border flex gap-1.5">
               <Input
                 placeholder="Nhắn tin cho mọi người..."
                 value={chatInput}
                 onChange={(e) => setChatInput(e.target.value)}
-                className="bg-slate-800 border-slate-700 text-slate-100 text-xs h-9 focus-visible:ring-emerald-500"
+                className="text-xs h-9"
                 data-testid="in-meeting-chat-input"
               />
-              <Button type="submit" size="icon" className="h-9 w-9 bg-emerald-600 hover:bg-emerald-500 shrink-0" data-testid="in-meeting-chat-send-btn">
-                <Send className="w-3.5 h-3.5 text-white" />
+              <Button type="submit" size="icon" className="h-9 w-9 bg-primary hover:bg-primary/90 shrink-0" data-testid="in-meeting-chat-send-btn">
+                <Send className="w-3.5 h-3.5 text-primary-foreground" />
               </Button>
             </form>
           </div>
@@ -710,7 +862,7 @@ export function LiveMeetingRoom({
       </div>
 
       {/* 3. Floating Bottom Toolbar */}
-      <div className="p-3 bg-slate-900/95 border-t border-slate-800/80 backdrop-blur flex items-center justify-center gap-2 sm:gap-3 z-20">
+      <div className="p-3 bg-card border-t border-border flex items-center justify-center gap-2 sm:gap-3 z-20 shadow-md">
         {/* Mic Toggle */}
         <Button
           type="button"
@@ -719,12 +871,12 @@ export function LiveMeetingRoom({
           onClick={toggleMic}
           className={`h-10 px-3 sm:px-4 rounded-xl gap-2 font-medium transition-all ${
             isMicOn
-              ? "bg-slate-800 hover:bg-slate-700 text-slate-100 border-slate-700"
-              : "bg-red-600 hover:bg-red-500 text-white shadow-lg shadow-red-950/50"
+              ? "border-border bg-background hover:bg-accent text-foreground"
+              : "bg-destructive hover:bg-destructive/90 text-destructive-foreground shadow-sm"
           }`}
           data-testid="toggle-mic-btn"
         >
-          {isMicOn ? <Mic className="w-4 h-4 text-emerald-400" /> : <MicOff className="w-4 h-4" />}
+          {isMicOn ? <Mic className="w-4 h-4 text-emerald-500" /> : <MicOff className="w-4 h-4" />}
           <span className="hidden sm:inline text-xs">{isMicOn ? "Tắt mic" : "Bật mic"}</span>
         </Button>
 
@@ -736,12 +888,12 @@ export function LiveMeetingRoom({
           onClick={toggleCam}
           className={`h-10 px-3 sm:px-4 rounded-xl gap-2 font-medium transition-all ${
             isCamOn
-              ? "bg-slate-800 hover:bg-slate-700 text-slate-100 border-slate-700"
-              : "bg-red-600 hover:bg-red-500 text-white shadow-lg shadow-red-950/50"
+              ? "border-border bg-background hover:bg-accent text-foreground"
+              : "bg-destructive hover:bg-destructive/90 text-destructive-foreground shadow-sm"
           }`}
           data-testid="toggle-cam-btn"
         >
-          {isCamOn ? <Video className="w-4 h-4 text-emerald-400" /> : <VideoOff className="w-4 h-4" />}
+          {isCamOn ? <Video className="w-4 h-4 text-emerald-500" /> : <VideoOff className="w-4 h-4" />}
           <span className="hidden sm:inline text-xs">{isCamOn ? "Tắt camera" : "Bật camera"}</span>
         </Button>
 
@@ -749,12 +901,12 @@ export function LiveMeetingRoom({
         <Button
           type="button"
           size="sm"
-          variant={isScreenSharing ? "secondary" : "outline"}
+          variant={isScreenSharing ? "default" : "outline"}
           onClick={toggleScreenShare}
           className={`h-10 px-3 sm:px-4 rounded-xl gap-2 font-medium transition-all ${
             isScreenSharing
-              ? "bg-emerald-600 text-white hover:bg-emerald-500"
-              : "bg-slate-800 hover:bg-slate-700 text-slate-100 border-slate-700"
+              ? "bg-emerald-600 text-white hover:bg-emerald-500 shadow-sm"
+              : "border-border bg-background hover:bg-accent text-foreground"
           }`}
           data-testid="toggle-screen-share-btn"
         >
@@ -773,8 +925,8 @@ export function LiveMeetingRoom({
           }}
           className={`h-10 px-3 sm:px-4 rounded-xl gap-2 font-medium transition-all ${
             isParticipantsOpen
-              ? "bg-emerald-950/80 text-emerald-300 border-emerald-700"
-              : "bg-slate-800 hover:bg-slate-700 text-slate-100 border-slate-700"
+              ? "bg-accent text-accent-foreground border-border"
+              : "border-border bg-background hover:bg-accent text-foreground"
           }`}
           data-testid="toggle-participants-drawer-btn"
         >
@@ -793,8 +945,8 @@ export function LiveMeetingRoom({
           }}
           className={`h-10 px-3 sm:px-4 rounded-xl gap-2 font-medium transition-all ${
             isChatOpen
-              ? "bg-emerald-950/80 text-emerald-300 border-emerald-700"
-              : "bg-slate-800 hover:bg-slate-700 text-slate-100 border-slate-700"
+              ? "bg-accent text-accent-foreground border-border"
+              : "border-border bg-background hover:bg-accent text-foreground"
           }`}
           data-testid="toggle-in-meeting-chat-btn"
         >

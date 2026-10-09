@@ -386,7 +386,7 @@ export default function ProjectSettingsPage() {
                 return (
                   <div key={m.userId} className="flex flex-col gap-3 p-4 bg-card hover:bg-muted/30 transition-colors sm:flex-row sm:items-center sm:justify-between">
                     <div className="flex items-center gap-3">
-                      <div className="h-10 w-10 rounded-full bg-gradient-to-br from-blue-500/20 to-blue-500/5 flex items-center justify-center text-sm font-bold text-blue-600 border border-blue-500/20">
+                      <div className="h-9 w-9 rounded-full bg-muted border border-border/80 flex items-center justify-center text-xs font-semibold text-foreground shrink-0">
                         {initials}
                       </div>
                       <div>

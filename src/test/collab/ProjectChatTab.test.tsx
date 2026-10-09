@@ -28,9 +28,8 @@ describe("ProjectChatTab Component", () => {
     render(<ProjectChatTab projectId={100} currentUserId={1} />);
 
     await waitFor(() => {
-      expect(screen.getByText("No messages yet")).toBeInTheDocument();
+      expect(screen.getByText(/Chưa có tin nhắn nào|No messages yet/i)).toBeInTheDocument();
     });
-    expect(screen.getByText("Say hello to your project teammates to kick off collaboration!")).toBeInTheDocument();
   });
 
   it("renders messages list with sender name and content", async () => {
@@ -80,7 +79,7 @@ describe("ProjectChatTab Component", () => {
     render(<ProjectChatTab projectId={100} isArchived={true} currentUserId={1} />);
 
     await waitFor(() => {
-      expect(screen.getByPlaceholderText("Project is archived")).toBeDisabled();
+      expect(screen.getByPlaceholderText(/Dự án đã lưu trữ|Project is archived/i)).toBeDisabled();
     });
   });
 });

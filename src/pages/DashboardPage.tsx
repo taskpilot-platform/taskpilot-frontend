@@ -20,12 +20,8 @@ import { skillService } from "@/services/skill.service";
 import { projectService } from "@/services/project.service";
 import { getApiErrorMessage } from "@/lib/http";
 import { 
-  Briefcase, 
-  CheckCircle2, 
   ChevronRight, 
   FolderKanban, 
-  Loader2, 
-  ShieldCheck, 
   Zap,
   CalendarDays,
   LayoutDashboard
@@ -65,7 +61,7 @@ export default function DashboardPage() {
   }, []);
 
   const handleShowToast = () => {
-    toast.success("Frontend đã kết nối API backend thành công");
+    toast.success(t("dashboard.check_conn_success", { defaultValue: "Frontend đã kết nối API backend thành công" }));
   };
 
   const currentDate = new Date().toLocaleDateString(undefined, { 
@@ -77,90 +73,128 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen space-y-6 p-3 sm:p-6 md:p-8 relative max-w-7xl mx-auto">
-      {isLoading && (
-        <div className="fixed inset-0 z-[100] bg-background/50 backdrop-blur-xl flex flex-col items-center justify-center text-muted-foreground transition-all duration-300">
-          <Loader2 className="mb-4 h-12 w-12 animate-spin text-primary" />
-          <p className="text-lg font-medium animate-pulse">{t("dashboard.loading", { defaultValue: "Loading your workspace..." })}</p>
-        </div>
-      )}
-
-      {/* Hero Section */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-primary/10 via-primary/5 to-background border border-border/50 shadow-sm">
-        <div className="absolute inset-0 bg-grid-white/10 dark:bg-grid-black/10 [mask-image:linear-gradient(to_bottom,white,transparent)]" />
-        <div className="relative flex flex-col md:flex-row md:items-center md:justify-between p-8 md:p-12 gap-6">
-          <div className="space-y-4">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-sm font-medium border border-primary/20 backdrop-blur-md shadow-sm">
-              <CalendarDays className="h-4 w-4" />
-              {currentDate}
+      {/* Hero Header - Editorial, Crisp, No AI Gradient/Blur Blobs */}
+      <div className="rounded-xl border border-border/80 bg-card p-6 sm:p-8 shadow-sm">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
+          <div className="space-y-3">
+            <div className="inline-flex items-center gap-2 px-2.5 py-0.5 rounded border border-border/70 bg-muted/40 text-xs font-mono font-medium text-muted-foreground">
+              <CalendarDays className="h-3.5 w-3.5" />
+              <span>{currentDate}</span>
             </div>
             <div>
-              <h1 className="text-2xl sm:text-4xl md:text-5xl font-extrabold tracking-tight text-foreground">
-                {t("dashboard.welcome", { defaultValue: "Welcome back," })} <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-primary/60">{profile?.fullName?.split(' ')[0] || 'User'}!</span>
+              <h1 className="text-2xl sm:text-3xl md:text-4xl font-semibold tracking-tight text-foreground">
+                {t("dashboard.welcome", { defaultValue: "Welcome back," })}{" "}
+                <span className="text-primary font-bold">
+                  {profile ? (profile.fullName?.split(' ')[0] || 'User') : (
+                    <span className="inline-block w-24 h-7 rounded bg-muted/60 animate-pulse align-middle" />
+                  )}
+                </span>
               </h1>
-              <p className="text-lg text-muted-foreground mt-2 max-w-xl">
+              <p className="text-sm sm:text-base text-muted-foreground mt-1 max-w-xl font-normal">
                 {t("dashboard.desc", { defaultValue: "Here's an overview of your active workload and projects. Let's make today productive." })}
               </p>
             </div>
           </div>
           <div className="flex items-center gap-3 shrink-0">
             <ThemeSelector />
-            <Button onClick={handleShowToast} variant="outline" className="shadow-sm hover:bg-primary hover:text-primary-foreground transition-all">
-              <Zap className="h-4 w-4 mr-2" /> {t("dashboard.check_conn_btn", { defaultValue: "Test API" })}
+            <Button onClick={handleShowToast} variant="outline" size="sm" className="shadow-none border-border/80 hover:bg-muted font-medium">
+              <Zap className="h-3.5 w-3.5 mr-1.5" /> {t("dashboard.check_conn_btn", { defaultValue: "Test API" })}
             </Button>
           </div>
         </div>
       </div>
 
+      {/* Bento Grid Metrics - Asymmetric, High Density, Typographic First */}
       <div className="grid gap-6 md:grid-cols-3">
-        {/* Profile Card */}
-        <Card className="bg-white/40 dark:bg-black/20 backdrop-blur-xl border-border/60 shadow-sm hover:shadow-md transition-all duration-300 group">
-          <CardHeader className="pb-4">
-            <CardTitle className="flex items-center gap-2 text-lg">
-              <div className="p-2 rounded-lg bg-blue-500/10 text-blue-500 group-hover:bg-blue-500 group-hover:text-white transition-colors">
-                <ShieldCheck className="h-5 w-5" />
+        {/* Workload Hero Card (Spans 2 columns) */}
+        <Card className="md:col-span-2 border-border/80 bg-card shadow-sm flex flex-col justify-between">
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs uppercase tracking-wider font-mono font-semibold text-muted-foreground">
+                  {t("dashboard.workload", { defaultValue: "Active Workload" })}
+                </p>
+                <CardTitle className="text-lg font-semibold mt-1">
+                  {t("dashboard.workload_desc", { defaultValue: "Tasks currently assigned to you" })}
+                </CardTitle>
               </div>
+              <div className="flex items-center gap-2">
+                {isLoading ? (
+                  <div className="h-5 w-20 rounded bg-muted/50 animate-pulse" />
+                ) : (
+                  <>
+                    <Badge variant="outline" className="text-xs font-mono border-border/70">
+                      {profile?.role || "MEMBER"}
+                    </Badge>
+                    <Badge className="text-xs font-mono bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/25">
+                      {profile?.status || "ACTIVE"}
+                    </Badge>
+                  </>
+                )}
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="pt-4">
+            {isLoading ? (
+              <div className="space-y-3 py-1">
+                <div className="h-14 w-28 rounded bg-muted/60 animate-pulse" />
+                <div className="h-4 w-44 rounded bg-muted/40 animate-pulse" />
+              </div>
+            ) : (
+              <div className="flex items-baseline gap-3">
+                <span className="text-5xl sm:text-6xl font-bold tracking-tight text-foreground font-mono">
+                  {profile?.currentWorkload || 0}
+                </span>
+                <span className="text-sm text-muted-foreground font-medium uppercase tracking-wider">
+                  Assigned Tasks
+                </span>
+              </div>
+            )}
+            <div className="mt-4 pt-4 border-t border-border/50 flex items-center justify-between text-xs text-muted-foreground">
+              <span>Ready for execution across active project boards</span>
+              <Button variant="link" size="sm" className="p-0 h-auto text-xs text-primary font-medium" onClick={() => navigate('/projects')}>
+                View board tasks &rarr;
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Profile Card (Spans 1 column) */}
+        <Card className="border-border/80 bg-card shadow-sm flex flex-col justify-between">
+          <CardHeader className="pb-2">
+            <p className="text-xs uppercase tracking-wider font-mono font-semibold text-muted-foreground">
               {t("dashboard.current_user", { defaultValue: "Profile Info" })}
-            </CardTitle>
-            <CardDescription className="font-mono text-xs">{profile?.email || "-"}</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-1">
-            <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">{t("dashboard.fullname", { defaultValue: "Full Name" })}</p>
-            <p className="text-xl font-bold text-foreground">{profile?.fullName || "-"}</p>
-          </CardContent>
-        </Card>
-
-        {/* Status Card */}
-        <Card className="bg-white/40 dark:bg-black/20 backdrop-blur-xl border-border/60 shadow-sm hover:shadow-md transition-all duration-300 group">
-          <CardHeader className="pb-4">
-            <CardTitle className="flex items-center gap-2 text-lg">
-              <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-500 group-hover:bg-emerald-500 group-hover:text-white transition-colors">
-                <CheckCircle2 className="h-5 w-5" />
+            </p>
+            {isLoading ? (
+              <div className="space-y-2 mt-1">
+                <div className="h-5 w-36 rounded bg-muted/60 animate-pulse" />
+                <div className="h-3 w-48 rounded bg-muted/40 animate-pulse" />
               </div>
-              {t("dashboard.account_status", { defaultValue: "Account Status" })}
-            </CardTitle>
-            <CardDescription>{t("dashboard.account_status_desc", { defaultValue: "Your current standing and role" })}</CardDescription>
+            ) : (
+              <>
+                <CardTitle className="text-base font-semibold truncate mt-1">
+                  {profile?.fullName || "-"}
+                </CardTitle>
+                <CardDescription className="font-mono text-xs truncate">
+                  {profile?.email || "-"}
+                </CardDescription>
+              </>
+            )}
           </CardHeader>
-          <CardContent className="flex items-center gap-3">
-            <Badge className="px-3 py-1 rounded-md text-sm shadow-sm bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 border-emerald-500/20">{profile?.status || "UNKNOWN"}</Badge>
-            <Badge variant="secondary" className="px-3 py-1 rounded-md text-sm border-border/50">{profile?.role || "-"}</Badge>
-          </CardContent>
-        </Card>
-
-        {/* Workload Card */}
-        <Card className="bg-white/40 dark:bg-black/20 backdrop-blur-xl border-border/60 shadow-sm hover:shadow-md transition-all duration-300 group">
-          <CardHeader className="pb-4">
-            <CardTitle className="flex items-center gap-2 text-lg">
-              <div className="p-2 rounded-lg bg-amber-500/10 text-amber-500 group-hover:bg-amber-500 group-hover:text-white transition-colors">
-                <Briefcase className="h-5 w-5" />
+          <CardContent className="pt-2">
+            <div className="space-y-2 rounded-lg bg-muted/30 p-3 border border-border/50">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-muted-foreground font-medium">{t("dashboard.account_status", { defaultValue: "Status" })}</span>
+                <span className="font-mono font-semibold text-foreground">
+                  {isLoading ? "..." : (profile?.status || "ACTIVE")}
+                </span>
               </div>
-              {t("dashboard.workload", { defaultValue: "Active Workload" })}
-            </CardTitle>
-            <CardDescription>{t("dashboard.workload_desc", { defaultValue: "Tasks currently assigned to you" })}</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-baseline gap-2">
-              <span className="text-4xl font-black text-foreground">{profile?.currentWorkload || 0}</span>
-              <span className="text-sm text-muted-foreground font-medium uppercase tracking-wide">Tasks</span>
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-muted-foreground font-medium">Role</span>
+                <span className="font-mono text-foreground">
+                  {isLoading ? "..." : (profile?.role || "USER")}
+                </span>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -183,7 +217,19 @@ export default function DashboardPage() {
             </div>
           </CardHeader>
           <CardContent className="p-0 flex-1">
-            {projects.length === 0 ? (
+            {isLoading ? (
+              <div className="p-4 space-y-3">
+                {[1, 2, 3].map((n) => (
+                  <div key={n} className="flex items-center justify-between py-2 border-b border-border/30 last:border-0">
+                    <div className="space-y-1.5">
+                      <div className="h-4 w-44 rounded bg-muted/60 animate-pulse" />
+                      <div className="h-3 w-20 rounded bg-muted/40 animate-pulse" />
+                    </div>
+                    <div className="h-5 w-16 rounded bg-muted/40 animate-pulse" />
+                  </div>
+                ))}
+              </div>
+            ) : projects.length === 0 ? (
               <div className="p-8 text-center text-muted-foreground flex flex-col items-center justify-center h-full">
                 <FolderKanban className="h-10 w-10 mb-3 opacity-20" />
                 <p>No active projects found.</p>
@@ -194,8 +240,8 @@ export default function DashboardPage() {
                 {projects.map((project) => (
                   <div key={project.id} className="p-4 hover:bg-muted/30 transition-colors flex items-center justify-between group">
                     <div className="flex items-center gap-4">
-                      <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center border border-primary/20 shadow-sm shrink-0">
-                        <LayoutDashboard className="h-5 w-5 text-primary" />
+                      <div className="h-9 w-9 rounded-lg bg-muted/60 border border-border/80 flex items-center justify-center text-muted-foreground group-hover:text-primary transition-colors shrink-0">
+                        <LayoutDashboard className="h-4.5 w-4.5" />
                       </div>
                       <div>
                         <h4 className="font-semibold text-foreground group-hover:text-primary transition-colors cursor-pointer" onClick={() => navigate(`/projects/${project.id}/overview`)}>
@@ -233,7 +279,13 @@ export default function DashboardPage() {
             </div>
           </CardHeader>
           <CardContent className="p-6 flex-1">
-            {skills.length === 0 ? (
+            {isLoading ? (
+              <div className="flex flex-wrap gap-2.5">
+                {[1, 2, 3, 4, 5].map((n) => (
+                  <div key={n} className="h-8 w-24 rounded-full bg-muted/50 animate-pulse" />
+                ))}
+              </div>
+            ) : skills.length === 0 ? (
               <div className="text-center text-muted-foreground flex flex-col items-center justify-center h-full">
                 <Zap className="h-10 w-10 mb-3 opacity-20" />
                 <p>{t("dashboard.my_skills_empty", { defaultValue: "No skills configured yet." })}</p>

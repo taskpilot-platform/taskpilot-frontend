@@ -1,0 +1,21 @@
+# ANTI-AI DESIGN RULES (UI STEERING & ARTISAN DESIGN SYSTEM)
+
+1. CẤM ICON TRANG TRÍ DƯ THỪA:
+   - Không đặt icon nhỏ vào đầu mỗi thẻ card hoặc tiêu đề nếu icon đó không mang ý nghĩa điều hướng/hành động thực tế.
+   - Ưu tiên typography, weight, và spacing để phân cấp thị giác.
+
+2. LOẠI BỎ GRADIENT & HIỆU ỨNG SÁO RỖNG:
+   - Cấm dùng gradient tím/indigo/cyan mờ ảo phía sau nền (purple glow / cosmic aura).
+   - Hạn chế tối đa việc lạm dụng backdrop-blur và viền phát sáng (border-glow).
+   - Chuẩn hóa bo góc: dùng `rounded-md`, `rounded-lg` tinh tế, tránh lạm dụng `rounded-2xl` / `rounded-3xl` cho mọi thành phần.
+
+3. PHÁ VỠ TÍNH ĐỐI XỨNG CƠ HỌC:
+   - Tránh cấu trúc 3 card nằm ngang đều tăm tắp với kích thước bằng nhau. Hãy dùng Bento Grid bất đối xứng (1 ô lớn chiếm 2 cột kết hợp các ô compact).
+   - Đa dạng hóa padding giữa các section (hero rộng rãi py-16/20, feature py-12, data dense py-6).
+
+4. BẢNG MÀU CÓ CHỦ ĐÍCH & BẢO TOÀN 3 THEME HIỆN TẠI:
+   - Dùng tối đa 1 màu accent nổi bật duy nhất cho các nút CTA chính.
+   - BẮT BUỘC giữ tính nhất quán và tương thích hoàn hảo trên cả 3 theme:
+     * `light`: Nền trắng sạch, border phân tách rõ nét, chữ đậm tương phản cao.
+     * `dark`: Nền zinc/slate trung tính, không gradient tím/xanh ma mị.
+     * `glass`: Giữ vững chế độ kính mờ tùy chỉnh của TaskPilot, chữ đen tương phản cao, không bị lóa mờ.

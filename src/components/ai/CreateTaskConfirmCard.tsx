@@ -36,10 +36,10 @@ export function CreateTaskConfirmCard({
   };
 
   return (
-    <div className="rounded-2xl border border-border/50 bg-card/80 backdrop-blur-md shadow-lg overflow-hidden">
+    <div className="rounded-xl border border-border/80 bg-card shadow-sm overflow-hidden">
       {/* Header */}
       <div className="px-4 pt-4 pb-3 flex items-start gap-3">
-        <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-500/10 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-300/30 dark:border-emerald-500/30">
+        <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
           <ListChecks className="h-4 w-4" />
         </div>
         <div className="min-w-0 flex-1">

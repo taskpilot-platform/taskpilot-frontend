@@ -56,7 +56,7 @@ export function CombinedConfirmAndPlanCard({
   }
 
   return (
-    <div className="mt-3 rounded-lg border border-amber-500/30 bg-background/55 p-3 shadow-lg backdrop-blur-[28px] backdrop-saturate-150">
+    <div className="mt-3 rounded-xl border border-amber-500/40 bg-card p-3.5 shadow-sm">
       <div className="mb-3 border-b border-amber-500/20 pb-2">
         <div className="flex items-center gap-2 mb-1.5">
           <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-amber-500/20 text-amber-600 dark:text-amber-400 text-[10px] font-black animate-pulse">!</span>

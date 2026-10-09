@@ -19,6 +19,8 @@ http.interceptors.request.use((config) => {
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
+  const currentLang = localStorage.getItem("i18nextLng") || "vi";
+  config.headers["Accept-Language"] = currentLang.startsWith("en") ? "en" : "vi";
   return config;
 });
 
@@ -51,7 +53,9 @@ export const api = {
 };
 
 export function getApiErrorMessage(error: unknown): string {
-  const fallbackMessage = "Có lỗi xảy ra. Vui lòng thử lại.";
+  const currentLang = localStorage.getItem("i18nextLng") || "vi";
+  const isEn = currentLang.startsWith("en");
+  const fallbackMessage = isEn ? "An error occurred. Please try again." : "Có lỗi xảy ra. Vui lòng thử lại.";
 
   if (!error) {
     return fallbackMessage;

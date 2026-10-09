@@ -12,9 +12,9 @@ export default function AuthLayout() {
   };
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-slate-950 text-foreground">
+    <div className="relative min-h-screen overflow-hidden bg-zinc-950 text-foreground selection:bg-primary/20">
       <div className="absolute right-4 top-4 z-50">
-        <Button variant="ghost" size="icon" onClick={toggleLanguage} title="Change Language" className="text-slate-300 hover:text-white">
+        <Button variant="ghost" size="icon" onClick={toggleLanguage} title="Change Language" className="text-zinc-400 hover:text-zinc-100 hover:bg-zinc-900">
           <img 
             src={i18n.language === "vi" ? "https://flagcdn.com/w40/vn.png" : "https://flagcdn.com/w40/gb.png"} 
             alt={i18n.language === "vi" ? "Tiếng Việt" : "English"}
@@ -22,20 +22,20 @@ export default function AuthLayout() {
           />
         </Button>
       </div>
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(14,165,233,0.2),transparent_35%),radial-gradient(circle_at_80%_10%,rgba(59,130,246,0.2),transparent_30%),linear-gradient(135deg,#020617_0%,#0f172a_45%,#082f49_100%)]" />
-      <div className="absolute -left-24 top-20 h-72 w-72 rounded-full bg-cyan-400/20 blur-3xl" />
-      <div className="absolute -right-24 bottom-20 h-80 w-80 rounded-full bg-blue-500/20 blur-3xl" />
+
+      {/* Clean architectural grid texture - No AI purple/cyan cosmic glows */}
+      <div className="absolute inset-0 bg-[linear-gradient(to_right,#3f3f4618_1px,transparent_1px),linear-gradient(to_bottom,#3f3f4618_1px,transparent_1px)] bg-[size:40px_40px] pointer-events-none" />
 
       <div className="relative mx-auto flex min-h-screen w-full max-w-6xl items-center px-4 py-10 sm:px-6 lg:px-8">
-        <div className="grid w-full items-center gap-8 lg:grid-cols-2">
-          <section className="hidden text-slate-100 lg:block">
-            <p className="mb-3 inline-block rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs uppercase tracking-wider">
+        <div className="grid w-full items-center gap-12 lg:grid-cols-2">
+          <section className="hidden text-zinc-100 lg:block space-y-6">
+            <div className="inline-flex items-center rounded-md border border-zinc-800 bg-zinc-900/60 px-3 py-1 text-xs font-mono font-medium tracking-wide text-zinc-300">
               {t("auth.workspace_tag")}
-            </p>
-            <h2 className="max-w-md text-4xl font-bold leading-tight">
+            </div>
+            <h2 className="max-w-md text-4xl sm:text-5xl font-semibold tracking-tight text-zinc-100 leading-[1.15]">
               {t("auth.hero_title")}
             </h2>
-            <p className="mt-4 max-w-lg text-slate-300">
+            <p className="max-w-md text-base text-zinc-400 leading-relaxed font-normal">
               {t("auth.hero_desc")}
             </p>
           </section>

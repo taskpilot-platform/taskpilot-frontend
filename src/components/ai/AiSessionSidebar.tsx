@@ -140,7 +140,7 @@ export function AiSessionSidebar({
 }: AiSessionSidebarProps) {
   return (
     <div
-      className={`hidden md:flex border-r border-border/40 flex-col bg-background/10 backdrop-blur-[40px] backdrop-saturate-150 transition-all duration-300 ${
+      className={`hidden md:flex border-r border-border/60 flex-col bg-card/60 transition-all duration-300 ${
         isSidebarCollapsed ? "w-16 items-center" : "w-64"
       }`}
     >
@@ -235,14 +235,14 @@ export function AiMobileHeader({
   t,
 }: AiMobileHeaderProps) {
   return (
-    <div className="md:hidden flex items-center justify-between px-4 py-2.5 border-b border-border/40 bg-background/10 backdrop-blur-[40px] backdrop-saturate-150 relative z-20">
+    <div className="md:hidden flex items-center justify-between px-4 py-2.5 border-b border-border/60 bg-card/80 relative z-20">
       <Sheet open={isMobileSidebarOpen} onOpenChange={onOpenChangeMobileSidebar}>
         <SheetTrigger asChild>
           <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-primary/10">
             <Menu className="w-5 h-5" />
           </Button>
         </SheetTrigger>
-        <SheetContent side="left" className="w-72 p-0 bg-background/95 backdrop-blur-xl border-r border-border/40">
+        <SheetContent side="left" className="w-72 p-0 bg-card border-r border-border/60">
           <SheetTitle className="sr-only">Chat Sessions</SheetTitle>
           <SheetDescription className="sr-only">List of your TaskPilot chat sessions</SheetDescription>
           <div className="flex flex-col h-full bg-transparent">

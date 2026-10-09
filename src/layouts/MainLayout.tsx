@@ -10,7 +10,7 @@ import { useAuthStore } from "@/stores/auth.store";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import type { UserProfile } from "@/types/user";
 import type { NotificationItem } from "@/types/notification";
-import { LayoutDashboard, ShieldCheck, UserRound, LogOut, FolderKanban, Users, Code, Settings, Menu, ChevronLeft, Bot, Bell, MessageSquare } from "lucide-react";
+import { LayoutDashboard, ShieldCheck, UserRound, LogOut, FolderKanban, Users, Code, Settings, Menu, ChevronLeft, Bot, Bell, MessageSquare, MessagesSquare, Video, CalendarDays } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { toast } from "react-toastify";
 import { profileService } from "@/services/profile.service";
@@ -304,6 +304,21 @@ export default function MainLayout() {
                   <span>{t("layout.comments", { defaultValue: "Comments" })}</span>
                 </NavLink>
 
+                <NavLink to="/chat" onClick={() => setIsMobileNavOpen(false)} className={({isActive}) => `flex items-center gap-2 rounded-md px-3 py-2 transition-colors ${isActive ? "bg-accent font-medium text-emerald-800 dark:text-emerald-300" : "hover:bg-accent"}`} title={t("layout.chat", { defaultValue: "Chat" })} data-testid="nav-chat-mobile">
+                  <MessagesSquare className="h-4 w-4 shrink-0" />
+                  <span>{t("layout.chat", { defaultValue: "Chat" })}</span>
+                </NavLink>
+
+                <NavLink to="/meetings" onClick={() => setIsMobileNavOpen(false)} className={({isActive}) => `flex items-center gap-2 rounded-md px-3 py-2 transition-colors ${isActive ? "bg-accent font-medium text-blue-600 dark:text-blue-400" : "hover:bg-accent"}`} title={t("layout.meetings", { defaultValue: "Cuộc họp" })} data-testid="nav-meetings-mobile">
+                  <Video className="h-4 w-4 shrink-0" />
+                  <span>{t("layout.meetings", { defaultValue: "Cuộc họp" })}</span>
+                </NavLink>
+
+                <NavLink to="/calendar" onClick={() => setIsMobileNavOpen(false)} className={({isActive}) => `flex items-center gap-2 rounded-md px-3 py-2 transition-colors ${isActive ? "bg-accent font-medium text-amber-800 dark:text-amber-300" : "hover:bg-accent"}`} title={t("layout.calendar", { defaultValue: "Lịch" })} data-testid="nav-calendar-mobile">
+                  <CalendarDays className="h-4 w-4 shrink-0" />
+                  <span>{t("layout.calendar", { defaultValue: "Lịch" })}</span>
+                </NavLink>
+
                 <NavLink to="/copilot" onClick={() => setIsMobileNavOpen(false)} className={({isActive}) => `flex items-center gap-2 rounded-md px-3 py-2 transition-colors ${isActive ? "bg-accent font-medium text-indigo-600" : "hover:bg-accent text-indigo-600/80"}`} title={t("layout.copilot", { defaultValue: "Copilot AI Chat" })}>
                   <Bot className="h-4 w-4 shrink-0" />
                   <span>{t("layout.copilot", { defaultValue: "Copilot" })}</span>
@@ -478,6 +493,42 @@ export default function MainLayout() {
           >
             <MessageSquare className="h-4 w-4 shrink-0" />
             {!isCollapsed && <span>{t("layout.comments", { defaultValue: "Comments" })}</span>}
+          </NavLink>
+          <NavLink
+            to="/chat"
+            className={({ isActive }) =>
+              `flex items-center gap-2 rounded-md ${isCollapsed ? 'justify-center px-0' : 'px-3'} py-2 transition-colors ${isActive ? "bg-accent font-medium text-emerald-800 dark:text-emerald-300" : "hover:bg-accent"
+              }`
+            }
+            title={t("layout.chat", { defaultValue: "Chat" })}
+            data-testid="nav-chat"
+          >
+            <MessagesSquare className="h-4 w-4 shrink-0" />
+            {!isCollapsed && <span>{t("layout.chat", { defaultValue: "Chat" })}</span>}
+          </NavLink>
+          <NavLink
+            to="/meetings"
+            className={({ isActive }) =>
+              `flex items-center gap-2 rounded-md ${isCollapsed ? 'justify-center px-0' : 'px-3'} py-2 transition-colors ${isActive ? "bg-accent font-medium text-blue-600 dark:text-blue-400" : "hover:bg-accent"
+              }`
+            }
+            title={t("layout.meetings", { defaultValue: "Cuộc họp" })}
+            data-testid="nav-meetings"
+          >
+            <Video className="h-4 w-4 shrink-0" />
+            {!isCollapsed && <span>{t("layout.meetings", { defaultValue: "Cuộc họp" })}</span>}
+          </NavLink>
+          <NavLink
+            to="/calendar"
+            className={({ isActive }) =>
+              `flex items-center gap-2 rounded-md ${isCollapsed ? 'justify-center px-0' : 'px-3'} py-2 transition-colors ${isActive ? "bg-accent font-medium text-amber-800 dark:text-amber-300" : "hover:bg-accent"
+              }`
+            }
+            title={t("layout.calendar", { defaultValue: "Lịch" })}
+            data-testid="nav-calendar"
+          >
+            <CalendarDays className="h-4 w-4 shrink-0" />
+            {!isCollapsed && <span>{t("layout.calendar", { defaultValue: "Lịch" })}</span>}
           </NavLink>
           <NavLink
             to="/copilot"

@@ -57,4 +57,9 @@ export const meetingService = {
     api
       .get<MeetingParticipantDto[]>(`/v1/projects/${projectId}/meetings/${meetingId}/participants`)
       .then(unwrap<MeetingParticipantDto[]>),
+
+  getMyMeetings: (): Promise<ProjectMeetingDto[]> =>
+    api
+      .get<ProjectMeetingDto[]>(`/v1/meetings/my`)
+      .then(unwrap<ProjectMeetingDto[]>),
 };

@@ -261,8 +261,42 @@ html.dark.theme-orange { --primary: 24.6 85% 63.1% !important; --primary-foregro
     color: #ffffff !important;
   }
 
-  html.glass .bg-slate-900 {
+  /* Dark containers in glass mode (e.g. AuthLayout, dark cards, badges) */
+  html.glass .bg-zinc-950,
+  html.glass .bg-zinc-900,
+  html.glass .bg-slate-900,
+  html.glass .bg-slate-950,
+  html.glass .bg-black,
+  html.glass [class*="bg-zinc-9"],
+  html.glass [class*="bg-slate-9"] {
     color: #ffffff !important;
+  }
+
+  html.glass .bg-zinc-950 h1,
+  html.glass .bg-zinc-950 h2,
+  html.glass .bg-zinc-950 h3,
+  html.glass .bg-zinc-950 h4,
+  html.glass .bg-zinc-950 strong,
+  html.glass .bg-slate-900 h1,
+  html.glass .bg-slate-900 h2,
+  html.glass .bg-slate-900 h3,
+  html.glass [class*="bg-zinc-9"] h1,
+  html.glass [class*="bg-zinc-9"] h2,
+  html.glass [class*="bg-zinc-9"] h3,
+  html.glass [class*="bg-slate-9"] h1,
+  html.glass [class*="bg-slate-9"] h2,
+  html.glass [class*="bg-slate-9"] h3 {
+    color: #f8fafc !important;
+  }
+
+  html.glass .bg-zinc-950 p,
+  html.glass .bg-zinc-950 span,
+  html.glass .bg-zinc-950 div,
+  html.glass [class*="bg-zinc-9"] p,
+  html.glass [class*="bg-zinc-9"] span,
+  html.glass [class*="bg-slate-9"] p,
+  html.glass [class*="bg-slate-9"] span {
+    color: #d4d4d8 !important;
   }
 
   /* 5. Special Elements (Sidebar) */
@@ -377,26 +411,33 @@ html.dark.glass .date-input-placeholder {
   animation: smoothStepEnter 0.9s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
-/* Glassmorphic React-Toastify Overrides */
+/* React-Toastify Overrides - Crisp & Accessible */
 .Toastify__toast {
-  background-color: rgba(255, 255, 255, 0.4) !important;
-  backdrop-filter: blur(20px) saturate(140%) !important;
-  -webkit-backdrop-filter: blur(20px) saturate(140%) !important;
-  border: 1px solid rgba(255, 255, 255, 0.25) !important;
-  border-radius: 1rem !important; /* rounded-2xl */
-  box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.02) !important;
-  color: #111827 !important;
+  background-color: #ffffff !important;
+  border: 1px solid hsl(var(--border)) !important;
+  border-radius: 0.75rem !important; /* rounded-xl */
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.02) !important;
+  color: #09090b !important;
   font-family: inherit !important;
   font-weight: 500 !important;
 }
 
-/* Glassmorphic Dark Mode Toast */
+/* Dark Mode Toast */
 .dark .Toastify__toast,
 html.dark .Toastify__toast {
-  background-color: rgba(15, 23, 42, 0.6) !important;
-  border: 1px solid rgba(255, 255, 255, 0.15) !important;
-  color: #f8fafc !important;
-  box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.3), 0 1px 3px rgba(0, 0, 0, 0.1) !important;
+  background-color: #18181b !important;
+  border: 1px solid hsl(var(--border)) !important;
+  color: #fafafa !important;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.4), 0 1px 3px rgba(0, 0, 0, 0.2) !important;
+}
+
+/* Glass Theme Toast */
+html.glass .Toastify__toast {
+  background-color: rgba(255, 255, 255, 0.25) !important;
+  backdrop-filter: blur(20px) saturate(140%) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(140%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.3) !important;
+  color: #000000 !important;
 }
 
 /* Internal Toastify Styling Elements */

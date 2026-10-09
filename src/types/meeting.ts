@@ -13,6 +13,8 @@ export interface ProjectMeetingDto {
   status: MeetingStatus;
   recordingEnabled: boolean;
   recordingFileId?: number | null;
+  scheduledStartTime?: string | null;
+  scheduledEndTime?: string | null;
   startedAt: string;
   endedAt?: string | null;
   durationSeconds?: number | null;
@@ -25,6 +27,8 @@ export interface CreateMeetingRequest {
   title: string;
   description?: string;
   recordingEnabled?: boolean;
+  scheduledStartTime?: string;
+  scheduledEndTime?: string;
 }
 
 export interface MeetingTokenResponse {

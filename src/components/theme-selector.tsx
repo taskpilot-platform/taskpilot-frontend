@@ -44,7 +44,7 @@ export function ThemeSelector() {
             variant={theme === "glass" ? "default" : "outline"}
             size="sm"
             onClick={() => setTheme("glass")}
-            className={theme === "glass" ? "bg-gradient-to-r from-blue-400 to-purple-400 border-none text-white" : ""}
+            className={theme === "glass" ? "bg-primary text-primary-foreground font-semibold shadow-xs" : ""}
           >
             <Sparkles className="h-4 w-4 mr-1" />
             {t("theme.glass")}

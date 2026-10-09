@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import {
   MessageSquare,
   Send,
@@ -30,6 +31,7 @@ export const ProjectChatTab: React.FC<ProjectChatTabProps> = ({
   isArchived = false,
   currentUserId: propUserId,
 }) => {
+  const { t } = useTranslation();
   const token = useAuthStore((state) => state.accessToken);
   const [currentUserId, setCurrentUserId] = useState<number | null>(propUserId ?? null);
   const [messages, setMessages] = useState<ProjectChatMessage[]>([]);
@@ -161,12 +163,12 @@ export const ProjectChatTab: React.FC<ProjectChatTabProps> = ({
           {isConnected ? (
             <Badge variant="outline" className="gap-1 border-emerald-500/30 text-emerald-600 bg-emerald-500/10">
               <Wifi className="h-3.5 w-3.5" />
-              Connected
+              {t("chat.connected", { defaultValue: "Đã kết nối" })}
             </Badge>
           ) : (
             <Badge variant="outline" className="gap-1 border-amber-500/30 text-amber-600 bg-amber-500/10">
               <WifiOff className="h-3.5 w-3.5" />
-              Reconnecting
+              {t("chat.connecting", { defaultValue: "Đang kết nối..." })}
             </Badge>
           )}
         </div>
@@ -182,9 +184,9 @@ export const ProjectChatTab: React.FC<ProjectChatTabProps> = ({
       <Card className="border-muted/60 shadow-sm flex flex-col h-[600px]">
         <CardHeader className="pb-3 border-b border-border/40 bg-muted/10 shrink-0">
           <CardTitle className="text-sm font-semibold flex items-center justify-between">
-            <span>Project Conversation</span>
+            <span>{t("chat.tab_title", { defaultValue: "Kênh Trò Chuyện" })}</span>
             <span className="text-xs font-normal text-muted-foreground">
-              {messages.length} messages
+              {t("chat.members_count", { count: messages.length, defaultValue: `${messages.length} tin nhắn` })}
             </span>
           </CardTitle>
         </CardHeader>
@@ -194,15 +196,12 @@ export const ProjectChatTab: React.FC<ProjectChatTabProps> = ({
           {isLoadingHistory && messages.length === 0 ? (
             <div className="flex items-center justify-center h-full text-muted-foreground">
               <Loader2 className="h-6 w-6 animate-spin mr-2" />
-              Loading conversation...
+              {t("calendar.loading", { defaultValue: "Loading..." })}
             </div>
           ) : messages.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground">
               <MessageSquare className="h-10 w-10 text-muted-foreground/30 mb-3" />
-              <p className="text-base font-medium">No messages yet</p>
-              <p className="text-xs text-muted-foreground/80 mt-1">
-                Say hello to your project teammates to kick off collaboration!
-              </p>
+              <p className="text-base font-medium">{t("chat.empty_messages", { defaultValue: "Chưa có tin nhắn nào. Hãy bắt đầu cuộc trò chuyện!" })}</p>
             </div>
           ) : (
             messages.map((msg) => {
@@ -234,10 +233,10 @@ export const ProjectChatTab: React.FC<ProjectChatTabProps> = ({
                     </div>
 
                     <div
-                      className={`p-3 rounded-2xl text-sm leading-relaxed shadow-sm inline-block text-left ${
+                      className={`p-3 rounded-xl text-sm leading-relaxed shadow-sm inline-block text-left ${
                         isMe
-                          ? "bg-primary text-primary-foreground rounded-tr-none"
-                          : "bg-muted/60 text-foreground border border-border/40 rounded-tl-none"
+                          ? "bg-primary text-primary-foreground rounded-tr-xs"
+                          : "bg-muted/60 text-foreground border border-border/40 rounded-tl-xs"
                       }`}
                     >
                       <p className="whitespace-pre-wrap break-words">{msg.content}</p>
@@ -269,7 +268,7 @@ export const ProjectChatTab: React.FC<ProjectChatTabProps> = ({
             <Input
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
-              placeholder={isArchived ? "Project is archived" : "Type a message... (Press Enter to send)"}
+              placeholder={isArchived ? t("chat.input_archived", { defaultValue: "Dự án đã lưu trữ, chỉ đọc" }) : t("chat.input_placeholder", { defaultValue: "Nhập tin nhắn... (Nhấn Enter để gửi)" })}
               disabled={isArchived || isSending}
               className="flex-1 bg-muted/20 border-muted"
             />
@@ -283,7 +282,7 @@ export const ProjectChatTab: React.FC<ProjectChatTabProps> = ({
               ) : (
                 <>
                   <Send className="h-4 w-4" />
-                  <span className="hidden sm:inline">Send</span>
+                  <span className="hidden sm:inline">{t("chat.send", { defaultValue: "Gửi" })}</span>
                 </>
               )}
             </Button>

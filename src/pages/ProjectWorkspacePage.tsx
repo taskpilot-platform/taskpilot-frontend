@@ -30,7 +30,8 @@ import {
   BookOpen,
   FolderOpen,
   MessageSquare,
-  Video
+  Video,
+  Calendar
 } from "lucide-react";
 import { useLeaveProject } from "@/hooks/useLeaveProject";
 import { useTranslation } from "react-i18next";
@@ -71,12 +72,13 @@ import { ProjectKnowledgeTab } from "@/components/knowledge/ProjectKnowledgeTab"
 import { ProjectFilesTab } from "@/components/files/ProjectFilesTab";
 import { ProjectChatTab } from "@/components/chat/ProjectChatTab";
 import { ProjectMeetingsTab } from "@/components/meetings/ProjectMeetingsTab";
+import { ProjectCalendarTab } from "@/components/calendar/ProjectCalendarTab";
 import type { MyProject, Project, ProjectMember, ProjectSummary } from "@/types/project";
 import type { TaskDetailDto, TaskDto, TaskPriority, TaskStatus } from "@/types/task";
 import type { BacklogResponse, BoardResponse, SprintDto } from "@/types/sprint";
 import type { TimelineResponse, TimelineTaskDto } from "@/types/timeline";
 
-const VALID_TABS = ["overview", "board", "backlog", "timeline", "knowledge", "files", "chat", "meetings"] as const;
+const VALID_TABS = ["overview", "board", "backlog", "timeline", "calendar", "knowledge", "files", "chat", "meetings"] as const;
 type ViewMode = (typeof VALID_TABS)[number];
 type BacklogSortMode = "position" | "createdAt" | "priority";
 const VALID_TAB_SET = new Set<string>(VALID_TABS);
@@ -200,11 +202,34 @@ export default function ProjectWorkspacePage() {
   const { projectId, tabId, taskId } = useParams();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const activeTab: ViewMode = isViewMode(tabId) ? tabId : "overview";
-  const initialJoinMeetingId = searchParams.get("join") ? Number(searchParams.get("join")) : null;
-
   const currentProjectId = Number(projectId);
   const currentTaskId = taskId ? Number(taskId) : null;
+
+  const savedTabKey = currentProjectId ? `taskpilot_proj_${currentProjectId}_tab` : null;
+  const getInitialTab = (): ViewMode => {
+    if (isViewMode(tabId)) return tabId;
+    if (savedTabKey) {
+      const saved = sessionStorage.getItem(savedTabKey);
+      if (saved && isViewMode(saved)) return saved;
+    }
+    return "overview";
+  };
+  const activeTab: ViewMode = isViewMode(tabId) ? tabId : getInitialTab();
+  const initialJoinMeetingId = searchParams.get("join") ? Number(searchParams.get("join")) : null;
+
+  const [visitedTabs, setVisitedTabs] = useState<Set<ViewMode>>(() => new Set([activeTab]));
+
+  useEffect(() => {
+    if (activeTab && savedTabKey) {
+      sessionStorage.setItem(savedTabKey, activeTab);
+    }
+    setVisitedTabs((prev) => {
+      if (prev.has(activeTab)) return prev;
+      const next = new Set(prev);
+      next.add(activeTab);
+      return next;
+    });
+  }, [activeTab, savedTabKey]);
 
   const [searchInput, setSearchInput] = useState("");
   const [project, setProject] = useState<Project | null>(null);
@@ -353,7 +378,7 @@ export default function ProjectWorkspacePage() {
   };
 
   const loadTabData = async (pid: number, tab: ViewMode, _force = false) => {
-    if (tab === "board" || tab === "overview") {
+    if (tab === "board" || tab === "overview" || tab === "calendar") {
       const boardRes = await sprintService.getBoard(pid);
       setBoardData(boardRes.data);
       mergeTasks(boardRes.data?.tasks || []);
@@ -413,10 +438,12 @@ export default function ProjectWorkspacePage() {
   }, [activeTab, currentProjectId, loadedProjectId]);
 
   useEffect(() => {
-    if (tabId && !isViewMode(tabId) && currentProjectId) {
+    if (!tabId && currentProjectId) {
+      navigate(`/projects/${currentProjectId}/${activeTab}`, { replace: true });
+    } else if (tabId && !isViewMode(tabId) && currentProjectId) {
       navigate(`/projects/${currentProjectId}/overview`, { replace: true });
     }
-  }, [tabId, currentProjectId, navigate]);
+  }, [tabId, activeTab, currentProjectId, navigate]);
 
   useEffect(() => {
     if (currentTaskId && !isTaskDetailOpen) {
@@ -1150,6 +1177,9 @@ export default function ProjectWorkspacePage() {
             <Button type="button" variant={activeTab === "timeline" ? "secondary" : "ghost"} className={`gap-2 shrink-0 ${activeTab === "timeline" ? "bg-muted" : "hover:bg-muted/50"}`} onClick={() => navigate(`/projects/${currentProjectId}/timeline`)}>
               <CalendarDays className="h-4 w-4" /> Timeline
             </Button>
+            <Button type="button" variant={activeTab === "calendar" ? "secondary" : "ghost"} className={`gap-2 shrink-0 ${activeTab === "calendar" ? "bg-muted" : "hover:bg-muted/50"}`} onClick={() => navigate(`/projects/${currentProjectId}/calendar`)} data-testid="tab-calendar">
+              <Calendar className="h-4 w-4" /> Calendar
+            </Button>
             <Button type="button" variant={activeTab === "knowledge" ? "secondary" : "ghost"} className={`gap-2 shrink-0 ${activeTab === "knowledge" ? "bg-muted" : "hover:bg-muted/50"}`} onClick={() => navigate(`/projects/${currentProjectId}/knowledge`)}>
               <BookOpen className="h-4 w-4" /> {t("knowledge.tab_title")}
             </Button>
@@ -1173,14 +1203,14 @@ export default function ProjectWorkspacePage() {
       {/* VIEW MODES */}
       <div className="flex-1 bg-transparent relative">
         {isLoadingTasks && !project ? (
-          <div className="absolute inset-0 z-10 bg-card backdrop-blur-xl flex flex-col items-center justify-center text-muted-foreground transition-all duration-300">
-            <Loader2 className="mb-4 h-10 w-10 animate-spin text-primary" />
-            <p className="text-lg font-medium animate-pulse">Loading workspace...</p>
+          <div className="absolute inset-0 z-10 bg-background/80 flex flex-col items-center justify-center text-muted-foreground transition-all duration-200">
+            <Loader2 className="mb-3 h-8 w-8 animate-spin text-primary" />
+            <p className="text-sm font-medium">Loading workspace...</p>
           </div>
         ) : (
           <>
-            {activeTab === "board" && (
-              <div className="overflow-x-auto pb-4 bg-transparent">
+            {visitedTabs.has("board") && (
+              <div className={`overflow-x-auto pb-4 bg-transparent ${activeTab === "board" ? "block" : "hidden"}`}>
                 {boardData?.workflowMode === "SCRUM" && !boardData.activeSprint ? (
                   <Card className="max-w-xl mx-auto mt-20 border-dashed">
                     <CardContent className="p-10 text-center text-muted-foreground">
@@ -1194,7 +1224,7 @@ export default function ProjectWorkspacePage() {
                   {groupedKanban.map((column) => (
                     <div
                       key={column.status}
-                      className="flex-1 flex flex-col rounded-xl border bg-card p-3.5 min-w-[300px] shadow-sm border-white/10"
+                      className="flex-1 flex flex-col rounded-xl border border-border/80 bg-card p-3.5 min-w-[300px] shadow-sm"
                       onDragOver={handleDragOver}
                       onDrop={(e) => handleDrop(e, column.status)}
                     >
@@ -1260,8 +1290,8 @@ export default function ProjectWorkspacePage() {
               </div>
             )}
 
-            {activeTab === "overview" && (
-              <div className="pt-2 space-y-6 bg-transparent">
+            {visitedTabs.has("overview") && (
+              <div className={`pt-2 space-y-6 bg-transparent ${activeTab === "overview" ? "block" : "hidden"}`}>
                 <div className="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-6">
 
                   {/* Left Column (Main Info) */}
@@ -1443,7 +1473,7 @@ export default function ProjectWorkspacePage() {
                                 onClick={() => openMemberDetail(m)}
                               >
                                 <div className="flex items-center gap-3">
-                                  <div className="h-9 w-9 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center text-xs font-bold text-primary border border-primary/20">
+                                  <div className="h-9 w-9 rounded-full bg-muted border border-border/80 flex items-center justify-center text-xs font-semibold text-foreground shrink-0">
                                     {initials}
                                   </div>
                                   <div>
@@ -1463,7 +1493,7 @@ export default function ProjectWorkspacePage() {
                     </Card>
 
                     {/* Quick Actions Placeholder */}
-                    <Card className="shadow-sm border-white/20 dark:border-white/10 bg-white/40 dark:bg-black/20 backdrop-blur-xl backdrop-saturate-150">
+                    <Card className="shadow-sm border-border/80 bg-card">
                       <CardContent className="p-5">
                         <h3 className="text-sm font-semibold mb-3 text-primary">Quick Actions</h3>
                         <div className="space-y-2">
@@ -1492,8 +1522,8 @@ export default function ProjectWorkspacePage() {
               </div>
             )}
 
-            {activeTab === "timeline" && (
-              <div className="pt-2 bg-transparent">
+            {visitedTabs.has("timeline") && (
+              <div className={`pt-2 bg-transparent ${activeTab === "timeline" ? "block" : "hidden"}`}>
                 <Card className="max-w-6xl mx-auto shadow-sm border-muted/60">
                   <CardHeader className="border-b border-border/40 bg-muted/10">
                     <div className="flex flex-wrap items-start justify-between gap-3">
@@ -1590,8 +1620,8 @@ export default function ProjectWorkspacePage() {
               </div>
             )}
 
-            {activeTab === "backlog" && (
-              <div className="pt-2 bg-transparent">
+            {visitedTabs.has("backlog") && (
+              <div className={`pt-2 bg-transparent ${activeTab === "backlog" ? "block" : "hidden"}`}>
                 <Card className="max-w-5xl mx-auto shadow-sm border-muted/60">
                   <CardHeader className="pb-4 border-b border-border/40 bg-muted/10 flex flex-row items-center justify-between flex-wrap gap-4">
                     <div>
@@ -1721,17 +1751,36 @@ export default function ProjectWorkspacePage() {
                 </Card>
               </div>
             )}
-            {activeTab === "knowledge" && (
-              <ProjectKnowledgeTab projectId={currentProjectId} isArchived={isArchived} isManager={isManager} />
+            {visitedTabs.has("calendar") && (
+              <div className={activeTab === "calendar" ? "block" : "hidden"}>
+                <ProjectCalendarTab
+                  projectId={currentProjectId}
+                  projectMembers={projectMembers}
+                  tasks={tasks}
+                  currentUserId={myUserId}
+                  onOpenTaskDetail={openTaskDetail}
+                />
+              </div>
             )}
-            {activeTab === "files" && (
-              <ProjectFilesTab projectId={currentProjectId} isArchived={isArchived} isManager={isManager} currentUserId={myUserId} />
+            {visitedTabs.has("knowledge") && (
+              <div className={activeTab === "knowledge" ? "block" : "hidden"}>
+                <ProjectKnowledgeTab projectId={currentProjectId} isArchived={isArchived} isManager={isManager} />
+              </div>
             )}
-            {activeTab === "chat" && (
-              <ProjectChatTab projectId={currentProjectId} isArchived={isArchived} currentUserId={myUserId} />
+            {visitedTabs.has("files") && (
+              <div className={activeTab === "files" ? "block" : "hidden"}>
+                <ProjectFilesTab projectId={currentProjectId} isArchived={isArchived} isManager={isManager} currentUserId={myUserId} />
+              </div>
             )}
-            {activeTab === "meetings" && (
-              <ProjectMeetingsTab projectId={currentProjectId} isArchived={isArchived} currentUserId={myUserId} initialJoinMeetingId={initialJoinMeetingId} />
+            {visitedTabs.has("chat") && (
+              <div className={activeTab === "chat" ? "block" : "hidden"}>
+                <ProjectChatTab projectId={currentProjectId} isArchived={isArchived} currentUserId={myUserId} />
+              </div>
+            )}
+            {visitedTabs.has("meetings") && (
+              <div className={activeTab === "meetings" ? "block" : "hidden"}>
+                <ProjectMeetingsTab projectId={currentProjectId} isArchived={isArchived} currentUserId={myUserId} initialJoinMeetingId={initialJoinMeetingId} />
+              </div>
             )}
           </>
         )}
@@ -1761,7 +1810,7 @@ export default function ProjectWorkspacePage() {
           {selectedMemberForDetail && (
             <div className="space-y-6">
               <div className="flex items-center gap-4">
-                <div className="h-16 w-16 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center text-xl font-bold text-primary border border-primary/20">
+                <div className="h-16 w-16 rounded-full bg-muted border border-border/80 flex items-center justify-center text-xl font-bold text-foreground shrink-0">
                   {selectedMemberForDetail.fullName
                     ? selectedMemberForDetail.fullName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
                     : `U${selectedMemberForDetail.userId}`}
