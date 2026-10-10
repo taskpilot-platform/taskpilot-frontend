@@ -82,3 +82,29 @@ export type ChatComposerProps = {
   onStop: () => void;
   stopTooltip: string;
 };
+
+export type MetricDataStatus = "MEASURED" | "INSUFFICIENT_DATA" | "UNVERIFIED" | "DEFAULT";
+export type RecommendationDifferentiationStatus = "DIFFERENTIATED" | "INSUFFICIENT_TO_DIFFERENTIATE" | "UNKNOWN";
+
+export type RecommendedCandidateView = {
+  rank: number;
+  candidateId?: number;
+  displayName: string;
+  presentationFitValue?: number | null;
+  fitStatus: MetricDataStatus;
+  storedWorkloadValue?: number | null;
+  workloadStatus: MetricDataStatus;
+  performanceStatus: MetricDataStatus;
+  memberStatus?: string | null;
+};
+
+export type RecommendationView = {
+  projectId?: number;
+  requiredSkills?: string[];
+  candidates: RecommendedCandidateView[];
+  differentiationStatus?: RecommendationDifferentiationStatus;
+  presentationContractVersion?: string;
+  scoringModelVersion?: string;
+  heuristicMode?: string;
+  aiExplanation?: string | null;
+};

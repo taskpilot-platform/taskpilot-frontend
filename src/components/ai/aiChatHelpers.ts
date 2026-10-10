@@ -7,6 +7,7 @@ import type {
   DynamicFormSpec,
   PendingActionConfirmation,
   ConfirmedTaskMutation,
+  RecommendationView,
 } from "./aiChatTypes";
 
 export const WRITE_TOOL_NAMES = new Set(["assignTaskToMember", "assignTaskToMemberByName", "recommendAndAssignTask", "updateTaskRequiredSkills", "updateTaskStatus", "patchTask", "patchProject", "patchSprint", "patchTaskComment", "createSystemSkill", "patchSystemSkill", "deleteSystemSkill", "addMySkill", "patchMySkill", "deleteMySkill", "markNotificationRead", "markAllNotificationsRead", "createTask", "createSprint", "startSprint", "completeSprint", "assignTaskToSprint"]);
@@ -290,6 +291,50 @@ export function tryRepairTruncatedJson(raw: string): unknown | null {
   return null;
 }
 
+export function isRecommendationView(data: unknown): data is RecommendationView {
+  if (!data || typeof data !== "object") return false;
+  const record = data as Record<string, unknown>;
+  return Array.isArray(record.candidates) && (
+    typeof record.presentationContractVersion === "string" ||
+    typeof record.scoringModelVersion === "string" ||
+    (record.candidates.length > 0 && typeof (record.candidates[0] as Record<string, unknown>)?.displayName === "string")
+  );
+}
+
+export function formatRecommendationView(view: RecommendationView): string {
+  const lines: string[] = [];
+  lines.push("### Đề xuất phân công ứng viên");
+  if (view.heuristicMode) {
+    lines.push(`- **Chế độ phân công**: ${view.heuristicMode}`);
+  }
+  if (view.requiredSkills && view.requiredSkills.length > 0) {
+    lines.push(`- **Kỹ năng yêu cầu**: ${view.requiredSkills.join(", ")}`);
+  }
+  if (view.differentiationStatus === "INSUFFICIENT_TO_DIFFERENTIATE") {
+    lines.push(`> **Lưu ý**: Dữ liệu hiện tại không đủ để phân biệt mức độ vượt trội giữa các ứng viên.`);
+  }
+  if (view.candidates && view.candidates.length > 0) {
+    lines.push("\n**Danh sách ứng viên**:");
+    view.candidates.forEach((c) => {
+      const fitText = c.fitStatus === "MEASURED" && c.presentationFitValue !== null && c.presentationFitValue !== undefined
+        ? `${Math.round(c.presentationFitValue * 100)}% (Đã đo lường)`
+        : "Chưa đủ dữ liệu kỹ năng";
+      const workloadText = c.storedWorkloadValue !== null && c.storedWorkloadValue !== undefined
+        ? `${c.storedWorkloadValue} điểm (Chưa có dữ liệu workload đáng tin cậy)`
+        : "Chưa có dữ liệu workload đáng tin cậy";
+      const perfText = "Chưa đủ dữ liệu hiệu suất";
+      lines.push(`${c.rank}. **${c.displayName}** (${c.memberStatus ?? "AVAILABLE"})`);
+      lines.push(`   - Phù hợp kỹ năng: ${fitText}`);
+      lines.push(`   - Khối lượng công việc: ${workloadText}`);
+      lines.push(`   - Hiệu suất: ${perfText}`);
+    });
+  }
+  if (view.aiExplanation) {
+    lines.push(`\n**Nhận xét của AI**: ${view.aiExplanation}`);
+  }
+  return lines.join("\n");
+}
+
 export function formatFriendlyToolPayload(value?: string) {
   if (!value) return null;
 
@@ -306,12 +351,17 @@ export function formatFriendlyToolPayload(value?: string) {
   if (parsed === null) {
     return value
       .replace(/"[^"]*[Ii]d"\s*:\s*[^,}\]]+,?\s*/g, '') // xóa các cặp key:value chứa id
-      .replace(/[{}\[\]"]/g, '') // xóa dấu JSON
+      .replace(/[{}[\]"]/g, '') // xóa dấu JSON
       .split('\n')
       .map(l => l.trim())
       .filter(l => l.length > 2)
       .map(l => `- ${l.replace(/^,\s*/, '').replace(/,\s*$/, '').replace(/\s*,\s*/g, ' | ')}`)
       .join('\n');
+  }
+
+  // Bước 4: Kiểm tra allowlisted RecommendationView để hiển thị chuyên dụng
+  if (isRecommendationView(parsed)) {
+    return formatRecommendationView(parsed);
   }
 
   // Format parsed data

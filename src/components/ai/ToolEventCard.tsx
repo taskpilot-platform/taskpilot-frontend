@@ -1,8 +1,9 @@
 import { useState, useEffect, useMemo } from "react";
 import { Check, X } from "lucide-react";
-import type { ToolEvent, PendingActionConfirmation } from "./aiChatTypes";
-import { formatFriendlyToolPayload, parseConfirmationResult } from "./aiChatHelpers";
+import type { ToolEvent, PendingActionConfirmation, RecommendationView } from "./aiChatTypes";
+import { formatFriendlyToolPayload, parseConfirmationResult, isRecommendationView } from "./aiChatHelpers";
 import { TypewriterMarkdown } from "./TypewriterMarkdown";
+import { RecommendationCard } from "./RecommendationCard";
 
 export function ToolEventCard({
   tool,
@@ -23,6 +24,19 @@ export function ToolEventCard({
   const formattedResult = formatFriendlyToolPayload(tool.result);
   const confirmation = tool.confirmation ?? parseConfirmationResult(tool.result);
 
+  const recommendationView = useMemo<RecommendationView | null>(() => {
+    if (!tool.result) return null;
+    try {
+      const parsed = JSON.parse(tool.result);
+      if (isRecommendationView(parsed)) {
+        return parsed;
+      }
+    } catch {
+      // ignore
+    }
+    return null;
+  }, [tool.result]);
+
   return (
     <div className="font-mono text-[13px] my-1 group">
       <div className="flex items-start gap-2 text-neutral-800 dark:text-neutral-200">
@@ -37,11 +51,17 @@ export function ToolEventCard({
         </div>
       </div>
       
-      {/* Result: Terminal style */}
-      {formattedResult && !compact && (
-        <div className="mt-1.5 pl-[18px] text-neutral-600 dark:text-neutral-400 leading-relaxed max-w-full opacity-90 prose prose-sm dark:prose-invert prose-p:my-0 prose-ul:my-0 prose-li:my-0 border-l-[2px] border-neutral-100 dark:border-neutral-800 ml-[5px]">
-          <TypewriterMarkdown text={formattedResult} speed={1} />
+      {/* Result: Dedicated recommendation card or Terminal style */}
+      {recommendationView && !compact ? (
+        <div className="mt-1.5 pl-[18px]">
+          <RecommendationCard view={recommendationView} />
         </div>
+      ) : (
+        formattedResult && !compact && (
+          <div className="mt-1.5 pl-[18px] text-neutral-600 dark:text-neutral-400 leading-relaxed max-w-full opacity-90 prose prose-sm dark:prose-invert prose-p:my-0 prose-ul:my-0 prose-li:my-0 border-l-[2px] border-neutral-100 dark:border-neutral-800 ml-[5px]">
+            <TypewriterMarkdown text={formattedResult} speed={1} />
+          </div>
+        )
       )}
 
       {/* Box Xác nhận vẫn giữ UI rõ ràng để user dễ click */}
