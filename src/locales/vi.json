@@ -430,7 +430,32 @@
 		"phase_generating": "Đang tạo câu trả lời",
 		"phase_finalized": "Hoàn tất",
 		"phase_failed": "Thất bại",
-		"phase_processing": "Đang xử lý"
+		"phase_processing": "Đang xử lý",
+		"recommendation": {
+			"title": "Đề xuất phân công ứng viên",
+			"heuristic_mode": "Chế độ: {{mode}}",
+			"required_skills": "Kỹ năng: {{skills}}",
+			"differentiation_alert_title": "Lưu ý:",
+			"differentiation_alert_desc": "Dữ liệu hiện tại không đủ để phân biệt mức độ vượt trội giữa các ứng viên. Danh sách được sắp xếp theo thứ tự hiển thị kỹ thuật.",
+			"ai_explanation_label": "Nhận xét của AI:",
+			"empty": "Không tìm thấy ứng viên phù hợp.",
+			"technical_details_toggle": "Chi tiết kỹ thuật mô hình",
+			"technical_contract_version": "Phiên bản giao diện: {{version}}",
+			"technical_scoring_version": "Phiên bản tính điểm: {{version}}",
+			"skill_fit_label": "Phù hợp kỹ năng",
+			"skill_fit_measured": "{{percent}}% (Đã đo lường)",
+			"skill_fit_insufficient": "Chưa đủ dữ liệu kỹ năng",
+			"workload_label": "Khối lượng công việc",
+			"active_task_count": "Số công việc đang hoạt động: {{count}}",
+			"unverified_workload_value": "Giá trị workload đã lưu: {{value}}",
+			"unverified_workload_explanation": "(Chưa có dữ liệu workload đáng tin cậy)",
+			"unverified_workload_fallback": "Chưa có dữ liệu workload đáng tin cậy",
+			"performance_label": "Hiệu suất",
+			"performance_unavailable": "Chưa đủ dữ liệu hiệu suất",
+			"candidates_list_title": "Danh sách ứng viên:",
+			"mode_label": "Chế độ phân công: {{mode}}",
+			"skills_label": "Kỹ năng yêu cầu: {{skills}}"
+		}
 	},
 	"comments": {
 		"title": "Bình luận",

@@ -94,6 +94,9 @@ export type RecommendedCandidateView = {
   fitStatus: MetricDataStatus;
   storedWorkloadValue?: number | null;
   workloadStatus: MetricDataStatus;
+  workloadUnit?: string | null;
+  workloadScope?: string | null;
+  workloadMeasuredAt?: string | null;
   performanceStatus: MetricDataStatus;
   memberStatus?: string | null;
 };

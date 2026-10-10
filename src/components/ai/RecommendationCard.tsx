@@ -1,8 +1,10 @@
 import { useState } from "react";
 import { Sparkles, AlertCircle, Info, ChevronDown, ChevronUp, User } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { RecommendationView, RecommendedCandidateView } from "./aiChatTypes";
 
 export function RecommendationCard({ view }: { view: RecommendationView }) {
+  const { t } = useTranslation();
   const [showTechnicalDetails, setShowTechnicalDetails] = useState(false);
 
   const isTied = view.differentiationStatus === "INSUFFICIENT_TO_DIFFERENTIATE";
@@ -19,7 +21,7 @@ export function RecommendationCard({ view }: { view: RecommendationView }) {
             <Sparkles className="h-3.5 w-3.5" />
           </span>
           <h4 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">
-            Đề xuất phân công ứng viên
+            {t("copilot.recommendation.title")}
           </h4>
         </div>
         <div className="flex items-center gap-1.5 flex-wrap">
@@ -28,12 +30,12 @@ export function RecommendationCard({ view }: { view: RecommendationView }) {
               data-testid="heuristic-mode-badge"
               className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200/50 dark:border-blue-800/50"
             >
-              Chế độ: {view.heuristicMode}
+              {t("copilot.recommendation.heuristic_mode", { mode: view.heuristicMode })}
             </span>
           )}
           {view.requiredSkills && view.requiredSkills.length > 0 && (
             <span className="text-[11px] text-neutral-500 dark:text-neutral-400">
-              Kỹ năng: {view.requiredSkills.join(", ")}
+              {t("copilot.recommendation.required_skills", { skills: view.requiredSkills.join(", ") })}
             </span>
           )}
         </div>
@@ -47,7 +49,8 @@ export function RecommendationCard({ view }: { view: RecommendationView }) {
         >
           <AlertCircle className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400 mt-0.5" />
           <span>
-            <strong>Lưu ý:</strong> Dữ liệu hiện tại không đủ để phân biệt mức độ vượt trội giữa các ứng viên. Danh sách được sắp xếp theo thứ tự hiển thị kỹ thuật.
+            <strong>{t("copilot.recommendation.differentiation_alert_title")}</strong>{" "}
+            {t("copilot.recommendation.differentiation_alert_desc")}
           </span>
         </div>
       )}
@@ -60,7 +63,7 @@ export function RecommendationCard({ view }: { view: RecommendationView }) {
         >
           <div className="flex items-center gap-1.5 font-semibold text-blue-900 dark:text-blue-300 mb-1">
             <Info className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
-            Nhận xét của AI:
+            {t("copilot.recommendation.ai_explanation_label")}
           </div>
           <p className="whitespace-pre-line">{view.aiExplanation}</p>
         </div>
@@ -74,7 +77,7 @@ export function RecommendationCard({ view }: { view: RecommendationView }) {
           ))
         ) : (
           <div className="text-center py-4 text-xs text-neutral-500">
-            Không tìm thấy ứng viên phù hợp.
+            {t("copilot.recommendation.empty")}
           </div>
         )}
       </div>
@@ -88,7 +91,7 @@ export function RecommendationCard({ view }: { view: RecommendationView }) {
             onClick={() => setShowTechnicalDetails(!showTechnicalDetails)}
             className="flex items-center gap-1 hover:text-neutral-700 dark:hover:text-neutral-300 transition-colors"
           >
-            <span>Chi tiết kỹ thuật mô hình</span>
+            <span>{t("copilot.recommendation.technical_details_toggle")}</span>
             {showTechnicalDetails ? (
               <ChevronUp className="h-3 w-3" />
             ) : (
@@ -98,10 +101,10 @@ export function RecommendationCard({ view }: { view: RecommendationView }) {
           {showTechnicalDetails && (
             <div data-testid="technical-details-content" className="mt-2 space-y-1 font-mono text-[10px]">
               {view.presentationContractVersion && (
-                <div>Phiên bản giao diện: {view.presentationContractVersion}</div>
+                <div>{t("copilot.recommendation.technical_contract_version", { version: view.presentationContractVersion })}</div>
               )}
               {view.scoringModelVersion && (
-                <div>Phiên bản tính điểm: {view.scoringModelVersion}</div>
+                <div>{t("copilot.recommendation.technical_scoring_version", { version: view.scoringModelVersion })}</div>
               )}
             </div>
           )}
@@ -112,6 +115,7 @@ export function RecommendationCard({ view }: { view: RecommendationView }) {
 }
 
 function CandidateRow({ candidate }: { candidate: RecommendedCandidateView }) {
+  const { t } = useTranslation();
   const rankColors: Record<number, string> = {
     1: "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/30",
     2: "bg-slate-500/10 text-slate-700 dark:text-slate-300 border-slate-500/30",
@@ -151,36 +155,41 @@ function CandidateRow({ candidate }: { candidate: RecommendedCandidateView }) {
       <div className="flex flex-wrap items-center gap-4 text-xs">
         {/* Skill Fit */}
         <div data-testid="metric-fit" className="flex flex-col">
-          <span className="text-[10px] text-neutral-400 uppercase font-medium">Phù hợp kỹ năng</span>
+          <span className="text-[10px] text-neutral-400 uppercase font-medium">{t("copilot.recommendation.skill_fit_label")}</span>
           {candidate.fitStatus === "MEASURED" && candidate.presentationFitValue !== null && candidate.presentationFitValue !== undefined ? (
             <span className="font-semibold text-emerald-600 dark:text-emerald-400">
-              {Math.round(candidate.presentationFitValue * 100)}%{" "}
-              <span className="text-[10px] font-normal text-neutral-400">(Đã đo lường)</span>
+              {t("copilot.recommendation.skill_fit_measured", { percent: Math.round(candidate.presentationFitValue * 100) })}
             </span>
           ) : (
             <span className="font-medium text-neutral-500 dark:text-neutral-400">
-              Chưa đủ dữ liệu kỹ năng
+              {t("copilot.recommendation.skill_fit_insufficient")}
             </span>
           )}
         </div>
 
         {/* Workload */}
         <div data-testid="metric-workload" className="flex flex-col">
-          <span className="text-[10px] text-neutral-400 uppercase font-medium">Khối lượng công việc</span>
-          <span className="font-medium text-neutral-600 dark:text-neutral-300">
-            Giá trị workload đã lưu: {candidate.storedWorkloadValue ?? "—"}{" "}
-            <span className="text-[10px] text-neutral-400 block sm:inline">
-              (Chưa có dữ liệu workload đáng tin cậy)
+          <span className="text-[10px] text-neutral-400 uppercase font-medium">{t("copilot.recommendation.workload_label")}</span>
+          {candidate.workloadStatus === "MEASURED" && candidate.workloadUnit === "ACTIVE_TASK_COUNT" ? (
+            <span className="font-semibold text-neutral-800 dark:text-neutral-200">
+              {t("copilot.recommendation.active_task_count", { count: candidate.storedWorkloadValue ?? 0 })}
             </span>
-          </span>
+          ) : (
+            <span className="font-medium text-neutral-600 dark:text-neutral-300">
+              {t("copilot.recommendation.unverified_workload_value", { value: candidate.storedWorkloadValue ?? "—" })}{" "}
+              <span className="text-[10px] text-neutral-400 block sm:inline">
+                {t("copilot.recommendation.unverified_workload_explanation")}
+              </span>
+            </span>
+          )}
         </div>
 
         {/* Performance */}
         <div data-testid="metric-performance" className="flex flex-col">
-          <span className="text-[10px] text-neutral-400 uppercase font-medium">Hiệu suất</span>
+          <span className="text-[10px] text-neutral-400 uppercase font-medium">{t("copilot.recommendation.performance_label")}</span>
           <span className="font-medium text-neutral-600 dark:text-neutral-300">
             <span className="text-[10px] text-neutral-400">
-              Chưa đủ dữ liệu hiệu suất
+              {t("copilot.recommendation.performance_unavailable")}
             </span>
           </span>
         </div>

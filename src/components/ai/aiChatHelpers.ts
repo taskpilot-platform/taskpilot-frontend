@@ -9,6 +9,7 @@ import type {
   ConfirmedTaskMutation,
   RecommendationView,
 } from "./aiChatTypes";
+import i18n from "../../lib/i18n";
 
 export const WRITE_TOOL_NAMES = new Set(["assignTaskToMember", "assignTaskToMemberByName", "recommendAndAssignTask", "updateTaskRequiredSkills", "updateTaskStatus", "patchTask", "patchProject", "patchSprint", "patchTaskComment", "createSystemSkill", "patchSystemSkill", "deleteSystemSkill", "addMySkill", "patchMySkill", "deleteMySkill", "markNotificationRead", "markAllNotificationsRead", "createTask", "createSprint", "startSprint", "completeSprint", "assignTaskToSprint"]);
 
@@ -303,34 +304,36 @@ export function isRecommendationView(data: unknown): data is RecommendationView 
 
 export function formatRecommendationView(view: RecommendationView): string {
   const lines: string[] = [];
-  lines.push("### Đề xuất phân công ứng viên");
+  lines.push(`### ${i18n.t("copilot.recommendation.title")}`);
   if (view.heuristicMode) {
-    lines.push(`- **Chế độ phân công**: ${view.heuristicMode}`);
+    lines.push(`- **${i18n.t("copilot.recommendation.mode_label", { mode: view.heuristicMode })}**`);
   }
   if (view.requiredSkills && view.requiredSkills.length > 0) {
-    lines.push(`- **Kỹ năng yêu cầu**: ${view.requiredSkills.join(", ")}`);
+    lines.push(`- **${i18n.t("copilot.recommendation.skills_label", { skills: view.requiredSkills.join(", ") })}**`);
   }
   if (view.differentiationStatus === "INSUFFICIENT_TO_DIFFERENTIATE") {
-    lines.push(`> **Lưu ý**: Dữ liệu hiện tại không đủ để phân biệt mức độ vượt trội giữa các ứng viên.`);
+    lines.push(`> **${i18n.t("copilot.recommendation.differentiation_alert_title")}**: ${i18n.t("copilot.recommendation.differentiation_alert_desc")}`);
   }
   if (view.candidates && view.candidates.length > 0) {
-    lines.push("\n**Danh sách ứng viên**:");
+    lines.push(`\n**${i18n.t("copilot.recommendation.candidates_list_title")}**`);
     view.candidates.forEach((c) => {
       const fitText = c.fitStatus === "MEASURED" && c.presentationFitValue !== null && c.presentationFitValue !== undefined
-        ? `${Math.round(c.presentationFitValue * 100)}% (Đã đo lường)`
-        : "Chưa đủ dữ liệu kỹ năng";
-      const workloadText = c.storedWorkloadValue !== null && c.storedWorkloadValue !== undefined
-        ? `${c.storedWorkloadValue} điểm (Chưa có dữ liệu workload đáng tin cậy)`
-        : "Chưa có dữ liệu workload đáng tin cậy";
-      const perfText = "Chưa đủ dữ liệu hiệu suất";
+        ? i18n.t("copilot.recommendation.skill_fit_measured", { percent: Math.round(c.presentationFitValue * 100) })
+        : i18n.t("copilot.recommendation.skill_fit_insufficient");
+      const workloadText = c.workloadStatus === "MEASURED" && c.workloadUnit === "ACTIVE_TASK_COUNT"
+        ? i18n.t("copilot.recommendation.active_task_count", { count: c.storedWorkloadValue ?? 0 })
+        : c.storedWorkloadValue !== null && c.storedWorkloadValue !== undefined
+        ? `${i18n.t("copilot.recommendation.unverified_workload_value", { value: c.storedWorkloadValue })} ${i18n.t("copilot.recommendation.unverified_workload_explanation")}`
+        : i18n.t("copilot.recommendation.unverified_workload_fallback");
+      const perfText = i18n.t("copilot.recommendation.performance_unavailable");
       lines.push(`${c.rank}. **${c.displayName}** (${c.memberStatus ?? "AVAILABLE"})`);
-      lines.push(`   - Phù hợp kỹ năng: ${fitText}`);
-      lines.push(`   - Khối lượng công việc: ${workloadText}`);
-      lines.push(`   - Hiệu suất: ${perfText}`);
+      lines.push(`   - ${i18n.t("copilot.recommendation.skill_fit_label")}: ${fitText}`);
+      lines.push(`   - ${i18n.t("copilot.recommendation.workload_label")}: ${workloadText}`);
+      lines.push(`   - ${i18n.t("copilot.recommendation.performance_label")}: ${perfText}`);
     });
   }
   if (view.aiExplanation) {
-    lines.push(`\n**Nhận xét của AI**: ${view.aiExplanation}`);
+    lines.push(`\n**${i18n.t("copilot.recommendation.ai_explanation_label")}** ${view.aiExplanation}`);
   }
   return lines.join("\n");
 }
