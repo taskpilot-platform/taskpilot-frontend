@@ -124,6 +124,50 @@ describe("Global Chat & Meetings Components", () => {
       expect(screen.queryByTestId("channel-item-100")).not.toBeInTheDocument();
       expect(screen.getByTestId("channel-item-200")).toBeInTheDocument();
     });
+
+    it("renders MS Teams tabs (Chat, Files, Meetings) and switches tabs", async () => {
+      render(
+        <MemoryRouter initialEntries={["/chat?project=100"]}>
+          <GlobalChatPage />
+        </MemoryRouter>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId("global-chat-page")).toBeInTheDocument();
+      });
+
+      expect(screen.getByTestId("tab-chat-btn")).toBeInTheDocument();
+      expect(screen.getByTestId("tab-files-btn")).toBeInTheDocument();
+      expect(screen.getByTestId("tab-meetings-btn")).toBeInTheDocument();
+      expect(screen.getByTestId("btn-meet-now")).toBeInTheDocument();
+
+      // Switch to Files tab
+      fireEvent.click(screen.getByTestId("tab-files-btn"));
+      // Switch to Meetings tab
+      fireEvent.click(screen.getByTestId("tab-meetings-btn"));
+      // Switch back to Chat tab
+      fireEvent.click(screen.getByTestId("tab-chat-btn"));
+    });
+
+    it("opens Create Group Chat dialog on button click", async () => {
+      render(
+        <MemoryRouter initialEntries={["/chat"]}>
+          <GlobalChatPage />
+        </MemoryRouter>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId("global-chat-page")).toBeInTheDocument();
+      });
+
+      const openCreateBtn = screen.getByTestId("btn-open-create-group");
+      fireEvent.click(openCreateBtn);
+
+      await waitFor(() => {
+        expect(screen.getByTestId("create-group-chat-modal")).toBeInTheDocument();
+        expect(screen.getByTestId("input-group-name")).toBeInTheDocument();
+      });
+    });
   });
 
   describe("GlobalMeetingsPage", () => {

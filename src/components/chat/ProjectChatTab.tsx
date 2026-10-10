@@ -24,12 +24,16 @@ interface ProjectChatTabProps {
   projectId: number;
   isArchived?: boolean;
   currentUserId?: number | null;
+  hideHeader?: boolean;
+  embedded?: boolean;
 }
 
 export const ProjectChatTab: React.FC<ProjectChatTabProps> = ({
   projectId,
   isArchived = false,
   currentUserId: propUserId,
+  hideHeader = false,
+  embedded = false,
 }) => {
   const { t } = useTranslation();
   const token = useAuthStore((state) => state.accessToken);
@@ -146,50 +150,63 @@ export const ProjectChatTab: React.FC<ProjectChatTabProps> = ({
   };
 
   return (
-    <div className="space-y-4 py-4" data-testid="project-chat-tab">
+    <div
+      className={embedded ? "flex-1 flex flex-col h-full min-h-0" : "space-y-4 py-4"}
+      data-testid="project-chat-tab"
+    >
       {/* Header bar */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-xl font-bold tracking-tight text-foreground flex items-center gap-2">
-            <MessageSquare className="h-6 w-6 text-primary" />
-            {t("chat.chat_room_title", { defaultValue: "Phòng Trò Chuyện Dự Án" })}
-          </h2>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            {t("chat.chat_room_subtitle", { defaultValue: "Trao đổi và thảo luận nhóm theo thời gian thực" })}
-          </p>
-        </div>
+      {!hideHeader && (
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div>
+            <h2 className="text-xl font-bold tracking-tight text-foreground flex items-center gap-2">
+              <MessageSquare className="h-6 w-6 text-primary" />
+              {t("chat.chat_room_title", { defaultValue: "Phòng Trò Chuyện Dự Án" })}
+            </h2>
+            <p className="text-sm text-muted-foreground mt-0.5">
+              {t("chat.chat_room_subtitle", { defaultValue: "Trao đổi và thảo luận nhóm theo thời gian thực" })}
+            </p>
+          </div>
 
-        <div className="flex items-center gap-2">
-          {isConnected ? (
-            <Badge variant="outline" className="gap-1 border-emerald-500/30 text-emerald-600 bg-emerald-500/10">
-              <Wifi className="h-3.5 w-3.5" />
-              {t("chat.connected", { defaultValue: "Đã kết nối" })}
-            </Badge>
-          ) : (
-            <Badge variant="outline" className="gap-1 border-amber-500/30 text-amber-600 bg-amber-500/10">
-              <WifiOff className="h-3.5 w-3.5" />
-              {t("chat.connecting", { defaultValue: "Đang kết nối..." })}
-            </Badge>
-          )}
+          <div className="flex items-center gap-2">
+            {isConnected ? (
+              <Badge variant="outline" className="gap-1 border-emerald-500/30 text-emerald-600 bg-emerald-500/10">
+                <Wifi className="h-3.5 w-3.5" />
+                {t("chat.connected", { defaultValue: "Đã kết nối" })}
+              </Badge>
+            ) : (
+              <Badge variant="outline" className="gap-1 border-amber-500/30 text-amber-600 bg-amber-500/10">
+                <WifiOff className="h-3.5 w-3.5" />
+                {t("chat.connecting", { defaultValue: "Đang kết nối..." })}
+              </Badge>
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
       {error && (
-        <div className="rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive">
+        <div className="rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive shrink-0">
           {error}
         </div>
       )}
 
       {/* Chat Container Card */}
-      <Card className="border-muted/60 shadow-sm flex flex-col h-[600px]">
-        <CardHeader className="pb-3 border-b border-border/40 bg-muted/10 shrink-0">
-          <CardTitle className="text-sm font-semibold flex items-center justify-between">
-            <span>{t("chat.tab_title", { defaultValue: "Kênh Trò Chuyện" })}</span>
-            <span className="text-xs font-normal text-muted-foreground">
-              {t("chat.members_count", { count: messages.length, defaultValue: `${messages.length} tin nhắn` })}
-            </span>
-          </CardTitle>
-        </CardHeader>
+      <Card
+        className={
+          embedded
+            ? "border-0 shadow-none bg-transparent flex flex-col flex-1 min-h-0 rounded-none"
+            : "border-muted/60 shadow-sm flex flex-col h-[600px]"
+        }
+      >
+        {!embedded && (
+          <CardHeader className="pb-3 border-b border-border/40 bg-muted/10 shrink-0">
+            <CardTitle className="text-sm font-semibold flex items-center justify-between">
+              <span>{t("chat.tab_title", { defaultValue: "Kênh Trò Chuyện" })}</span>
+              <span className="text-xs font-normal text-muted-foreground">
+                {t("chat.members_count", { count: messages.length, defaultValue: `${messages.length} tin nhắn` })}
+              </span>
+            </CardTitle>
+          </CardHeader>
+        )}
 
         {/* Messages Stream */}
         <CardContent className="flex-1 p-4 overflow-y-auto space-y-4">
