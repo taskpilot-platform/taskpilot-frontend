@@ -135,7 +135,7 @@ export default function GlobalCalendarPage() {
 
   if (isLoading) {
     return (
-      <div className="flex flex-col flex-1 h-full min-h-0 space-y-6 animate-pulse" data-testid="calendar-loading">
+      <div className="min-h-screen space-y-6 p-3 sm:p-6 md:p-8 max-w-7xl mx-auto w-full flex flex-col flex-1 animate-pulse" data-testid="calendar-loading">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-border/60">
           <div className="space-y-2">
             <div className="h-8 w-56 bg-muted rounded" />
@@ -161,7 +161,7 @@ export default function GlobalCalendarPage() {
   if (projects.length === 0) {
     return (
       <div
-        className="flex flex-col items-center justify-center min-h-[60vh] text-center px-4 max-w-md mx-auto"
+        className="min-h-screen p-3 sm:p-6 md:p-8 max-w-7xl mx-auto w-full flex flex-col items-center justify-center text-center"
         data-testid="no-projects-calendar-empty"
       >
         <div className="w-12 h-12 rounded-xl bg-muted border border-border/80 flex items-center justify-center mb-4 text-muted-foreground">
@@ -180,7 +180,7 @@ export default function GlobalCalendarPage() {
   }
 
   return (
-    <div className="flex flex-col flex-1 h-full min-h-0 space-y-6" data-testid="global-calendar-page">
+    <div className="min-h-screen space-y-6 p-3 sm:p-6 md:p-8 max-w-7xl mx-auto w-full flex flex-col flex-1" data-testid="global-calendar-page">
       {/* Top Banner / Project Switcher */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-border/60">
         <div className="space-y-1">
