@@ -728,8 +728,8 @@ export default function ProjectWorkspacePage() {
         dates.push(time);
       }
     };
-    addDate(timelineData?.project.startDate);
-    addDate(timelineData?.project.endDate);
+    addDate(timelineData?.project?.startDate);
+    addDate(timelineData?.project?.endDate);
     timelineData?.sprints.forEach(sprint => {
       addDate(sprint.startDate);
       addDate(sprint.endDate);
