@@ -7,7 +7,9 @@ import type {
   DynamicFormSpec,
   PendingActionConfirmation,
   ConfirmedTaskMutation,
+  RecommendationView,
 } from "./aiChatTypes";
+import i18n from "../../lib/i18n";
 
 export const WRITE_TOOL_NAMES = new Set(["assignTaskToMember", "assignTaskToMemberByName", "recommendAndAssignTask", "updateTaskRequiredSkills", "updateTaskStatus", "patchTask", "patchProject", "patchSprint", "patchTaskComment", "createSystemSkill", "patchSystemSkill", "deleteSystemSkill", "addMySkill", "patchMySkill", "deleteMySkill", "markNotificationRead", "markAllNotificationsRead", "createTask", "createSprint", "startSprint", "completeSprint", "assignTaskToSprint"]);
 
@@ -290,6 +292,52 @@ export function tryRepairTruncatedJson(raw: string): unknown | null {
   return null;
 }
 
+export function isRecommendationView(data: unknown): data is RecommendationView {
+  if (!data || typeof data !== "object") return false;
+  const record = data as Record<string, unknown>;
+  return Array.isArray(record.candidates) && (
+    typeof record.presentationContractVersion === "string" ||
+    typeof record.scoringModelVersion === "string" ||
+    (record.candidates.length > 0 && typeof (record.candidates[0] as Record<string, unknown>)?.displayName === "string")
+  );
+}
+
+export function formatRecommendationView(view: RecommendationView): string {
+  const lines: string[] = [];
+  lines.push(`### ${i18n.t("copilot.recommendation.title")}`);
+  if (view.heuristicMode) {
+    lines.push(`- **${i18n.t("copilot.recommendation.mode_label", { mode: view.heuristicMode })}**`);
+  }
+  if (view.requiredSkills && view.requiredSkills.length > 0) {
+    lines.push(`- **${i18n.t("copilot.recommendation.skills_label", { skills: view.requiredSkills.join(", ") })}**`);
+  }
+  if (view.differentiationStatus === "INSUFFICIENT_TO_DIFFERENTIATE") {
+    lines.push(`> **${i18n.t("copilot.recommendation.differentiation_alert_title")}**: ${i18n.t("copilot.recommendation.differentiation_alert_desc")}`);
+  }
+  if (view.candidates && view.candidates.length > 0) {
+    lines.push(`\n**${i18n.t("copilot.recommendation.candidates_list_title")}**`);
+    view.candidates.forEach((c) => {
+      const fitText = c.fitStatus === "MEASURED" && c.presentationFitValue !== null && c.presentationFitValue !== undefined
+        ? i18n.t("copilot.recommendation.skill_fit_measured", { percent: Math.round(c.presentationFitValue * 100) })
+        : i18n.t("copilot.recommendation.skill_fit_insufficient");
+      const workloadText = c.workloadStatus === "MEASURED" && c.workloadUnit === "ACTIVE_TASK_COUNT"
+        ? i18n.t("copilot.recommendation.active_task_count", { count: c.storedWorkloadValue ?? 0 })
+        : c.storedWorkloadValue !== null && c.storedWorkloadValue !== undefined
+        ? `${i18n.t("copilot.recommendation.unverified_workload_value", { value: c.storedWorkloadValue })} ${i18n.t("copilot.recommendation.unverified_workload_explanation")}`
+        : i18n.t("copilot.recommendation.unverified_workload_fallback");
+      const perfText = i18n.t("copilot.recommendation.performance_unavailable");
+      lines.push(`${c.rank}. **${c.displayName}** (${c.memberStatus ?? "AVAILABLE"})`);
+      lines.push(`   - ${i18n.t("copilot.recommendation.skill_fit_label")}: ${fitText}`);
+      lines.push(`   - ${i18n.t("copilot.recommendation.workload_label")}: ${workloadText}`);
+      lines.push(`   - ${i18n.t("copilot.recommendation.performance_label")}: ${perfText}`);
+    });
+  }
+  if (view.aiExplanation) {
+    lines.push(`\n**${i18n.t("copilot.recommendation.ai_explanation_label")}** ${view.aiExplanation}`);
+  }
+  return lines.join("\n");
+}
+
 export function formatFriendlyToolPayload(value?: string) {
   if (!value) return null;
 
@@ -306,12 +354,17 @@ export function formatFriendlyToolPayload(value?: string) {
   if (parsed === null) {
     return value
       .replace(/"[^"]*[Ii]d"\s*:\s*[^,}\]]+,?\s*/g, '') // xóa các cặp key:value chứa id
-      .replace(/[{}\[\]"]/g, '') // xóa dấu JSON
+      .replace(/[{}[\]"]/g, '') // xóa dấu JSON
       .split('\n')
       .map(l => l.trim())
       .filter(l => l.length > 2)
       .map(l => `- ${l.replace(/^,\s*/, '').replace(/,\s*$/, '').replace(/\s*,\s*/g, ' | ')}`)
       .join('\n');
+  }
+
+  // Bước 4: Kiểm tra allowlisted RecommendationView để hiển thị chuyên dụng
+  if (isRecommendationView(parsed)) {
+    return formatRecommendationView(parsed);
   }
 
   // Format parsed data

@@ -444,7 +444,32 @@
 		"phase_generating": "Generating",
 		"phase_finalized": "Finalized",
 		"phase_failed": "Failed",
-		"phase_processing": "Processing"
+		"phase_processing": "Processing",
+		"recommendation": {
+			"title": "Candidate Recommendation",
+			"heuristic_mode": "Mode: {{mode}}",
+			"required_skills": "Skills: {{skills}}",
+			"differentiation_alert_title": "Note:",
+			"differentiation_alert_desc": "Current data is insufficient to differentiate superior performance among candidates. The list is ordered by technical display order.",
+			"ai_explanation_label": "AI Assessment:",
+			"empty": "No suitable candidates found.",
+			"technical_details_toggle": "Model Technical Details",
+			"technical_contract_version": "Interface version: {{version}}",
+			"technical_scoring_version": "Scoring version: {{version}}",
+			"skill_fit_label": "Skill Fit",
+			"skill_fit_measured": "{{percent}}% (Measured)",
+			"skill_fit_insufficient": "Insufficient skill data",
+			"workload_label": "Workload",
+			"active_task_count": "Active assigned tasks: {{count}}",
+			"unverified_workload_value": "Stored workload value: {{value}}",
+			"unverified_workload_explanation": "(No reliable workload data available)",
+			"unverified_workload_fallback": "No reliable workload data available",
+			"performance_label": "Performance",
+			"performance_unavailable": "Insufficient performance data",
+			"candidates_list_title": "Candidate List:",
+			"mode_label": "Assignment mode: {{mode}}",
+			"skills_label": "Required skills: {{skills}}"
+		}
 	},
 	"comments": {
 		"title": "Comments",
