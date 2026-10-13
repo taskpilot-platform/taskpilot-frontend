@@ -27,6 +27,7 @@ import CommentsPage from "@/pages/CommentsPage";
 import GlobalChatPage from "@/pages/GlobalChatPage";
 import GlobalMeetingsPage from "@/pages/GlobalMeetingsPage";
 import GlobalCalendarPage from "@/pages/GlobalCalendarPage";
+import DemoRecommendationCardPage from "@/pages/DemoRecommendationCardPage";
 
 // Import Guard
 import ProtectedRoute from "./ProtectedRoute";
@@ -141,6 +142,10 @@ export const router = createBrowserRouter([
       {
         path: "/copilot",
         element: <AiChatPage />,
+      },
+      {
+        path: "/demo-recommendation",
+        element: <DemoRecommendationCardPage />,
       },
 
       // Admin
