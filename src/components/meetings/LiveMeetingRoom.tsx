@@ -13,6 +13,8 @@ import {
   Send,
   X,
   Disc,
+  Sparkles,
+  ChevronUp,
 } from "lucide-react";
 import { Room, RoomEvent, Track, VideoPresets } from "livekit-client";
 import { toast } from "react-toastify";
@@ -25,6 +27,11 @@ import { useConfirm } from "@/components/ui/confirm-dialog";
 import { meetingService } from "@/services/meeting.service";
 import { meetingRecordingStore } from "@/services/meetingRecordingStore";
 import { projectFilesService } from "@/services/project-files.service";
+import {
+  videoBackgroundBlurService,
+  BLUR_PRESETS,
+  type BlurPreset,
+} from "@/services/videoBackgroundBlurService";
 import type { MeetingTokenResponse, ProjectMeetingDto } from "@/types/meeting";
 
 interface LiveMeetingRoomProps {
@@ -62,9 +69,13 @@ interface ParticipantView {
 function ParticipantTile({
   view,
   room,
+  blurStream,
+  blurPreset = "off",
 }: {
   view: ParticipantView;
   room: Room | null;
+  blurStream?: MediaStream | null;
+  blurPreset?: BlurPreset;
 }) {
   const { t } = useTranslation();
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -80,6 +91,16 @@ function ParticipantTile({
         videoRef.current.srcObject = null;
       }
       setHasVideoStream(false);
+      return;
+    }
+
+    // 0. If local user has background blur active, prioritize processed blurred stream
+    if (view.isLocal && blurPreset !== "off" && blurStream) {
+      if (videoRef.current) {
+        videoRef.current.srcObject = blurStream;
+        videoRef.current.play()?.catch(() => {});
+        setHasVideoStream(true);
+      }
       return;
     }
 
@@ -142,7 +163,7 @@ function ParticipantTile({
         fallbackStream.getTracks().forEach((t) => t.stop());
       }
     };
-  }, [view.isCameraOff, view.isLocal, view.identity, room]);
+  }, [view.isCameraOff, view.isLocal, view.identity, room, blurStream, blurPreset]);
 
   return (
     <div
@@ -199,6 +220,22 @@ function ParticipantTile({
             </Badge>
           )}
           <span className="truncate max-w-[120px] sm:max-w-[180px]">{view.name}</span>
+          {view.isLocal && blurPreset !== "off" && (
+            <Badge
+              variant="outline"
+              className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 px-1.5 py-0 text-[10px] gap-1 font-medium pointer-events-auto"
+              data-testid="blur-active-badge"
+            >
+              <Sparkles className="w-2.5 h-2.5 text-emerald-500" />
+              <span>
+                {blurPreset === "slight"
+                  ? t("meetings.blur_slight_label", { defaultValue: "Mờ nhẹ" })
+                  : blurPreset === "deep"
+                  ? t("meetings.blur_deep_label", { defaultValue: "Mờ sâu" })
+                  : t("meetings.blur_standard_label", { defaultValue: "Mờ nền" })}
+              </span>
+            </Badge>
+          )}
         </div>
 
         <div className="bg-background/85 dark:bg-slate-950/80 backdrop-blur-md p-1.5 rounded-lg border border-border/80 shadow-sm">
@@ -304,6 +341,12 @@ export function LiveMeetingRoom({
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [screenStream, setScreenStream] = useState<MediaStream | null>(null);
 
+  // Background blur controls
+  const [blurPreset, setBlurPreset] = useState<BlurPreset>("off");
+  const [blurStream, setBlurStream] = useState<MediaStream | null>(null);
+  const [isBlurMenuOpen, setIsBlurMenuOpen] = useState(false);
+  const rawWebcamStreamRef = useRef<MediaStream | null>(null);
+
   // Recording controls
   const [isRecording, setIsRecording] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -367,6 +410,11 @@ export function LiveMeetingRoom({
     return () => {
       isMounted = false;
       cleanupRoom();
+      videoBackgroundBlurService.stop();
+      if (rawWebcamStreamRef.current) {
+        rawWebcamStreamRef.current.getTracks().forEach((t) => t.stop());
+        rawWebcamStreamRef.current = null;
+      }
     };
   }, [projectId, meetingId]);
 
@@ -554,6 +602,14 @@ export function LiveMeetingRoom({
   };
 
   const cleanupRoom = () => {
+    videoBackgroundBlurService.stop();
+    if (rawWebcamStreamRef.current) {
+      rawWebcamStreamRef.current.getTracks().forEach((t) => t.stop());
+      rawWebcamStreamRef.current = null;
+    }
+    setBlurStream(null);
+    setBlurPreset("off");
+
     if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
       try {
         mediaRecorderRef.current.stop();
@@ -670,6 +726,78 @@ export function LiveMeetingRoom({
     setViews((prev) =>
       prev.map((v) => (v.isLocal ? { ...v, isCameraOff: !next } : v))
     );
+  };
+
+  // Background blur management
+  const applyBlurPreset = async (preset: BlurPreset) => {
+    setIsBlurMenuOpen(false);
+    if (preset === "off") {
+      videoBackgroundBlurService.stop();
+      setBlurPreset("off");
+      setBlurStream(null);
+      toast.info(t("meetings.blur_disabled_toast", { defaultValue: "Đã tắt làm mờ nền" }));
+      return;
+    }
+
+    try {
+      // 1. Obtain raw webcam stream if not cached or active
+      let sourceStream = rawWebcamStreamRef.current;
+      if (!sourceStream || sourceStream.getTracks().every((t) => t.readyState === "ended")) {
+        if (typeof navigator !== "undefined" && navigator.mediaDevices?.getUserMedia) {
+          sourceStream = await navigator.mediaDevices.getUserMedia({
+            video: { width: { ideal: 1280 }, height: { ideal: 720 } },
+            audio: false,
+          });
+          rawWebcamStreamRef.current = sourceStream;
+        }
+      }
+
+      if (!sourceStream) {
+        // Fallback for headless / test environment
+        const mockCanvas = typeof document !== "undefined" ? document.createElement("canvas") : null;
+        if (mockCanvas && typeof mockCanvas.captureStream === "function") {
+          sourceStream = mockCanvas.captureStream(30);
+          rawWebcamStreamRef.current = sourceStream;
+        }
+      }
+
+      if (!sourceStream) {
+        toast.warning(t("meetings.blur_no_camera", { defaultValue: "Không tìm thấy thiết bị camera để làm mờ nền" }));
+        return;
+      }
+
+      const processed = await videoBackgroundBlurService.initialize(sourceStream, preset);
+      setBlurPreset(preset);
+      setBlurStream(processed);
+
+      // Attempt swapping LiveKit track if available
+      if (roomRef.current?.localParticipant) {
+        const pub = roomRef.current.localParticipant.getTrackPublication(Track.Source.Camera);
+        if (pub?.track && typeof (pub.track as any).restartTrack === "function") {
+          const newVideoTrack = processed.getVideoTracks()[0];
+          if (newVideoTrack) {
+            try {
+              await (pub.track as any).restartTrack({ track: newVideoTrack });
+            } catch (trackErr) {
+              console.warn("LiveKit track restart fallback:", trackErr);
+            }
+          }
+        }
+      }
+
+      toast.success(t("meetings.blur_enabled_toast", { defaultValue: "Đã bật tính năng làm mờ nền" }));
+    } catch (err) {
+      console.warn("Error applying background blur:", err);
+      toast.warning(t("meetings.blur_error", { defaultValue: "Không thể khởi tạo làm mờ nền" }));
+    }
+  };
+
+  const toggleBlur = () => {
+    if (blurPreset === "off") {
+      applyBlurPreset("standard");
+    } else {
+      applyBlurPreset("off");
+    }
   };
 
   // Toggle Screen Share
@@ -951,6 +1079,8 @@ export function LiveMeetingRoom({
                   <ParticipantTile
                     view={v}
                     room={roomRef.current}
+                    blurStream={blurStream}
+                    blurPreset={blurPreset}
                   />
                 </div>
               ))}
@@ -975,6 +1105,8 @@ export function LiveMeetingRoom({
                   key={v.identity}
                   view={v}
                   room={roomRef.current}
+                  blurStream={blurStream}
+                  blurPreset={blurPreset}
                 />
               ))}
             </div>
@@ -1112,6 +1244,82 @@ export function LiveMeetingRoom({
           {isCamOn ? <Video className="w-4 h-4 text-emerald-500" /> : <VideoOff className="w-4 h-4" />}
           <span className="hidden sm:inline text-xs">{isCamOn ? t("meetings.cam_off", { defaultValue: "Tắt camera" }) : t("meetings.cam_on", { defaultValue: "Bật camera" })}</span>
         </Button>
+
+        {/* Background Blur Toggle & Preset Menu */}
+        <div className="relative">
+          <div className="flex items-center">
+            <Button
+              type="button"
+              size="sm"
+              variant={blurPreset !== "off" ? "default" : "outline"}
+              onClick={toggleBlur}
+              className={`h-10 px-3 sm:px-3.5 rounded-l-xl rounded-r-none gap-2 font-medium transition-all ${
+                blurPreset !== "off"
+                  ? "bg-emerald-600 text-white hover:bg-emerald-500 shadow-sm border border-emerald-500"
+                  : "border-border bg-background hover:bg-accent text-foreground border-r-0"
+              }`}
+              title={blurPreset !== "off" ? t("meetings.blur_active", { defaultValue: "Đang bật làm mờ nền" }) : t("meetings.background_blur", { defaultValue: "Làm mờ nền" })}
+              data-testid="toggle-blur-btn"
+            >
+              <Sparkles className={`w-4 h-4 ${blurPreset !== "off" ? "text-white animate-pulse" : "text-emerald-500"}`} />
+              <span className="hidden sm:inline text-xs">
+                {blurPreset === "off"
+                  ? t("meetings.background_blur", { defaultValue: "Mờ nền" })
+                  : blurPreset === "slight"
+                  ? t("meetings.blur_slight_label", { defaultValue: "Mờ nhẹ" })
+                  : blurPreset === "deep"
+                  ? t("meetings.blur_deep_label", { defaultValue: "Mờ sâu" })
+                  : t("meetings.blur_standard_label", { defaultValue: "Chuẩn" })}
+              </span>
+            </Button>
+            <Button
+              type="button"
+              size="icon"
+              variant={blurPreset !== "off" ? "default" : "outline"}
+              onClick={() => setIsBlurMenuOpen(!isBlurMenuOpen)}
+              className={`h-10 w-8 rounded-r-xl rounded-l-none transition-all ${
+                blurPreset !== "off"
+                  ? "bg-emerald-600 text-white hover:bg-emerald-500 border border-emerald-500 border-l-emerald-400"
+                  : "border-border bg-background hover:bg-accent text-foreground"
+              }`}
+              title={t("meetings.blur_settings", { defaultValue: "Tùy chọn độ mờ" })}
+              data-testid="blur-menu-trigger-btn"
+            >
+              <ChevronUp className={`w-3.5 h-3.5 transition-transform duration-200 ${isBlurMenuOpen ? "rotate-180" : ""}`} />
+            </Button>
+          </div>
+
+          {/* Preset Popup Menu */}
+          {isBlurMenuOpen && (
+            <div
+              className="absolute bottom-12 left-0 w-52 bg-card/95 backdrop-blur-md border border-border rounded-xl p-1.5 shadow-2xl z-30 space-y-1 animate-in fade-in slide-in-from-bottom-2 duration-150"
+              data-testid="blur-preset-menu"
+            >
+              <div className="px-2.5 py-1 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider border-b border-border/60 mb-1">
+                {t("meetings.blur_settings_title", { defaultValue: "Mức độ làm mờ nền" })}
+              </div>
+              {BLUR_PRESETS.map((p) => {
+                const isSelected = blurPreset === p.key;
+                return (
+                  <button
+                    key={p.key}
+                    type="button"
+                    onClick={() => applyBlurPreset(p.key)}
+                    className={`w-full flex items-center justify-between px-2.5 py-1.5 text-xs rounded-lg transition-colors text-left ${
+                      isSelected
+                        ? "bg-primary text-primary-foreground font-medium"
+                        : "hover:bg-accent text-foreground"
+                    }`}
+                    data-testid={`blur-preset-option-${p.key}`}
+                  >
+                    <span>{t(p.labelKey, { defaultValue: p.fallbackLabel })}</span>
+                    {isSelected && <Check className="w-3.5 h-3.5 ml-2 shrink-0" />}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
 
         {/* Screen Share */}
         <Button
