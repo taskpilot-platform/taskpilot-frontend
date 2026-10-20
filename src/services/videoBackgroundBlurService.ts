@@ -140,9 +140,6 @@ export class VideoBackgroundBlurService {
     }
 
     try {
-      const width = 640;
-      const height = 480;
-
       // 1. Offscreen Video element to render camera frames
       const video = document.createElement("video");
       video.muted = true;
@@ -152,14 +149,24 @@ export class VideoBackgroundBlurService {
       await video.play().catch(() => {});
       this.offscreenVideo = video;
 
-      // 2. Offscreen Canvas element for frame composition
+      // 2. Determine camera dimensions preserving exact aspect ratio (standard 16:9 1280x720)
+      const trackSettings = videoTrack.getSettings ? videoTrack.getSettings() : undefined;
+      const rawWidth = trackSettings?.width || video.videoWidth || 1280;
+      const rawHeight = trackSettings?.height || video.videoHeight || 720;
+      const aspectRatio = rawWidth > 0 && rawHeight > 0 ? rawWidth / rawHeight : 16 / 9;
+
+      // Normalize canvas width to 1280 (or rawWidth if smaller) while preserving exact aspect ratio
+      const width = rawWidth >= 1280 ? 1280 : rawWidth || 1280;
+      const height = Math.round(width / aspectRatio) || 720;
+
+      // 3. Offscreen Canvas element for frame composition
       const canvas = document.createElement("canvas");
       canvas.width = width;
       canvas.height = height;
       this.canvas = canvas;
       this.ctx = canvas.getContext("2d", { willReadFrequently: true });
 
-      // 3. Initialize Google MediaPipe SelfieSegmentation AI model
+      // 4. Initialize Google MediaPipe SelfieSegmentation AI model
       await this.initMediaPipeModel(width, height);
 
       // 4. Obtain processed MediaStream from canvas
@@ -206,9 +213,10 @@ export class VideoBackgroundBlurService {
       });
 
       // Model selection: 1 (Landscape 144x256, optimized for webcam meetings)
+      // selfieMode: false preserves natural camera orientation without horizontal flipping
       segmenter.setOptions({
         modelSelection: 1,
-        selfieMode: true,
+        selfieMode: false,
       });
 
       segmenter.onResults((results: Results) => {
