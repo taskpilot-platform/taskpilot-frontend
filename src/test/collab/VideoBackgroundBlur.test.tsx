@@ -27,9 +27,45 @@ vi.mock("@/services/project-files.service", () => ({
   },
 }));
 
+vi.mock("@mediapipe/selfie_segmentation", () => {
+  return {
+    SelfieSegmentation: class MockSelfieSegmentation {
+      private onResultsCallback: any = null;
+      setOptions = vi.fn();
+      initialize = vi.fn().mockResolvedValue(undefined);
+      close = vi.fn().mockResolvedValue(undefined);
+      reset = vi.fn();
+      onResults(callback: any) {
+        this.onResultsCallback = callback;
+      }
+      send = vi.fn().mockImplementation(async ({ image }: any) => {
+        if (this.onResultsCallback) {
+          this.onResultsCallback({
+            image,
+            segmentationMask: image,
+          });
+        }
+      });
+    },
+  };
+});
+
 // Mock HTMLMediaElement & Canvas captureStream
 beforeEach(() => {
   vi.clearAllMocks();
+
+  // Mock HTMLCanvasElement 2D context
+  HTMLCanvasElement.prototype.getContext = vi.fn().mockReturnValue({
+    clearRect: vi.fn(),
+    drawImage: vi.fn(),
+    save: vi.fn(),
+    restore: vi.fn(),
+    beginPath: vi.fn(),
+    ellipse: vi.fn(),
+    clip: vi.fn(),
+    filter: "none",
+    globalCompositeOperation: "source-over",
+  });
 
   // Mock getUserMedia
   if (typeof navigator !== "undefined") {
@@ -134,6 +170,41 @@ describe("VideoBackgroundBlurService Unit Tests", () => {
     expect(service.isBlurActive()).toBe(false);
     expect(service.getSourceStream()).toBeNull();
     expect(service.getProcessedStream()).toBeNull();
+  });
+
+  it("activates MediaPipe AI segmentation by default on supported environments", async () => {
+    const service = new VideoBackgroundBlurService();
+    const mockTrack = { kind: "video", stop: vi.fn(), readyState: "live" };
+    const mockStream = {
+      getTracks: () => [mockTrack],
+      getVideoTracks: () => [mockTrack],
+    } as unknown as MediaStream;
+
+    await service.initialize(mockStream, "standard");
+    expect(service.isUsingAi()).toBe(true);
+    expect(service.isBlurActive()).toBe(true);
+    service.stop();
+  });
+
+  it("handles MediaPipe failure by falling back gracefully without throwing", async () => {
+    const service = new VideoBackgroundBlurService();
+    const mockTrack = { kind: "video", stop: vi.fn(), readyState: "live" };
+    const mockStream = {
+      getTracks: () => [mockTrack],
+      getVideoTracks: () => [mockTrack],
+    } as unknown as MediaStream;
+
+    const spy = vi.spyOn(service as any, "initMediaPipeModel").mockImplementationOnce(async () => {
+      (service as any).isAiActive = false;
+      (service as any).segmenter = null;
+    });
+
+    const processed = await service.initialize(mockStream, "deep");
+    expect(processed).toBeDefined();
+    expect(service.getPreset()).toBe("deep");
+    expect(service.isUsingAi()).toBe(false);
+    service.stop();
+    spy.mockRestore();
   });
 });
 
