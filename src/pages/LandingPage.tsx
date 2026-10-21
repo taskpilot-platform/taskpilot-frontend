@@ -3,6 +3,7 @@ import { LandingNavbar } from "@/components/landing/LandingNavbar";
 import { LandingHero } from "@/components/landing/LandingHero";
 import { LandingInteractivePreview } from "@/components/landing/LandingInteractivePreview";
 import { LandingFeaturesBento } from "@/components/landing/LandingFeaturesBento";
+import { LandingFeaturesDeepDive } from "@/components/landing/LandingFeaturesDeepDive";
 import { LandingMetrics } from "@/components/landing/LandingMetrics";
 import { LandingPricing } from "@/components/landing/LandingPricing";
 import { LandingFaq } from "@/components/landing/LandingFaq";
@@ -46,13 +47,16 @@ export default function LandingPage() {
         {/* 5. Asymmetrical Bento Features */}
         <LandingFeaturesBento />
 
-        {/* 6. Pricing Matrix */}
+        {/* 6. Comprehensive 7-Module Interactive Deep Dive */}
+        <LandingFeaturesDeepDive />
+
+        {/* 7. Pricing Matrix */}
         <LandingPricing />
 
-        {/* 7. FAQ Section */}
+        {/* 8. FAQ Section */}
         <LandingFaq />
 
-        {/* 8. Bottom Full-Bleed Call to Action */}
+        {/* 9. Bottom Full-Bleed Call to Action */}
         <section className="py-20 border-t border-border/80 bg-zinc-950 text-white relative overflow-hidden">
           <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff0a_1px,transparent_1px),linear-gradient(to_bottom,#ffffff0a_1px,transparent_1px)] bg-[size:32px_32px] pointer-events-none" />
 
@@ -77,7 +81,7 @@ export default function LandingPage() {
         </section>
       </main>
 
-      {/* 9. Semantic Footer */}
+      {/* 10. Semantic Footer */}
       <LandingFooter />
     </div>
   );

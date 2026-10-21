@@ -40,19 +40,19 @@ describe("LandingPage Component & SEO Unit Tests", () => {
     // Default tab is Copilot
     expect(screen.getByText("TaskPilot Autonomous Agent")).toBeInTheDocument();
 
-    // Switch to Kanban
-    const kanbanTabBtn = screen.getByRole("button", { name: /kanban/i });
-    fireEvent.click(kanbanTabBtn);
+    // Switch to Kanban in demo preview
+    const kanbanTabBtns = screen.getAllByRole("button", { name: /kanban/i });
+    fireEvent.click(kanbanTabBtns[0]);
     expect(screen.getByText(/CẦN LÀM \(TO DO\)/i)).toBeInTheDocument();
 
     // Switch to HD Meeting
-    const meetingTabBtn = screen.getByRole("button", { name: /hd meeting/i });
-    fireEvent.click(meetingTabBtn);
+    const meetingTabBtns = screen.getAllByRole("button", { name: /họp hd|meeting/i });
+    fireEvent.click(meetingTabBtns[0]);
     expect(screen.getByText(/Họp Daily Standup - Phòng #234/i)).toBeInTheDocument();
 
     // Switch to RAG Knowledge
-    const ragTabBtn = screen.getByRole("button", { name: /rag knowledge/i });
-    fireEvent.click(ragTabBtn);
+    const ragTabBtns = screen.getAllByRole("button", { name: /rag/i });
+    fireEvent.click(ragTabBtns[0]);
     expect(screen.getByText(/architecture_design_phase3.pdf/i)).toBeInTheDocument();
   });
 
@@ -100,5 +100,37 @@ describe("LandingPage Component & SEO Unit Tests", () => {
       expect(screen.getByText("The Next-Gen")).toBeInTheDocument();
       expect(screen.getByText("Intelligent Project Platform")).toBeInTheDocument();
     });
+  });
+
+  it("interacts with the Hero AI playground suggestions", () => {
+    render(
+      <MemoryRouter>
+        <LandingPage />
+      </MemoryRouter>
+    );
+
+    // Click "Tối ưu phân bổ nhân sự" prompt
+    const prompt2Btn = screen.getByRole("button", { name: "Tối ưu phân bổ nhân sự" });
+    fireEvent.click(prompt2Btn);
+
+    // Verify simulated heuristic output appears
+    expect(screen.getAllByText(/Phân tích Heuristic/i).length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("renders the 7-module deep dive suite and switches between capability tabs", () => {
+    render(
+      <MemoryRouter>
+        <LandingPage />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText("Hệ sinh thái tính năng chuyên sâu")).toBeInTheDocument();
+
+    // Click "Họp video HD & Studio AI" tab in Deep Dive
+    const videoSuiteTab = screen.getByRole("button", { name: /Họp video HD & Studio AI/i });
+    fireEvent.click(videoSuiteTab);
+
+    // Verify slider and video specs
+    expect(screen.getByText(/Adjust AI Background Blur Strength/i)).toBeInTheDocument();
   });
 });
