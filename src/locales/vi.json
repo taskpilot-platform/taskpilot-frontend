@@ -808,5 +808,122 @@
     "group_created_error": "Có lỗi khi tạo nhóm trò chuyện.",
     "empty_group_messages": "Nhóm chưa có tin nhắn nào. Hãy gửi lời chào đầu tiên!",
     "no_conversations_found": "Không tìm thấy cuộc trò chuyện phù hợp"
+  },
+  "landing": {
+    "nav": {
+      "features": "Tính năng",
+      "copilot": "AI Copilot",
+      "knowledge": "Tri thức RAG",
+      "meetings": "Họp trực tuyến",
+      "pricing": "Bảng giá",
+      "faq": "Hỏi đáp",
+      "login": "Đăng nhập",
+      "get_started": "Bắt đầu miễn phí",
+      "dashboard": "Vào Dashboard"
+    },
+    "hero": {
+      "badge": "TaskPilot 2.0 • Tích hợp Multi-Model AI & Họp trực tuyến HD",
+      "title_prefix": "Nền tảng quản trị dự án",
+      "title_highlight": "Thông minh thế hệ mới",
+      "description": "Tăng tốc tiến độ đội ngũ với AI Agent tự trị, phân bổ công việc thông minh theo ma trận kỹ năng, tra cứu tri thức RAG và phòng họp video HD không độ trễ.",
+      "cta_primary": "Trải nghiệm miễn phí",
+      "cta_secondary": "Xem giới thiệu tính năng",
+      "trusted_by": "Được tin cậy bởi các nhóm kỹ sư và doanh nghiệp công nghệ hàng đầu"
+    },
+    "preview": {
+      "badge": "Trực quan hóa luồng công việc",
+      "active_sprint": "Sprint 14 • Phát hành TaskPilot v2.0",
+      "tasks_completed": "28 / 32 Công việc hoàn thành",
+      "ai_recommendation_title": "Đề xuất thông minh từ Copilot",
+      "ai_recommendation_desc": "Tự động phân tích ma trận kỹ năng và khối lượng công việc để gán task Frontend cho kỹ sư phù hợp nhất.",
+      "ai_status": "Đã tối ưu hóa"
+    },
+    "features": {
+      "badge": "Tính năng cốt lõi",
+      "title": "Công cụ toàn diện cho mọi quy trình Agile",
+      "subtitle": "Chấm dứt việc phân mảnh dữ liệu qua hàng tá ứng dụng rời rạc. Mọi tác vụ, cuộc họp và kho tài liệu đều kết nối liền mạch.",
+      "item_copilot_title": "Multi-Model AI Copilot",
+      "item_copilot_desc": "Tự động chọn lọc mô hình tối ưu giữa Gemma 4, Gemini 2.5, DeepSeek R1 và GPT-4o để phân tích tiến độ, tóm tắt công việc và đề xuất chiến lược.",
+      "item_rag_title": "Kho tri thức RAG thông minh",
+      "item_rag_desc": "Tải lên tài liệu kiến trúc, specs hoặc tài liệu dự án. AI hỗ trợ tra cứu chính xác từng điều khoản với pgvector embedding.",
+      "item_meetings_title": "Họp trực tuyến HD & Xóa phông AI",
+      "item_meetings_desc": "Phòng họp bảo mật WebRTC LiveKit, chia sẻ màn hình 1080p, ghi hình và công nghệ tách nền chân dung ôm sát chạy ngay trên trình duyệt.",
+      "item_kanban_title": "Bảng Kanban & Sprint Board",
+      "item_kanban_desc": "Quản lý tiến độ trực quan, kéo thả mượt mà, phân loại nhãn và theo dõi trạng thái công việc theo thời gian thực.",
+      "item_skills_title": "Ma trận kỹ năng & Auto-Assignment",
+      "item_skills_desc": "Thuật toán Heuristic cân bằng giữa độ phù hợp kỹ năng, tải công việc và hiệu suất để gán task công bằng, chuẩn xác.",
+      "item_calendar_title": "Lịch biểu & Tích hợp Lịch họp",
+      "item_calendar_desc": "Đồng bộ hạn chót công việc, lịch trình sprint và các phiên họp video với thông báo đẩy tức thì."
+    },
+    "metrics": {
+      "item_1_val": "< 150ms",
+      "item_1_label": "Độ trễ streaming AI",
+      "item_2_val": "30+",
+      "item_2_label": "Mô hình AI hỗ trợ",
+      "item_3_val": "99.9%",
+      "item_3_label": "Thời gian hoạt động (Uptime)",
+      "item_4_val": "0₫",
+      "item_4_label": "Phí khởi tạo ban đầu"
+    },
+    "pricing": {
+      "badge": "Bảng giá minh bạch",
+      "title": "Khởi đầu miễn phí, mở rộng khi cần",
+      "subtitle": "Không yêu cầu thẻ tín dụng. Lựa chọn giải pháp phù hợp với quy mô đội ngũ của bạn.",
+      "tier_starter_name": "Starter",
+      "tier_starter_desc": "Dành cho lập trình viên cá nhân hoặc các nhóm nhỏ mới bắt đầu.",
+      "tier_starter_price": "0₫",
+      "tier_starter_period": "Mãi mãi miễn phí",
+      "tier_starter_f1": "Tối đa 3 dự án & 5 thành viên",
+      "tier_starter_f2": "AI Copilot cơ bản (Gemma / Flash)",
+      "tier_starter_f3": "Bảng Kanban & Sprint Board",
+      "tier_starter_f4": "500MB kho tệp dự án",
+      "tier_starter_btn": "Bắt đầu miễn phí",
+      "tier_pro_name": "Pro Team",
+      "tier_pro_badge": "Phổ biến nhất",
+      "tier_pro_desc": "Dành cho các đội ngũ phát triển Agile cần tăng tốc tối đa hiệu suất làm việc.",
+      "tier_pro_price": "149.000₫",
+      "tier_pro_period": "/ người dùng / tháng",
+      "tier_pro_f1": "Không giới hạn dự án & thành viên",
+      "tier_pro_f2": "Full Multi-Model AI (DeepSeek, GPT-4o, Gemini)",
+      "tier_pro_f3": "Kho tri thức RAG với pgvector không giới hạn",
+      "tier_pro_f4": "Họp trực tuyến HD & Ghi hình tự động",
+      "tier_pro_f5": "Thuật toán phân bổ nhân sự Heuristic",
+      "tier_pro_btn": "Dùng thử 14 ngày",
+      "tier_enterprise_name": "Enterprise",
+      "tier_enterprise_desc": "Dành cho doanh nghiệp lớn cần bảo mật chuyên sâu và hỗ trợ tận nơi.",
+      "tier_enterprise_price": "Liên hệ",
+      "tier_enterprise_period": "Tùy biến theo quy mô",
+      "tier_enterprise_f1": "Toàn bộ tính năng của gói Pro",
+      "tier_enterprise_f2": "Tùy chọn triển khai On-Premise / Private Cloud",
+      "tier_enterprise_f3": "Cam kết SLA 99.99% & Hỗ trợ kỹ thuật 24/7",
+      "tier_enterprise_f4": "Tích hợp SSO (SAML/Okta) & Audit Logs",
+      "tier_enterprise_btn": "Liên hệ tư vấn"
+    },
+    "faq": {
+      "badge": "Giải đáp thắc mắc",
+      "title": "Câu hỏi thường gặp",
+      "q1": "TaskPilot khác biệt gì so với các công cụ như Jira hay Trello?",
+      "a1": "TaskPilot tích hợp sâu AI Agent tự trị có khả năng hiểu ngữ cảnh dự án, tra cứu tài liệu bằng RAG và cung cấp phòng họp video HD trực tiếp ngay trong giao diện làm việc mà không cần cài đặt thêm bên thứ ba.",
+      "q2": "Dữ liệu dự án và tài liệu của tôi có được bảo mật không?",
+      "a2": "Tuyệt đối an toàn. Dữ liệu của bạn được mã hóa chuẩn ngân hàng (AES-256) và chúng tôi áp dụng chính sách Zero Data Retention, không sử dụng dữ liệu của khách hàng để huấn luyện AI công cộng.",
+      "q3": "Tính năng xóa phông trong cuộc họp có làm máy tính bị chậm không?",
+      "a3": "Không. Thuật toán làm mờ nền của TaskPilot ứng dụng SIMD WebAssembly chạy trực tiếp trên GPU máy khách, cho tốc độ mượt mà 30 FPS với mức tiêu thụ tài nguyên tối thiểu.",
+      "q4": "Tôi có thể hủy hoặc đổi gói đăng ký bất kỳ lúc nào không?",
+      "a4": "Có. Bạn hoàn toàn có thể nâng cấp, hạ cấp hoặc hủy gói bất kỳ lúc nào ngay trong phần Cài đặt quản trị mà không phải chịu bất kỳ khoản phụ phí nào."
+    },
+    "cta": {
+      "title": "Sẵn sàng nâng tầm năng suất dự án cùng TaskPilot?",
+      "subtitle": "Gia nhập ngay hôm nay và trải nghiệm phong cách quản trị dự án thông minh với AI Agent thực thụ.",
+      "btn": "Bắt đầu ngay hôm nay"
+    },
+    "footer": {
+      "tagline": "Nền tảng quản trị dự án thế hệ mới tích hợp AI thông minh.",
+      "product": "Sản phẩm",
+      "resources": "Tài nguyên",
+      "company": "Công ty",
+      "privacy": "Chính sách bảo mật",
+      "terms": "Điều khoản sử dụng",
+      "copyright": "© 2026 TaskPilot Platform. Mọi quyền được bảo lưu."
+    }
   }
 }

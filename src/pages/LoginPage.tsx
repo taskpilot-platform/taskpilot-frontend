@@ -31,7 +31,7 @@ export default function LoginPage() {
     try {
       await login({ email, password });
       toast.success(t("auth.login_success", { defaultValue: "Logged in successfully" }));
-      navigate("/");
+      navigate("/dashboard");
     } catch (error) {
       toast.error(getApiErrorMessage(error));
     }

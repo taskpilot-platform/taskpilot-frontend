@@ -1,0 +1,16 @@
+# Robots.txt for TaskPilot Platform
+User-agent: *
+Allow: /
+Allow: /landing
+Allow: /login
+Allow: /register
+
+# Disallow private user workspaces from crawler indexing
+Disallow: /api/
+Disallow: /projects/
+Disallow: /tasks/
+Disallow: /admin/
+Disallow: /profile/
+Disallow: /copilot
+
+Sitemap: https://taskpilot-platform.netlify.app/sitemap.xml

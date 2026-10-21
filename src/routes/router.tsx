@@ -28,11 +28,34 @@ import GlobalChatPage from "@/pages/GlobalChatPage";
 import GlobalMeetingsPage from "@/pages/GlobalMeetingsPage";
 import GlobalCalendarPage from "@/pages/GlobalCalendarPage";
 import DemoRecommendationCardPage from "@/pages/DemoRecommendationCardPage";
+import LandingPage from "@/pages/LandingPage";
+import { useAuthStore } from "@/stores/auth.store";
+import { Navigate } from "react-router-dom";
 
 // Import Guard
 import ProtectedRoute from "./ProtectedRoute";
 
+function RootIndexRoute() {
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  if (!isAuthenticated) {
+    return <LandingPage />;
+  }
+  return <Navigate to="/dashboard" replace />;
+}
+
 export const router = createBrowserRouter([
+  // 0. Public Landing Page (Truy cập công khai cho quảng bá & SEO)
+  {
+    path: "/landing",
+    element: <LandingPage />,
+  },
+
+  // Root path: Khách chưa đăng nhập -> Landing Page (tối ưu SEO); Đã đăng nhập -> Dashboard
+  {
+    path: "/",
+    element: <RootIndexRoute />,
+  },
+
   // 1. Nhóm Auth (Không cần đăng nhập)
   {
     element: <AuthLayout />,
@@ -65,7 +88,7 @@ export const router = createBrowserRouter([
     ),
     children: [
       {
-        path: "/",
+        path: "/dashboard",
         element: <DashboardPage />,
       },
       {

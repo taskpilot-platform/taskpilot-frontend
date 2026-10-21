@@ -361,7 +361,7 @@ export default function MainLayout() {
                   </>
                 ) : (
                   <>
-                    <NavLink to="/" onClick={() => setIsMobileNavOpen(false)} className={({isActive}) => `flex items-center gap-2 rounded-md px-3 py-2 transition-colors ${isActive ? "bg-accent font-medium" : "hover:bg-accent"}`} title={t("layout.dashboard")}>
+                    <NavLink to="/dashboard" onClick={() => setIsMobileNavOpen(false)} className={({isActive}) => `flex items-center gap-2 rounded-md px-3 py-2 transition-colors ${isActive ? "bg-accent font-medium" : "hover:bg-accent"}`} title={t("layout.dashboard")}>
                       <LayoutDashboard className="h-4 w-4 shrink-0" />
                       <span>{t("layout.dashboard")}</span>
                     </NavLink>
@@ -558,7 +558,7 @@ export default function MainLayout() {
           ) : (
             <>
               <NavLink
-                to="/"
+                to="/dashboard"
                 className={({ isActive }) =>
                   `flex items-center gap-2 rounded-md ${isCollapsed ? 'justify-center px-0' : 'px-3'} py-2 transition-colors ${isActive ? "bg-accent font-medium" : "hover:bg-accent"
                   }`

@@ -808,5 +808,122 @@
     "group_created_error": "Failed to create group chat.",
     "empty_group_messages": "No messages in this group yet. Send a greeting!",
     "no_conversations_found": "No matching conversations found"
+  },
+  "landing": {
+    "nav": {
+      "features": "Features",
+      "copilot": "AI Copilot",
+      "knowledge": "RAG Knowledge",
+      "meetings": "HD Meetings",
+      "pricing": "Pricing",
+      "faq": "FAQ",
+      "login": "Sign In",
+      "get_started": "Get Started Free",
+      "dashboard": "Go to Dashboard"
+    },
+    "hero": {
+      "badge": "TaskPilot 2.0 • Multi-Model AI & Real-Time HD Meetings",
+      "title_prefix": "The Next-Gen",
+      "title_highlight": "Intelligent Project Platform",
+      "description": "Accelerate your engineering team with autonomous AI agents, skill-matrix auto-assignment, RAG knowledge retrieval, and zero-latency HD video meetings.",
+      "cta_primary": "Get Started Free",
+      "cta_secondary": "Explore Features",
+      "trusted_by": "Trusted by forward-thinking engineering and product teams"
+    },
+    "preview": {
+      "badge": "Real-Time Workflow",
+      "active_sprint": "Sprint 14 • TaskPilot v2.0 Release",
+      "tasks_completed": "28 / 32 Tasks Completed",
+      "ai_recommendation_title": "Copilot Intelligent Recommendation",
+      "ai_recommendation_desc": "Automatically analyzes skill matrices and current workloads to delegate frontend tasks to the optimal engineer.",
+      "ai_status": "Optimized"
+    },
+    "features": {
+      "badge": "Core Capabilities",
+      "title": "Comprehensive Tools for Modern Agile Workflows",
+      "subtitle": "Eliminate tool sprawl and fragmented context. Your tasks, discussions, documents, and meetings live in one unified workspace.",
+      "item_copilot_title": "Multi-Model AI Copilot",
+      "item_copilot_desc": "Dynamically routes requests between Gemma 4, Gemini 2.5, DeepSeek R1, and GPT-4o for peak reasoning quality and cost efficiency.",
+      "item_rag_title": "Smart RAG Knowledge Base",
+      "item_rag_desc": "Attach architecture blueprints, PRDs, and project files. AI answers queries with verifiable, grounded context via pgvector.",
+      "item_meetings_title": "HD Video Meetings & AI Background Blur",
+      "item_meetings_desc": "Secure WebRTC LiveKit rooms, 1080p screen sharing, recording playback, and crisp in-browser portrait segmentation.",
+      "item_kanban_title": "Kanban & Sprint Planning",
+      "item_kanban_desc": "Visual workflow management with fluid drag-and-drop, label categorization, and instant real-time synchronization.",
+      "item_skills_title": "Skill Matrix & Auto-Assignment",
+      "item_skills_desc": "Heuristic algorithms balance technical proficiency, availability, and capacity for fair and effective workload delegation.",
+      "item_calendar_title": "Calendar & Schedule Integration",
+      "item_calendar_desc": "Synchronize sprint milestones, task deadlines, and scheduled video conferences with instant push notifications."
+    },
+    "metrics": {
+      "item_1_val": "< 150ms",
+      "item_1_label": "AI Streaming Latency",
+      "item_2_val": "30+",
+      "item_2_label": "AI Models Supported",
+      "item_3_val": "99.9%",
+      "item_3_label": "Operational Uptime",
+      "item_4_val": "$0",
+      "item_4_label": "Upfront Setup Fee"
+    },
+    "pricing": {
+      "badge": "Transparent Pricing",
+      "title": "Start Free, Scale as You Grow",
+      "subtitle": "No credit card required. Choose the plan that best fits your team velocity.",
+      "tier_starter_name": "Starter",
+      "tier_starter_desc": "Ideal for individual developers or small teams getting started.",
+      "tier_starter_price": "$0",
+      "tier_starter_period": "Free forever",
+      "tier_starter_f1": "Up to 3 projects & 5 team members",
+      "tier_starter_f2": "Core AI Copilot (Gemma / Flash)",
+      "tier_starter_f3": "Kanban & Sprint boards",
+      "tier_starter_f4": "500MB project file storage",
+      "tier_starter_btn": "Start Free",
+      "tier_pro_name": "Pro Team",
+      "tier_pro_badge": "Most Popular",
+      "tier_pro_desc": "Engineered for Agile teams aiming to maximize delivery speed.",
+      "tier_pro_price": "$7",
+      "tier_pro_period": "/ user / month",
+      "tier_pro_f1": "Unlimited projects & team members",
+      "tier_pro_f2": "Full Multi-Model AI (DeepSeek, GPT-4o, Gemini)",
+      "tier_pro_f3": "Unlimited RAG Knowledge Base with pgvector",
+      "tier_pro_f4": "HD Video Meetings & Auto-recording",
+      "tier_pro_f5": "Heuristic Auto-Assignment Engine",
+      "tier_pro_btn": "Start 14-Day Free Trial",
+      "tier_enterprise_name": "Enterprise",
+      "tier_enterprise_desc": "Custom architecture, dedicated compliance, and priority SLA for organizations.",
+      "tier_enterprise_price": "Custom",
+      "tier_enterprise_period": "Tailored to scale",
+      "tier_enterprise_f1": "All Pro capabilities included",
+      "tier_enterprise_f2": "On-Premise or Private Cloud deployment",
+      "tier_enterprise_f3": "99.99% SLA guarantee & 24/7 dedicated support",
+      "tier_enterprise_f4": "Enterprise SSO (SAML/Okta) & Audit Logs",
+      "tier_enterprise_btn": "Contact Enterprise Sales"
+    },
+    "faq": {
+      "badge": "Got Questions?",
+      "title": "Frequently Asked Questions",
+      "q1": "How does TaskPilot compare to tools like Jira, Trello, or Asana?",
+      "a1": "TaskPilot uniquely integrates autonomous AI agents, contextual RAG search, and real-time HD video conferences directly inside the workspace without requiring costly third-party plugins.",
+      "q2": "Is my project data and source code used to train public AI models?",
+      "a2": "Never. Your intellectual property is protected by 256-bit AES encryption and strict zero-data-retention agreements with AI vendors.",
+      "q3": "Does the video background blur require high-end hardware?",
+      "a3": "No. Our blur pipeline leverages lightweight SIMD WebAssembly running locally on your client GPU for steady 30 FPS video with minimal battery usage.",
+      "q4": "Can I cancel or change my plan anytime?",
+      "a4": "Yes. You can upgrade, downgrade, or cancel your subscription at any moment directly from your organization settings with zero lock-in."
+    },
+    "cta": {
+      "title": "Ready to elevate your project velocity with TaskPilot?",
+      "subtitle": "Join hundreds of agile teams accelerating delivery with autonomous AI agents today.",
+      "btn": "Get Started Now"
+    },
+    "footer": {
+      "tagline": "Next-generation intelligent project management platform.",
+      "product": "Product",
+      "resources": "Resources",
+      "company": "Company",
+      "privacy": "Privacy Policy",
+      "terms": "Terms of Service",
+      "copyright": "© 2026 TaskPilot Platform. All rights reserved."
+    }
   }
 }
