@@ -6,6 +6,7 @@ import { Video, Download, Play, Clock, User, AlertCircle, Upload } from "lucide-
 import { useTranslation } from "react-i18next";
 import { meetingRecordingStore } from "@/services/meetingRecordingStore";
 import { projectFilesService } from "@/services/project-files.service";
+import fixWebmDuration from "fix-webm-duration";
 import type { ProjectMeetingDto } from "@/types/meeting";
 
 interface MeetingRecordingModalProps {
@@ -21,6 +22,7 @@ export function MeetingRecordingModal({
 }: MeetingRecordingModalProps) {
   const { t } = useTranslation();
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [videoBlob, setVideoBlob] = useState<Blob | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isDemoMode, setIsDemoMode] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -31,6 +33,7 @@ export function MeetingRecordingModal({
 
     if (!isOpen || !meeting) {
       setVideoUrl(null);
+      setVideoBlob(null);
       return;
     }
 
@@ -40,7 +43,18 @@ export function MeetingRecordingModal({
         // 1. Try local IndexedDB store
         const record = await meetingRecordingStore.getRecording(meeting.id);
         if (record && record.blob) {
-          activeUrl = URL.createObjectURL(record.blob);
+          let playableBlob = record.blob;
+          // Ensure duration metadata is patched into the WebM container
+          if (playableBlob.type.includes("webm") || !playableBlob.type) {
+            const durMs = Math.max(1000, (record.durationSeconds || meeting.durationSeconds || 1) * 1000);
+            try {
+              playableBlob = await fixWebmDuration(record.blob, durMs);
+            } catch {
+              playableBlob = record.blob;
+            }
+          }
+          activeUrl = URL.createObjectURL(playableBlob);
+          setVideoBlob(playableBlob);
           setVideoUrl(activeUrl);
           setIsDemoMode(false);
           setIsLoading(false);
@@ -54,6 +68,7 @@ export function MeetingRecordingModal({
             meeting.recordingFileId
           );
           setVideoUrl(downloadUrl);
+          setVideoBlob(null);
           setIsDemoMode(false);
           setIsLoading(false);
           return;
@@ -61,9 +76,11 @@ export function MeetingRecordingModal({
 
         // 3. Fallback to enterprise sample meeting recording video
         setVideoUrl("/sample-meeting-recording.webm");
+        setVideoBlob(null);
         setIsDemoMode(true);
       } catch {
         setVideoUrl("/sample-meeting-recording.webm");
+        setVideoBlob(null);
         setIsDemoMode(true);
       } finally {
         setIsLoading(false);
@@ -80,13 +97,27 @@ export function MeetingRecordingModal({
   }, [isOpen, meeting]);
 
   const handleDownload = () => {
-    if (!videoUrl || !meeting) return;
+    if (!meeting) return;
+    let downloadUrl = videoUrl;
+    let tempUrl = false;
+
+    if (videoBlob) {
+      downloadUrl = URL.createObjectURL(videoBlob);
+      tempUrl = true;
+    }
+
+    if (!downloadUrl) return;
+
     const a = document.createElement("a");
-    a.href = videoUrl;
+    a.href = downloadUrl;
     a.download = `meeting_${meeting.id}_recording.webm`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
+
+    if (tempUrl) {
+      setTimeout(() => URL.revokeObjectURL(downloadUrl!), 1000);
+    }
   };
 
   const handlePlaySample = () => {
@@ -95,8 +126,13 @@ export function MeetingRecordingModal({
     if (meeting) {
       fetch("/sample-meeting-recording.webm")
         .then((res) => res.blob())
-        .then((blob) => {
-          void meetingRecordingStore.saveRecording(meeting.id, blob, {
+        .then(async (blob) => {
+          let fixed = blob;
+          try {
+            fixed = await fixWebmDuration(blob, (meeting.durationSeconds || 16) * 1000);
+          } catch {}
+          setVideoBlob(fixed);
+          void meetingRecordingStore.saveRecording(meeting.id, fixed, {
             title: meeting.title,
             projectId: meeting.projectId,
             durationSeconds: meeting.durationSeconds || 16,
@@ -110,12 +146,21 @@ export function MeetingRecordingModal({
     const file = e.target.files?.[0];
     if (!file || !meeting) return;
 
-    const url = URL.createObjectURL(file);
+    let patchedFile: Blob = file;
+    const durMs = Math.max(1000, (meeting.durationSeconds || 30) * 1000);
+    if (file.type.includes("webm") || !file.type) {
+      try {
+        patchedFile = await fixWebmDuration(file, durMs);
+      } catch {}
+    }
+
+    const url = URL.createObjectURL(patchedFile);
+    setVideoBlob(patchedFile);
     setVideoUrl(url);
     setIsDemoMode(false);
 
     // Save to local IndexedDB store
-    await meetingRecordingStore.saveRecording(meeting.id, file, {
+    await meetingRecordingStore.saveRecording(meeting.id, patchedFile, {
       title: meeting.title,
       projectId: meeting.projectId,
       durationSeconds: meeting.durationSeconds || 30,
@@ -176,6 +221,16 @@ export function MeetingRecordingModal({
                 playsInline
                 className="w-full h-full object-contain"
                 data-testid="recording-video-player"
+                onLoadedMetadata={(e) => {
+                  const v = e.currentTarget;
+                  if (!isFinite(v.duration) || v.duration === Infinity) {
+                    v.currentTime = 1e101;
+                    v.ontimeupdate = () => {
+                      v.ontimeupdate = null;
+                      v.currentTime = 0;
+                    };
+                  }
+                }}
               />
               {isDemoMode && (
                 <div

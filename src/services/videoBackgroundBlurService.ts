@@ -45,6 +45,8 @@ export class VideoBackgroundBlurService {
   private offscreenVideo: HTMLVideoElement | null = null;
   private canvas: HTMLCanvasElement | null = null;
   private ctx: CanvasRenderingContext2D | null = null;
+  private scratchCanvas: HTMLCanvasElement | null = null;
+  private scratchCtx: CanvasRenderingContext2D | null = null;
   private animFrameId: number | null = null;
   private isProcessing = false;
   private isModelBusy = false;
@@ -159,12 +161,18 @@ export class VideoBackgroundBlurService {
       const width = rawWidth >= 1280 ? 1280 : rawWidth || 1280;
       const height = Math.round(width / aspectRatio) || 720;
 
-      // 3. Offscreen Canvas element for frame composition
+      // 3. Offscreen Canvas elements for frame composition & razor-sharp matting
       const canvas = document.createElement("canvas");
       canvas.width = width;
       canvas.height = height;
       this.canvas = canvas;
       this.ctx = canvas.getContext("2d", { willReadFrequently: true });
+
+      const scratchCanvas = document.createElement("canvas");
+      scratchCanvas.width = width;
+      scratchCanvas.height = height;
+      this.scratchCanvas = scratchCanvas;
+      this.scratchCtx = scratchCanvas.getContext("2d", { willReadFrequently: true });
 
       // 4. Initialize Google MediaPipe SelfieSegmentation AI model
       await this.initMediaPipeModel(width, height);
@@ -209,13 +217,13 @@ export class VideoBackgroundBlurService {
       }
 
       const segmenter = new SegmenterCtor({
-        locateFile: (file: string) => `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${file}`,
+        locateFile: (file: string) => `/mediapipe/${file}`,
       });
 
-      // Model selection: 1 (Landscape 144x256, optimized for webcam meetings)
+      // Model selection: 0 (General model 256x256, high-precision portrait & hair matting)
       // selfieMode: false preserves natural camera orientation without horizontal flipping
       segmenter.setOptions({
-        modelSelection: 1,
+        modelSelection: 0,
         selfieMode: false,
       });
 
@@ -225,7 +233,7 @@ export class VideoBackgroundBlurService {
 
       if (typeof segmenter.initialize === "function") {
         const timeoutPromise = new Promise<void>((_, reject) => {
-          setTimeout(() => reject(new Error("MediaPipe initialization timeout")), 2500);
+          setTimeout(() => reject(new Error("MediaPipe initialization timeout")), 6000);
         });
         await Promise.race([segmenter.initialize(), timeoutPromise]).catch((initErr: any) => {
           console.warn("MediaPipe model initialization notice/fallback:", initErr);
@@ -242,7 +250,7 @@ export class VideoBackgroundBlurService {
   }
 
   /**
-   * Handle AI Segmentation results and render tri-layer composition
+   * Handle AI Segmentation results and render tri-layer composition with tight silhouette matting
    */
   private handleSegmentationResults(results: Results, width: number, height: number): void {
     if (!this.isProcessing || !this.ctx || !this.canvas) return;
@@ -257,26 +265,50 @@ export class VideoBackgroundBlurService {
     }
 
     const radius = this.preset === "slight" ? 8 : this.preset === "deep" ? 24 : 16;
+    const scratchCanvas = this.scratchCanvas;
+    const scratchCtx = this.scratchCtx;
 
-    ctx.save();
-    ctx.clearRect(0, 0, width, height);
+    if (scratchCanvas && scratchCtx) {
+      // Step 1: Render smooth Gaussian blurred background across the whole canvas
+      ctx.save();
+      ctx.clearRect(0, 0, width, height);
+      ctx.filter = `blur(${radius}px)`;
+      // Slight 16px bleed margin prevents edge transparency artifacts
+      ctx.drawImage(results.image, -16, -16, width + 32, height + 32);
+      ctx.restore();
 
-    // Step 1: Draw AI segmentation mask with 4px feathering to prevent hair/shoulder edge artifacts
-    ctx.filter = "blur(4px)";
-    ctx.drawImage(results.segmentationMask, 0, 0, width, height);
+      // Step 2: Cut out foreground person precisely on the offscreen scratch canvas
+      scratchCtx.save();
+      scratchCtx.clearRect(0, 0, width, height);
+      // Subtle 0.5px subpixel smoothing eliminates pixel aliasing without causing an unblurred halo
+      scratchCtx.filter = "blur(0.5px)";
+      scratchCtx.drawImage(results.segmentationMask, 0, 0, width, height);
 
-    // Step 2: Composite original sharp person inside the feathered mask
-    ctx.globalCompositeOperation = "source-in";
-    ctx.filter = "none";
-    ctx.drawImage(results.image, 0, 0, width, height);
+      // Clip sharp camera frame strictly inside the AI silhouette
+      scratchCtx.globalCompositeOperation = "source-in";
+      scratchCtx.filter = "none";
+      scratchCtx.drawImage(results.image, 0, 0, width, height);
+      scratchCtx.restore();
 
-    // Step 3: Composite blurred background behind the person
-    ctx.globalCompositeOperation = "destination-over";
-    ctx.filter = `blur(${radius}px)`;
-    // Draw with slight negative margin to avoid transparent boundary bleeding
-    ctx.drawImage(results.image, -16, -16, width + 32, height + 32);
-
-    ctx.restore();
+      // Step 3: Draw the sharp, tightly clipped person directly over the blurred room
+      ctx.save();
+      ctx.filter = "none";
+      ctx.drawImage(scratchCanvas, 0, 0, width, height);
+      ctx.restore();
+    } else {
+      // Direct composite fallback
+      ctx.save();
+      ctx.clearRect(0, 0, width, height);
+      ctx.filter = "blur(1px)";
+      ctx.drawImage(results.segmentationMask, 0, 0, width, height);
+      ctx.globalCompositeOperation = "source-in";
+      ctx.filter = "none";
+      ctx.drawImage(results.image, 0, 0, width, height);
+      ctx.globalCompositeOperation = "destination-over";
+      ctx.filter = `blur(${radius}px)`;
+      ctx.drawImage(results.image, -16, -16, width + 32, height + 32);
+      ctx.restore();
+    }
   }
 
   /**
@@ -384,6 +416,8 @@ export class VideoBackgroundBlurService {
 
     this.canvas = null;
     this.ctx = null;
+    this.scratchCanvas = null;
+    this.scratchCtx = null;
     this.sourceStream = null;
     this.processedStream = null;
   }

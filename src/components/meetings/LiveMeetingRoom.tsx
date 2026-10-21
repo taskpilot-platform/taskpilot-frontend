@@ -27,6 +27,7 @@ import { useConfirm } from "@/components/ui/confirm-dialog";
 import { meetingService } from "@/services/meeting.service";
 import { meetingRecordingStore } from "@/services/meetingRecordingStore";
 import { projectFilesService } from "@/services/project-files.service";
+import fixWebmDuration from "fix-webm-duration";
 import {
   videoBackgroundBlurService,
   BLUR_PRESETS,
@@ -655,9 +656,16 @@ export function LiveMeetingRoom({
       };
 
       recorder.onstop = async () => {
-        const durationSec = Math.max(1, Math.round((Date.now() - recordingStartTimeRef.current) / 1000));
-        const blob = new Blob(recordedChunksRef.current, { type: recorder.mimeType || "video/webm" });
+        const durationMs = Math.max(1000, Date.now() - recordingStartTimeRef.current);
+        const durationSec = Math.max(1, Math.round(durationMs / 1000));
+        let blob = new Blob(recordedChunksRef.current, { type: recorder.mimeType || "video/webm" });
         if (blob.size > 0) {
+          try {
+            blob = await fixWebmDuration(blob, durationMs);
+          } catch (fixErr) {
+            console.warn("Could not patch WebM duration header:", fixErr);
+          }
+
           await meetingRecordingStore.saveRecording(meetingId, blob, {
             title: meeting?.title || tokenData?.meeting?.title || `Cuộc họp #${meetingId}`,
             projectId,
