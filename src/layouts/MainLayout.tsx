@@ -15,9 +15,10 @@ import { useTranslation } from "react-i18next";
 import { toast } from "react-toastify";
 import { profileService } from "@/services/profile.service";
 import { notificationService } from "@/services/notification.service";
-import { authStorage, projectStorage } from "@/lib/storage";
+import { authStorage, projectStorage, themeStorage } from "@/lib/storage";
 import { oneSignalLogin } from "@/lib/onesignal";
 import { NavContextSwitcher, type NavigationContext } from "@/components/navigation/NavContextSwitcher";
+import { useTheme } from "next-themes";
 
 const NOTIFICATION_BLINK_MS = 3000;
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL?.trim() || "";
@@ -146,6 +147,16 @@ export default function MainLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const { t, i18n } = useTranslation();
+  const { theme, setTheme } = useTheme();
+
+  useEffect(() => {
+    // Restore saved user theme preference upon entering authenticated app
+    const savedUserTheme = themeStorage.getUserTheme();
+    if (savedUserTheme && savedUserTheme !== theme) {
+      setTheme(savedUserTheme);
+    }
+  }, [setTheme]);
+
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [userRole, setUserRole] = useState<string | null>(localStorage.getItem("userRole"));
@@ -702,7 +713,7 @@ export default function MainLayout() {
         </div>
       </aside>
 
-      <main className="flex-1 overflow-auto pt-14 md:pt-0">
+      <main className="flex-1 min-h-0 flex flex-col overflow-y-auto pt-14 md:pt-0">
         <Outlet />
       </main>
     </div>

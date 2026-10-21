@@ -245,9 +245,42 @@ export function notifyTaskMutation(mutation: ConfirmedTaskMutation) {
   }
 }
 
+export function cleanSessionTitle(value?: string | null, fallback = "Cuộc trò chuyện mới"): string {
+  if (!value) return fallback;
+  let clean = value
+    .replace(/<\s*(?:d?think|thought)\b[^>]*>[\s\S]*?<\s*\/\s*(?:d?think|thought)\s*>/gi, " ")
+    .replace(/<\/?\s*(?:d?think|thought)\b[^>]*>/gi, " ")
+    .replace(/```[\s\S]*?```/gi, " ")
+    .replace(/`[^`]*`/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  const isDirty =
+    clean.startsWith("[System:") ||
+    clean.startsWith("{") ||
+    clean.includes("getSystemInfo") ||
+    clean.toLowerCase().includes("ai utilized internal") ||
+    clean.toLowerCase().includes("thought-process") ||
+    clean.startsWith("{\"tool\"");
+
+  if (isDirty) {
+    clean = clean.replace(/\[System:[^\]]*\]/gi, "").trim();
+    if (clean.startsWith("{") || clean.startsWith("{\"tool\"") || !clean) {
+      return fallback;
+    }
+  }
+
+  if (clean.length > 50) {
+    clean = clean.substring(0, 47) + "...";
+  }
+
+  return clean || fallback;
+}
+
 export function stripThinkArtifacts(value?: string | null) {
   if (!value) return "";
-  return value
+  const cleaned = cleanSessionTitle(value, "");
+  return cleaned || value
     .replace(/<\s*(?:d?think|thought)\b[^>]*>[\s\S]*?<\s*\/\s*(?:d?think|thought)\s*>/gi, " ")
     .replace(/<\/?\s*(?:d?think|thought)\b[^>]*>/gi, " ")
     .replace(/```taskpilot-(?:form|confirm)\s*[\s\S]*?```/gi, " ")

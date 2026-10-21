@@ -3,6 +3,7 @@ import { useColorTheme, COLOR_THEMES, type ColorTheme, GLASS_WALLPAPERS } from "
 import { Button } from "@/components/ui/button"
 import { Moon, Sun, Monitor, Sparkles, Image as ImageIcon } from "lucide-react"
 import { useTranslation } from "react-i18next"
+import { themeStorage } from "@/lib/storage"
 
 const colorThemeConfig: Record<ColorTheme, { label: string; bgClass: string }> = {
   zinc: { label: "Zinc", bgClass: "bg-zinc-600" },
@@ -18,6 +19,11 @@ export function ThemeSelector() {
   const { theme, setTheme } = useTheme()
   const { colorTheme, setColorTheme, glassWallpaper, setGlassWallpaper } = useColorTheme()
 
+  const handleSelectTheme = (newTheme: string) => {
+    themeStorage.setUserTheme(newTheme);
+    setTheme(newTheme);
+  };
+
   return (
     <div className="space-y-6">
       {/* ========== Chế độ Sáng / Tối ========== */}
@@ -27,7 +33,7 @@ export function ThemeSelector() {
           <Button
             variant={theme === "light" ? "default" : "outline"}
             size="sm"
-            onClick={() => setTheme("light")}
+            onClick={() => handleSelectTheme("light")}
           >
             <Sun className="h-4 w-4 mr-1" />
             {t("theme.light")}
@@ -35,7 +41,7 @@ export function ThemeSelector() {
           <Button
             variant={theme === "dark" ? "default" : "outline"}
             size="sm"
-            onClick={() => setTheme("dark")}
+            onClick={() => handleSelectTheme("dark")}
           >
             <Moon className="h-4 w-4 mr-1" />
             {t("theme.dark")}
@@ -43,7 +49,7 @@ export function ThemeSelector() {
           <Button
             variant={theme === "glass" ? "default" : "outline"}
             size="sm"
-            onClick={() => setTheme("glass")}
+            onClick={() => handleSelectTheme("glass")}
             className={theme === "glass" ? "bg-primary text-primary-foreground font-semibold shadow-xs" : ""}
           >
             <Sparkles className="h-4 w-4 mr-1" />
@@ -52,7 +58,7 @@ export function ThemeSelector() {
           <Button
             variant={theme === "system" ? "default" : "outline"}
             size="sm"
-            onClick={() => setTheme("system")}
+            onClick={() => handleSelectTheme("system")}
           >
             <Monitor className="h-4 w-4 mr-1" />
             {t("theme.system")}

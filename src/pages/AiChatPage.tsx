@@ -14,6 +14,7 @@ import type { AssignmentDraft } from "@/components/ai/aiChatTypes";
 import { ChatComposer } from "@/components/ai/ChatComposer";
 import { AiSessionSidebar, AiMobileHeader } from "@/components/ai/AiSessionSidebar";
 import { AiMessageItem, AiStreamingPlaceholder } from "@/components/ai/AiMessageItem";
+import { cleanSessionTitle } from "@/components/ai/aiChatHelpers";
 
 const AI_LOAD_SESSIONS_ERROR_TOAST_ID = "ai-load-sessions-error-toast";
 const AI_LOAD_MESSAGES_ERROR_TOAST_ID = "ai-load-messages-error-toast";
@@ -333,7 +334,7 @@ export default function AiChatPage() {
   }, []);
 
   return (
-    <div className="flex h-screen overflow-hidden bg-transparent">
+    <div className="flex h-full w-full min-h-0 overflow-hidden bg-background">
       <AiSessionSidebar
         isSidebarCollapsed={isSidebarCollapsed}
         onToggleSidebar={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
@@ -353,7 +354,7 @@ export default function AiChatPage() {
         t={t}
       />
 
-      <div className="flex-1 flex flex-col bg-transparent relative">
+      <div className="flex-1 min-w-0 flex flex-col bg-background relative min-h-0 h-full">
         <AiMobileHeader
           isMobileSidebarOpen={isMobileSidebarOpen}
           onOpenChangeMobileSidebar={setIsMobileSidebarOpen}
@@ -373,80 +374,106 @@ export default function AiChatPage() {
           t={t}
         />
 
+        {/* Desktop Active Session Header */}
+        <div className="hidden md:flex items-center justify-between px-6 py-2.5 border-b border-border/80 bg-card/65 backdrop-blur-md shrink-0 z-10">
+          <div className="flex items-center gap-3 min-w-0">
+            <span className="font-semibold text-sm text-foreground truncate max-w-lg">
+              {activeSession ? cleanSessionTitle(activeSession.title, t("copilot.new_chat")) : t("copilot.title")}
+            </span>
+            {activeSession && (
+              <span className="inline-flex items-center rounded-md border border-border/60 bg-muted/40 px-2 py-0.5 text-[10px] font-mono text-muted-foreground shrink-0">
+                ID #{activeSession.id}
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            {streamModel && (
+              <div className="flex items-center gap-1.5 rounded-md border border-border/70 bg-muted/40 px-2.5 py-1 text-[11px] font-mono text-muted-foreground select-none">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                <span>{streamModel}</span>
+              </div>
+            )}
+          </div>
+        </div>
+
         <div
           ref={messagesViewportRef}
           onScroll={handleMessagesScroll}
-          className="flex-1 overflow-y-auto p-4 flex flex-col gap-4 relative z-10"
+          className="flex-1 min-h-0 overflow-y-auto px-4 sm:px-6 py-6 flex flex-col relative z-10 scrollbar-thin"
         >
-          {messages.length === 0 && !currentStreamMsg && (
-            <div className="flex flex-col items-center justify-center h-full text-center space-y-4 p-4">
-              <div className="rounded-xl border border-border/80 bg-card p-6 sm:p-8 shadow-sm flex flex-col items-center max-w-md w-full">
-                <div className="h-10 w-10 rounded-lg border border-border/60 bg-muted/40 text-primary flex items-center justify-center mb-3">
-                  <Bot className="w-5 h-5" />
+          <div className="max-w-4xl mx-auto w-full flex flex-col gap-6 flex-1">
+            {messages.length === 0 && !currentStreamMsg && (
+              <div className="flex flex-col items-center justify-center flex-1 text-center py-12 px-4 my-auto">
+                <div className="rounded-2xl border border-border/80 bg-card/85 backdrop-blur-md p-8 shadow-sm flex flex-col items-center max-w-md w-full">
+                  <div className="h-12 w-12 rounded-xl border border-border/80 bg-primary/10 text-primary flex items-center justify-center mb-4">
+                    <Bot className="w-6 h-6" />
+                  </div>
+                  <h3 className="text-xl font-bold tracking-tight text-foreground">
+                    {t("copilot.welcome_title")}
+                  </h3>
+                  <p className="text-sm text-muted-foreground mt-2 leading-relaxed">
+                    {t("copilot.welcome_desc")}
+                  </p>
                 </div>
-                <h3 className="text-lg sm:text-xl font-semibold tracking-tight text-foreground">
-                  {t("copilot.welcome_title")}
-                </h3>
-                <p className="text-xs sm:text-sm text-muted-foreground mt-2 leading-relaxed">
-                  {t("copilot.welcome_desc")}
-                </p>
               </div>
-            </div>
-          )}
+            )}
 
-          {messages.map((msg, idx) => (
-            <AiMessageItem
-              key={msg.id || idx}
-              msg={msg}
-              idx={idx}
-              t={t}
-              confirmPendingAction={confirmPendingAction}
-              cancelPendingAction={cancelPendingAction}
-              dynamicFormValues={dynamicFormValues}
-              updateDynamicFormValue={updateDynamicFormValue}
-              planModificationTexts={planModificationTexts}
-              setPlanModificationTexts={setPlanModificationTexts}
-              setDynamicFormValues={setDynamicFormValues}
-              assignmentDrafts={assignmentDrafts}
-              setAssignmentDrafts={setAssignmentDrafts}
-              skillDirectory={skillDirectory}
-              myProjects={myProjects}
-              sprintsByProject={sprintsByProject}
-              membersByProject={membersByProject}
-              labelsByProject={labelsByProject}
-              onProjectSelected={handleProjectSelected}
-              onSubmitPrompt={sendMessage}
-            />
-          ))}
+            {messages.map((msg, idx) => (
+              <AiMessageItem
+                key={msg.id || idx}
+                msg={msg}
+                idx={idx}
+                t={t}
+                confirmPendingAction={confirmPendingAction}
+                cancelPendingAction={cancelPendingAction}
+                dynamicFormValues={dynamicFormValues}
+                updateDynamicFormValue={updateDynamicFormValue}
+                planModificationTexts={planModificationTexts}
+                setPlanModificationTexts={setPlanModificationTexts}
+                setDynamicFormValues={setDynamicFormValues}
+                assignmentDrafts={assignmentDrafts}
+                setAssignmentDrafts={setAssignmentDrafts}
+                skillDirectory={skillDirectory}
+                myProjects={myProjects}
+                sprintsByProject={sprintsByProject}
+                membersByProject={membersByProject}
+                labelsByProject={labelsByProject}
+                onProjectSelected={handleProjectSelected}
+                onSubmitPrompt={sendMessage}
+              />
+            ))}
 
-          {isStreaming && activeSession?.id === streamingSessionId && (isThinking || currentStreamMsg) && (
-            <AiStreamingPlaceholder
-              currentStreamMsg={currentStreamMsg}
-              toolEvents={toolEvents}
-              expandedThinking={expandedThinking}
-              isThinking={isThinking}
-              t={t}
-              confirmPendingAction={confirmPendingAction}
-              cancelPendingAction={cancelPendingAction}
-            />
-          )}
+            {isStreaming && activeSession?.id === streamingSessionId && (isThinking || currentStreamMsg) && (
+              <AiStreamingPlaceholder
+                currentStreamMsg={currentStreamMsg}
+                toolEvents={toolEvents}
+                expandedThinking={expandedThinking}
+                isThinking={isThinking}
+                t={t}
+                confirmPendingAction={confirmPendingAction}
+                cancelPendingAction={cancelPendingAction}
+              />
+            )}
 
-          <div ref={messagesEndRef} />
+            <div ref={messagesEndRef} />
+          </div>
         </div>
 
-        <div className="p-4 border-t border-border/80 bg-card/90 relative z-10">
-          <ChatComposer
-            placeholder={
-              t("copilot.input_placeholder") + (!isMobile ? " (Enter để gửi, Shift+Enter để xuống dòng)" : "")
-            }
-            modelName={streamModel || "TaskPilot AI"}
-            maxChars={MAX_PROMPT_CHARS}
-            getLastPrompt={getLastPrompt}
-            onSubmit={sendMessage}
-            isStreaming={isStreaming}
-            onStop={stopGenerating}
-            stopTooltip={t("copilot.stop_generating")}
-          />
+        <div className="p-3 sm:p-4 border-t border-border/80 bg-card/90 backdrop-blur-md relative z-10 shrink-0">
+          <div className="max-w-4xl mx-auto w-full">
+            <ChatComposer
+              placeholder={
+                t("copilot.input_placeholder") + (!isMobile ? " (Enter để gửi, Shift+Enter để xuống dòng)" : "")
+              }
+              modelName={streamModel || "TaskPilot AI"}
+              maxChars={MAX_PROMPT_CHARS}
+              getLastPrompt={getLastPrompt}
+              onSubmit={sendMessage}
+              isStreaming={isStreaming}
+              onStop={stopGenerating}
+              stopTooltip={t("copilot.stop_generating")}
+            />
+          </div>
         </div>
       </div>
     </div>

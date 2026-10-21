@@ -1,6 +1,19 @@
 const ACCESS_TOKEN_KEY = "taskpilot_access_token";
 const REFRESH_TOKEN_KEY = "taskpilot_refresh_token";
 const LAST_PROJECT_ID_KEY = "taskpilot_last_project_id";
+const USER_THEME_KEY = "taskpilot_user_theme_preference";
+
+export const themeStorage = {
+  getUserTheme(): string | null {
+    return localStorage.getItem(USER_THEME_KEY);
+  },
+  setUserTheme(theme: string): void {
+    localStorage.setItem(USER_THEME_KEY, theme);
+  },
+  removeUserTheme(): void {
+    localStorage.removeItem(USER_THEME_KEY);
+  },
+};
 
 export const authStorage = {
   getAccessToken(): string | null {

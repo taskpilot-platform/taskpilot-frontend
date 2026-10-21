@@ -344,14 +344,14 @@ export function AiMessageItem({
   if (msg.sender === "USER") {
     return (
       <div className="flex gap-3 justify-end w-full">
-        <div className="max-w-[85%] md:max-w-[70%]">
-          <div className="rounded-xl rounded-br-xs px-3.5 py-2.5 bg-primary text-primary-foreground shadow-sm">
-            <div className="whitespace-pre-wrap">{msg.content}</div>
+        <div className="max-w-[85%] sm:max-w-[75%] md:max-w-[70%]">
+          <div className="rounded-2xl rounded-tr-xs px-4 py-2.5 bg-primary text-primary-foreground shadow-2xs text-sm leading-relaxed">
+            <div className="whitespace-pre-wrap font-sans">{msg.content}</div>
           </div>
         </div>
-        <Avatar className="w-8 h-8 shrink-0">
-          <AvatarFallback className="bg-muted text-muted-foreground">
-            <User className="w-4 h-4" />
+        <Avatar className="w-7 h-7 shrink-0 border border-border/60">
+          <AvatarFallback className="bg-muted text-muted-foreground text-xs font-semibold">
+            <User className="w-3.5 h-3.5" />
           </AvatarFallback>
         </Avatar>
       </div>
@@ -382,17 +382,22 @@ export function AiMessageItem({
   );
 
   return (
-    <div className="flex gap-4 justify-start w-full border-b border-border/10 pb-6 mb-2">
-      <Avatar className="w-8 h-8 shrink-0">
+    <div className="flex gap-3.5 justify-start w-full group">
+      <Avatar className="w-7 h-7 shrink-0 border border-primary/20 mt-0.5">
         <AvatarFallback className="bg-primary/10 text-primary">
-          <Bot className="w-4 h-4" />
+          <Bot className="w-3.5 h-3.5" />
         </AvatarFallback>
       </Avatar>
       <div className="flex-1 min-w-0">
-        <div className="text-sm font-semibold text-neutral-800 dark:text-neutral-200 mb-1.5 flex items-center gap-1.5">
-          <span>TaskPilot AI</span>
+        <div className="flex items-center gap-2 mb-1.5">
+          <span className="text-xs font-semibold text-foreground tracking-tight">TaskPilot AI</span>
+          {msg.createdAt && (
+            <span className="text-[10px] text-muted-foreground font-mono">
+              {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            </span>
+          )}
         </div>
-        <div className="text-neutral-900 dark:text-neutral-100">
+        <div className="rounded-2xl rounded-tl-xs border border-border/80 bg-card/85 backdrop-blur-xs p-4 sm:p-5 shadow-2xs text-sm leading-relaxed text-foreground">
           <AiMessageContent
             content={msg.content}
             tools={(msg as any).toolEvents || []}
@@ -401,8 +406,8 @@ export function AiMessageItem({
             confirmPendingAction={confirmPendingAction}
             cancelPendingAction={cancelPendingAction}
           />
+          {extras && <div className="mt-4 pt-3 border-t border-border/60">{extras}</div>}
         </div>
-        {extras && <div className="mt-4">{extras}</div>}
       </div>
     </div>
   );
@@ -426,17 +431,23 @@ export function AiStreamingPlaceholder({
   cancelPendingAction: (actionId: string) => void;
 }) {
   return (
-    <div className="flex gap-4 justify-start w-full pb-6">
-      <Avatar className="w-8 h-8 shrink-0">
+    <div className="flex gap-3.5 justify-start w-full animate-in fade-in duration-200">
+      <Avatar className="w-7 h-7 shrink-0 border border-primary/20 mt-0.5">
         <AvatarFallback className="bg-primary/10 text-primary">
-          <Loader2 className="w-4 h-4 animate-spin" />
+          <Loader2 className="w-3.5 h-3.5 animate-spin" />
         </AvatarFallback>
       </Avatar>
       <div className="flex-1 min-w-0">
-        <div className="text-sm font-semibold text-neutral-800 dark:text-neutral-200 mb-1.5 flex items-center gap-1.5">
-          <span>TaskPilot AI</span>
+        <div className="flex items-center gap-2 mb-1.5">
+          <span className="text-xs font-semibold text-foreground tracking-tight">TaskPilot AI</span>
+          <span className="text-[10px] text-primary font-mono flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+            {isThinking
+              ? `${t("copilot.phase_thinking")}...`
+              : `${t("copilot.phase_generating")}...`}
+          </span>
         </div>
-        <div className="text-neutral-900 dark:text-neutral-100">
+        <div className="rounded-2xl rounded-tl-xs border border-primary/30 bg-card/90 backdrop-blur-xs p-4 sm:p-5 shadow-2xs text-sm leading-relaxed text-foreground">
           <AiMessageContent
             content={currentStreamMsg}
             tools={toolEvents}
