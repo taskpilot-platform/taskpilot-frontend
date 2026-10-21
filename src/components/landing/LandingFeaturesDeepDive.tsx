@@ -142,7 +142,7 @@ export function LandingFeaturesDeepDive() {
         <div className="rounded-2xl border border-border/80 bg-card p-6 sm:p-10 shadow-lg">
           {/* TAB 1: AI AGENTS & COPILOT */}
           {activeTab === "agents" && (
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center animate-forward-thrust">
               {/* Text Description Column */}
               <div className="lg:col-span-5 space-y-5">
                 <div className="inline-flex items-center gap-1.5 rounded-md bg-primary/10 px-2.5 py-1 text-xs font-mono font-medium text-primary">
@@ -158,15 +158,15 @@ export function LandingFeaturesDeepDive() {
 
                 <div className="space-y-2.5 pt-2 font-mono text-xs text-foreground">
                   <div className="flex items-center gap-2">
-                    <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+                    <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0 animate-spring-settle" />
                     <span>{t("landing.features_suite.agents_f1")}</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+                    <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0 animate-spring-settle" />
                     <span>{t("landing.features_suite.agents_f2")}</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+                    <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0 animate-spring-settle" />
                     <span>{t("landing.features_suite.agents_f3")}</span>
                   </div>
                 </div>
@@ -180,24 +180,24 @@ export function LandingFeaturesDeepDive() {
                   <div className="flex items-center gap-1 text-[11px] font-mono">
                     <button
                       onClick={() => setActiveModel("deepseek")}
-                      className={`px-2 py-0.5 rounded cursor-pointer ${
-                        activeModel === "deepseek" ? "bg-primary text-primary-foreground font-semibold" : "bg-muted text-muted-foreground"
+                      className={`px-2 py-0.5 rounded cursor-pointer transition-all duration-200 ${
+                        activeModel === "deepseek" ? "bg-primary text-primary-foreground font-semibold scale-102" : "bg-muted text-muted-foreground"
                       }`}
                     >
                       DeepSeek R1
                     </button>
                     <button
                       onClick={() => setActiveModel("gemma")}
-                      className={`px-2 py-0.5 rounded cursor-pointer ${
-                        activeModel === "gemma" ? "bg-primary text-primary-foreground font-semibold" : "bg-muted text-muted-foreground"
+                      className={`px-2 py-0.5 rounded cursor-pointer transition-all duration-200 ${
+                        activeModel === "gemma" ? "bg-primary text-primary-foreground font-semibold scale-102" : "bg-muted text-muted-foreground"
                       }`}
                     >
                       Gemma 4
                     </button>
                     <button
                       onClick={() => setActiveModel("gpt4o")}
-                      className={`px-2 py-0.5 rounded cursor-pointer ${
-                        activeModel === "gpt4o" ? "bg-primary text-primary-foreground font-semibold" : "bg-muted text-muted-foreground"
+                      className={`px-2 py-0.5 rounded cursor-pointer transition-all duration-200 ${
+                        activeModel === "gpt4o" ? "bg-primary text-primary-foreground font-semibold scale-102" : "bg-muted text-muted-foreground"
                       }`}
                     >
                       GPT-4o
@@ -206,10 +206,10 @@ export function LandingFeaturesDeepDive() {
                 </div>
 
                 {/* Simulated Reasoning Tree */}
-                <div className="rounded-lg border border-border/80 bg-background/90 p-4 space-y-3 font-mono text-xs">
+                <div className="rounded-lg border border-border/80 bg-background/90 p-4 space-y-3 font-mono text-xs animate-forward-thrust">
                   <div className="flex items-center justify-between text-muted-foreground border-b border-border/40 pb-2">
                     <span>Task: Automated Acceptance Criteria Generation</span>
-                    <Badge variant="outline" className="text-[10px] text-emerald-500 border-emerald-500/30">
+                    <Badge variant="outline" className="text-[10px] text-emerald-500 border-emerald-500/30 font-mono">
                       Tokens: 1,420 • 98.4% Confidence
                     </Badge>
                   </div>
@@ -223,7 +223,7 @@ export function LandingFeaturesDeepDive() {
 
                   <div className="p-2.5 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-[11px] flex items-center justify-between">
                     <span>✓ Ready to export to Jira, GitHub Issues or TaskPilot Sprint Board</span>
-                    <Button size="sm" variant="ghost" className="h-6 text-[10px] text-emerald-600 dark:text-emerald-400 font-mono">
+                    <Button size="sm" variant="ghost" className="h-6 text-[10px] text-emerald-600 dark:text-emerald-400 font-mono active:scale-95 transition-transform">
                       Export (1-click)
                     </Button>
                   </div>
@@ -234,7 +234,7 @@ export function LandingFeaturesDeepDive() {
 
           {/* TAB 2: KANBAN SPRINT & VELOCITY */}
           {activeTab === "kanban" && (
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center animate-forward-thrust">
               <div className="lg:col-span-5 space-y-5">
                 <div className="inline-flex items-center gap-1.5 rounded-md bg-purple-500/10 px-2.5 py-1 text-xs font-mono font-medium text-purple-600 dark:text-purple-400">
                   <Layers className="h-3.5 w-3.5" />
@@ -249,15 +249,15 @@ export function LandingFeaturesDeepDive() {
 
                 <div className="space-y-2.5 pt-2 font-mono text-xs text-foreground">
                   <div className="flex items-center gap-2">
-                    <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+                    <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0 animate-spring-settle" />
                     <span>{t("landing.features_suite.kanban_f1")}</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+                    <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0 animate-spring-settle" />
                     <span>{t("landing.features_suite.kanban_f2")}</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+                    <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0 animate-spring-settle" />
                     <span>{t("landing.features_suite.kanban_f3")}</span>
                   </div>
                 </div>
@@ -267,46 +267,46 @@ export function LandingFeaturesDeepDive() {
               <div className="lg:col-span-7 rounded-xl border border-border/90 bg-muted/30 p-4 sm:p-6 space-y-4">
                 <div className="flex items-center justify-between pb-2 border-b border-border/60 text-xs font-mono">
                   <span className="font-semibold text-foreground">Sprint 14 Velocity Trajectory</span>
-                  <Badge variant="outline" className="text-[10px] text-purple-600 dark:text-purple-400 border-purple-500/30">
+                  <Badge variant="outline" className="text-[10px] text-purple-600 dark:text-purple-400 border-purple-500/30 font-mono">
                     Velocity: 48 SP / Sprint
                   </Badge>
                 </div>
 
-                {/* Simulated Velocity Bars */}
+                {/* Velocity Bars with Kinetic Growth */}
                 <div className="grid grid-cols-4 gap-2 pt-2">
                   <div className="space-y-1 text-center">
                     <div className="h-24 bg-muted rounded flex items-end justify-center p-1">
-                      <div className="w-full bg-purple-500/50 rounded-xs" style={{ height: "65%" }} />
+                      <div className="w-full bg-purple-500/50 rounded-xs transition-all duration-700" style={{ height: "65%" }} />
                     </div>
                     <span className="text-[10px] font-mono text-muted-foreground">Sprint 11</span>
                   </div>
                   <div className="space-y-1 text-center">
                     <div className="h-24 bg-muted rounded flex items-end justify-center p-1">
-                      <div className="w-full bg-purple-500/60 rounded-xs" style={{ height: "80%" }} />
+                      <div className="w-full bg-purple-500/60 rounded-xs transition-all duration-700" style={{ height: "80%" }} />
                     </div>
                     <span className="text-[10px] font-mono text-muted-foreground">Sprint 12</span>
                   </div>
                   <div className="space-y-1 text-center">
                     <div className="h-24 bg-muted rounded flex items-end justify-center p-1">
-                      <div className="w-full bg-purple-500/80 rounded-xs" style={{ height: "92%" }} />
+                      <div className="w-full bg-purple-500/80 rounded-xs transition-all duration-700" style={{ height: "92%" }} />
                     </div>
                     <span className="text-[10px] font-mono text-muted-foreground">Sprint 13</span>
                   </div>
                   <div className="space-y-1 text-center">
                     <div className="h-24 bg-muted rounded flex items-end justify-center p-1 border border-primary/40">
-                      <div className="w-full bg-primary rounded-xs" style={{ height: "98%" }} />
+                      <div className="w-full bg-primary rounded-xs animate-elastic-progress" style={{ height: "98%" }} />
                     </div>
                     <span className="text-[10px] font-mono text-primary font-bold">Sprint 14 (Now)</span>
                   </div>
                 </div>
 
                 {/* Interactive Micro Card */}
-                <div className="p-3 rounded-lg border border-border/70 bg-background/90 flex items-center justify-between shadow-2xs">
+                <div className="p-3 rounded-lg border border-border/70 bg-background/90 flex items-center justify-between shadow-2xs hover:scale-101 hover:-rotate-0.5 transition-all duration-200 cursor-pointer">
                   <div>
                     <span className="text-xs font-semibold text-foreground block">TASK-1042: Optimizing WebAssembly SIMD Blur</span>
                     <span className="text-[11px] text-muted-foreground font-mono">Assigned to: Minh Dang • Story Points: 5 SP</span>
                   </div>
-                  <Badge variant="secondary" className="text-[10px] bg-purple-500/10 text-purple-600 dark:text-purple-400">
+                  <Badge variant="secondary" className="text-[10px] bg-purple-500/10 text-purple-600 dark:text-purple-400 font-mono">
                     In Review
                   </Badge>
                 </div>
@@ -316,7 +316,7 @@ export function LandingFeaturesDeepDive() {
 
           {/* TAB 3: HD VIDEO MEETINGS & AI STUDIO */}
           {activeTab === "meetings" && (
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center animate-forward-thrust">
               <div className="lg:col-span-5 space-y-5">
                 <div className="inline-flex items-center gap-1.5 rounded-md bg-emerald-500/10 px-2.5 py-1 text-xs font-mono font-medium text-emerald-600 dark:text-emerald-400">
                   <Video className="h-3.5 w-3.5" />
@@ -331,15 +331,15 @@ export function LandingFeaturesDeepDive() {
 
                 <div className="space-y-2.5 pt-2 font-mono text-xs text-foreground">
                   <div className="flex items-center gap-2">
-                    <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+                    <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0 animate-spring-settle" />
                     <span>{t("landing.features_suite.meetings_f1")}</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+                    <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0 animate-spring-settle" />
                     <span>{t("landing.features_suite.meetings_f2")}</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+                    <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0 animate-spring-settle" />
                     <span>{t("landing.features_suite.meetings_f3")}</span>
                   </div>
                 </div>
@@ -352,7 +352,17 @@ export function LandingFeaturesDeepDive() {
                     <div className="h-14 w-14 rounded-full bg-emerald-500/20 text-emerald-400 mx-auto flex items-center justify-center font-bold text-base ring-2 ring-emerald-500/40">
                       Host
                     </div>
-                    <span className="text-xs text-zinc-300 block font-medium">Daily Engineering Sync</span>
+                    <div className="flex items-center justify-center gap-2">
+                      <span className="text-xs text-zinc-300 font-medium">Daily Engineering Sync</span>
+                      {/* Audio frequency bars */}
+                      <div className="flex items-end gap-0.5 h-3 px-1">
+                        <span className="w-0.5 bg-emerald-400 h-full animate-audio-bounce-1 rounded-full" />
+                        <span className="w-0.5 bg-emerald-400 h-full animate-audio-bounce-2 rounded-full" />
+                        <span className="w-0.5 bg-emerald-400 h-full animate-audio-bounce-3 rounded-full" />
+                        <span className="w-0.5 bg-emerald-400 h-full animate-audio-bounce-4 rounded-full" />
+                        <span className="w-0.5 bg-emerald-400 h-full animate-audio-bounce-5 rounded-full" />
+                      </div>
+                    </div>
                   </div>
 
                   {/* Dynamic blur aura adjusted by slider */}
@@ -397,7 +407,7 @@ export function LandingFeaturesDeepDive() {
 
           {/* TAB 4: RAG KNOWLEDGE BASE */}
           {activeTab === "rag" && (
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center animate-forward-thrust">
               <div className="lg:col-span-5 space-y-5">
                 <div className="inline-flex items-center gap-1.5 rounded-md bg-blue-500/10 px-2.5 py-1 text-xs font-mono font-medium text-blue-600 dark:text-blue-400">
                   <FileSearch className="h-3.5 w-3.5" />
@@ -412,15 +422,15 @@ export function LandingFeaturesDeepDive() {
 
                 <div className="space-y-2.5 pt-2 font-mono text-xs text-foreground">
                   <div className="flex items-center gap-2">
-                    <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+                    <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0 animate-spring-settle" />
                     <span>{t("landing.features_suite.rag_f1")}</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+                    <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0 animate-spring-settle" />
                     <span>{t("landing.features_suite.rag_f2")}</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+                    <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0 animate-spring-settle" />
                     <span>{t("landing.features_suite.rag_f3")}</span>
                   </div>
                 </div>
@@ -431,31 +441,31 @@ export function LandingFeaturesDeepDive() {
                 <div className="p-3 rounded-lg border border-border/80 bg-background/90 space-y-2">
                   <div className="flex items-center justify-between text-muted-foreground">
                     <span className="text-foreground font-semibold">Indexed Vectors in Project #12</span>
-                    <span className="text-blue-500">4,812 Chunks</span>
+                    <span className="text-blue-500 font-bold">4,812 Chunks</span>
                   </div>
                   <div className="grid grid-cols-3 gap-2 text-[10px] text-center">
-                    <div className="p-2 rounded bg-muted/50 border border-border/60">
+                    <div className="p-2 rounded bg-muted/50 border border-border/60 hover:scale-102 transition-transform">
                       <span className="font-semibold block text-foreground">architecture.pdf</span>
                       <span className="text-muted-foreground">1,200 Chunks</span>
                     </div>
-                    <div className="p-2 rounded bg-muted/50 border border-border/60">
+                    <div className="p-2 rounded bg-muted/50 border border-border/60 hover:scale-102 transition-transform">
                       <span className="font-semibold block text-foreground">api_specs.json</span>
                       <span className="text-muted-foreground">840 Chunks</span>
                     </div>
-                    <div className="p-2 rounded bg-muted/50 border border-border/60">
+                    <div className="p-2 rounded bg-muted/50 border border-border/60 hover:scale-102 transition-transform">
                       <span className="font-semibold block text-foreground">prd_v2.md</span>
                       <span className="text-muted-foreground">2,772 Chunks</span>
                     </div>
                   </div>
                 </div>
 
-                <div className="p-3.5 rounded-lg border border-blue-500/30 bg-blue-500/5 space-y-2">
+                <div className="p-3.5 rounded-lg border border-blue-500/30 bg-blue-500/5 space-y-2 animate-forward-thrust">
                   <div className="flex items-center justify-between">
                     <span className="text-foreground font-bold flex items-center gap-1.5">
-                      <Sparkles className="h-3.5 w-3.5 text-blue-500" />
+                      <Sparkles className="h-3.5 w-3.5 text-blue-500 animate-pulse" />
                       Semantic Citation Preview
                     </span>
-                    <Badge variant="outline" className="text-[10px] text-blue-600 dark:text-blue-400 border-blue-500/40">
+                    <Badge variant="outline" className="text-[10px] text-blue-600 dark:text-blue-400 border-blue-500/40 font-mono">
                       Cosine Match: 0.942
                     </Badge>
                   </div>
@@ -469,7 +479,7 @@ export function LandingFeaturesDeepDive() {
 
           {/* TAB 5: TEAM REAL-TIME CHAT */}
           {activeTab === "chat" && (
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center animate-forward-thrust">
               <div className="lg:col-span-5 space-y-5">
                 <div className="inline-flex items-center gap-1.5 rounded-md bg-amber-500/10 px-2.5 py-1 text-xs font-mono font-medium text-amber-600 dark:text-amber-400">
                   <MessageSquare className="h-3.5 w-3.5" />
@@ -484,15 +494,15 @@ export function LandingFeaturesDeepDive() {
 
                 <div className="space-y-2.5 pt-2 font-mono text-xs text-foreground">
                   <div className="flex items-center gap-2">
-                    <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+                    <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0 animate-spring-settle" />
                     <span>{t("landing.features_suite.chat_f1")}</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+                    <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0 animate-spring-settle" />
                     <span>{t("landing.features_suite.chat_f2")}</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+                    <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0 animate-spring-settle" />
                     <span>{t("landing.features_suite.chat_f3")}</span>
                   </div>
                 </div>
@@ -502,13 +512,13 @@ export function LandingFeaturesDeepDive() {
               <div className="lg:col-span-7 rounded-xl border border-border/90 bg-muted/30 p-4 sm:p-6 space-y-3 font-mono text-xs">
                 <div className="flex items-center justify-between pb-2 border-b border-border/60">
                   <span className="font-semibold text-foreground">#release-v2-devs (6 members)</span>
-                  <span className="text-[10px] text-emerald-500 flex items-center gap-1">
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> Live
+                  <span className="text-[10px] text-emerald-500 flex items-center gap-1 font-mono">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-ping" /> Live Socket
                   </span>
                 </div>
 
                 <div className="space-y-2.5">
-                  <div className="p-2.5 rounded bg-background/90 border border-border/70 space-y-1">
+                  <div className="p-2.5 rounded bg-background/90 border border-border/70 space-y-1 animate-forward-thrust">
                     <div className="flex items-center justify-between text-[11px]">
                       <span className="font-semibold text-foreground">Minh Dang</span>
                       <span className="text-muted-foreground text-[10px]">10:42 AM</span>
@@ -518,7 +528,7 @@ export function LandingFeaturesDeepDive() {
                     </p>
                   </div>
 
-                  <div className="p-2.5 rounded bg-background/90 border border-border/70 space-y-1">
+                  <div className="p-2.5 rounded bg-background/90 border border-border/70 space-y-1 animate-forward-thrust" style={{ animationDelay: '0.1s' }}>
                     <div className="flex items-center justify-between text-[11px]">
                       <span className="font-semibold text-foreground">Lan Nguyen (QA Lead)</span>
                       <span className="text-muted-foreground text-[10px]">10:44 AM</span>
@@ -534,7 +544,7 @@ export function LandingFeaturesDeepDive() {
 
           {/* TAB 6: HEURISTIC SKILL MATRIX */}
           {activeTab === "matrix" && (
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center animate-forward-thrust">
               <div className="lg:col-span-5 space-y-5">
                 <div className="inline-flex items-center gap-1.5 rounded-md bg-rose-500/10 px-2.5 py-1 text-xs font-mono font-medium text-rose-600 dark:text-rose-400">
                   <Activity className="h-3.5 w-3.5" />
@@ -549,15 +559,15 @@ export function LandingFeaturesDeepDive() {
 
                 <div className="space-y-2.5 pt-2 font-mono text-xs text-foreground">
                   <div className="flex items-center gap-2">
-                    <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+                    <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0 animate-spring-settle" />
                     <span>{t("landing.features_suite.matrix_f1")}</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+                    <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0 animate-spring-settle" />
                     <span>{t("landing.features_suite.matrix_f2")}</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+                    <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0 animate-spring-settle" />
                     <span>{t("landing.features_suite.matrix_f3")}</span>
                   </div>
                 </div>
@@ -567,14 +577,14 @@ export function LandingFeaturesDeepDive() {
               <div className="lg:col-span-7 rounded-xl border border-border/90 bg-muted/30 p-4 sm:p-6 space-y-3 font-mono text-xs">
                 <div className="flex items-center justify-between pb-2 border-b border-border/60">
                   <span className="font-semibold text-foreground">Algorithm: Score = w1·Fit + w2·Load + w3·Perf</span>
-                  <Badge variant="outline" className="text-[10px] text-rose-500 border-rose-500/30">Auto-Balancing</Badge>
+                  <Badge variant="outline" className="text-[10px] text-rose-500 border-rose-500/30 font-mono">Auto-Balancing</Badge>
                 </div>
 
                 <div className="space-y-2">
-                  <div className="p-3 rounded-lg border border-border/70 bg-background/90 space-y-1.5">
+                  <div className="p-3 rounded-lg border border-border/70 bg-background/90 space-y-1.5 animate-forward-thrust">
                     <div className="flex items-center justify-between">
                       <span className="font-semibold text-foreground">Minh Dang (Frontend / WebGL)</span>
-                      <Badge variant="secondary" className="text-[10px] text-emerald-600 dark:text-emerald-400">Recommendation: OPTIMAL</Badge>
+                      <Badge variant="secondary" className="text-[10px] text-emerald-600 dark:text-emerald-400 font-mono">Recommendation: OPTIMAL</Badge>
                     </div>
                     <div className="grid grid-cols-3 gap-2 text-[10px] text-muted-foreground">
                       <span>Skill Fit: 95%</span>
@@ -582,14 +592,14 @@ export function LandingFeaturesDeepDive() {
                       <span>Score: 0.92</span>
                     </div>
                     <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
-                      <div className="h-full bg-emerald-500 rounded-full" style={{ width: "92%" }} />
+                      <div className="h-full bg-emerald-500 rounded-full transition-all duration-700 ease-out" style={{ width: "92%" }} />
                     </div>
                   </div>
 
-                  <div className="p-3 rounded-lg border border-border/70 bg-background/90 space-y-1.5">
+                  <div className="p-3 rounded-lg border border-border/70 bg-background/90 space-y-1.5 animate-forward-thrust" style={{ animationDelay: '0.1s' }}>
                     <div className="flex items-center justify-between">
                       <span className="font-semibold text-foreground">Tuan Pham (Backend / DB)</span>
-                      <Badge variant="secondary" className="text-[10px] text-amber-600 dark:text-amber-400">High Workload</Badge>
+                      <Badge variant="secondary" className="text-[10px] text-amber-600 dark:text-amber-400 font-mono">High Workload</Badge>
                     </div>
                     <div className="grid grid-cols-3 gap-2 text-[10px] text-muted-foreground">
                       <span>Skill Fit: 88%</span>
@@ -597,7 +607,7 @@ export function LandingFeaturesDeepDive() {
                       <span>Score: 0.54</span>
                     </div>
                     <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
-                      <div className="h-full bg-amber-500 rounded-full" style={{ width: "54%" }} />
+                      <div className="h-full bg-amber-500 rounded-full transition-all duration-700 ease-out" style={{ width: "54%" }} />
                     </div>
                   </div>
                 </div>
@@ -607,7 +617,7 @@ export function LandingFeaturesDeepDive() {
 
           {/* TAB 7: TIMELINE & GANTT */}
           {activeTab === "calendar" && (
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center animate-forward-thrust">
               <div className="lg:col-span-5 space-y-5">
                 <div className="inline-flex items-center gap-1.5 rounded-md bg-teal-500/10 px-2.5 py-1 text-xs font-mono font-medium text-teal-600 dark:text-teal-400">
                   <Calendar className="h-3.5 w-3.5" />
@@ -622,15 +632,15 @@ export function LandingFeaturesDeepDive() {
 
                 <div className="space-y-2.5 pt-2 font-mono text-xs text-foreground">
                   <div className="flex items-center gap-2">
-                    <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+                    <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0 animate-spring-settle" />
                     <span>{t("landing.features_suite.calendar_f1")}</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+                    <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0 animate-spring-settle" />
                     <span>{t("landing.features_suite.calendar_f2")}</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+                    <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0 animate-spring-settle" />
                     <span>{t("landing.features_suite.calendar_f3")}</span>
                   </div>
                 </div>
@@ -648,7 +658,7 @@ export function LandingFeaturesDeepDive() {
                   <div className="space-y-1">
                     <div className="flex justify-between text-[11px]">
                       <span className="text-foreground">Phase 1: Architecture & SEO Specs</span>
-                      <span className="text-emerald-500">Completed (Oct 18-20)</span>
+                      <span className="text-emerald-500 font-bold">Completed (Oct 18-20)</span>
                     </div>
                     <div className="h-3 bg-muted rounded overflow-hidden">
                       <div className="h-full bg-emerald-500 rounded" style={{ width: "100%" }} />
@@ -659,7 +669,7 @@ export function LandingFeaturesDeepDive() {
                   <div className="space-y-1">
                     <div className="flex justify-between text-[11px]">
                       <span className="text-foreground">Phase 2: Video Blur Matting & WebM Fix</span>
-                      <span className="text-emerald-500">Completed (Oct 21)</span>
+                      <span className="text-emerald-500 font-bold">Completed (Oct 21)</span>
                     </div>
                     <div className="h-3 bg-muted rounded overflow-hidden">
                       <div className="h-full bg-emerald-500 rounded" style={{ width: "100%" }} />
@@ -673,14 +683,14 @@ export function LandingFeaturesDeepDive() {
                       <span className="text-primary font-bold">In Progress (85%)</span>
                     </div>
                     <div className="h-3 bg-muted rounded overflow-hidden">
-                      <div className="h-full bg-primary rounded" style={{ width: "85%" }} />
+                      <div className="h-full bg-primary rounded animate-elastic-progress" style={{ width: "85%" }} />
                     </div>
                   </div>
                 </div>
 
                 <div className="pt-2 flex items-center justify-between text-[10px] text-muted-foreground border-t border-border/40">
-                  <span className="flex items-center gap-1 text-emerald-500"><ShieldCheck className="h-3 w-3" /> Zero Conflict Detected</span>
-                  <span>Synced with MS Teams</span>
+                  <span className="flex items-center gap-1 text-emerald-500 font-mono"><ShieldCheck className="h-3 w-3" /> Zero Conflict Detected</span>
+                  <span className="font-mono">Synced with MS Teams</span>
                 </div>
               </div>
             </div>

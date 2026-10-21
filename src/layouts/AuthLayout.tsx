@@ -60,6 +60,13 @@ export default function AuthLayout() {
       {/* Clean architectural grid texture - Adapts to Light and Dark mode without AI cosmic glows */}
       <div className="absolute inset-0 bg-[linear-gradient(to_right,#e4e4e780_1px,transparent_1px),linear-gradient(to_bottom,#e4e4e780_1px,transparent_1px)] dark:bg-[linear-gradient(to_right,#3f3f4618_1px,transparent_1px),linear-gradient(to_bottom,#3f3f4618_1px,transparent_1px)] bg-[size:40px_40px] pointer-events-none" />
 
+      {/* Aerodynamic Cockpit Flight Stream Trails */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-1/4 left-0 w-64 h-[1px] bg-gradient-to-r from-transparent via-zinc-400 dark:via-zinc-500 to-transparent animate-flight-stream" />
+        <div className="absolute top-2/3 left-0 w-96 h-[1px] bg-gradient-to-r from-transparent via-emerald-500/40 to-transparent animate-flight-stream-fast" style={{ animationDelay: '1.8s' }} />
+        <div className="absolute top-1/2 left-0 w-48 h-[1px] bg-gradient-to-r from-transparent via-blue-500/30 to-transparent animate-flight-stream" style={{ animationDelay: '3.2s' }} />
+      </div>
+
       <div className="relative mx-auto flex min-h-screen w-full max-w-6xl items-center px-4 py-16 sm:px-6 lg:px-8">
         <div className="grid w-full items-center gap-12 lg:grid-cols-2">
           {/* Dynamic Interactive Showcase in Left Column */}

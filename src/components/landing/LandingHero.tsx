@@ -21,11 +21,27 @@ export function LandingHero({ onExploreClick }: LandingHeroProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const [selectedPrompt, setSelectedPrompt] = useState<number>(0);
+  const [isTriggering, setIsTriggering] = useState(false);
+
+  const handleSelectPrompt = (index: number) => {
+    setIsTriggering(true);
+    setSelectedPrompt(index);
+    setTimeout(() => {
+      setIsTriggering(false);
+    }, 280);
+  };
 
   return (
     <section className="relative overflow-hidden pt-12 pb-16 sm:pt-20 sm:pb-24">
-      {/* Subtle Architectural Grid Pattern */}
+      {/* Architectural Grid Pattern */}
       <div className="absolute inset-0 bg-[linear-gradient(to_right,#e4e4e760_1px,transparent_1px),linear-gradient(to_bottom,#e4e4e760_1px,transparent_1px)] dark:bg-[linear-gradient(to_right,#3f3f4615_1px,transparent_1px),linear-gradient(to_bottom,#3f3f4615_1px,transparent_1px)] bg-[size:48px_48px] pointer-events-none" />
+
+      {/* Aerodynamic Velocity Trails - Simulating forward flight velocity */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-1/4 left-0 w-80 h-[1px] bg-gradient-to-r from-transparent via-zinc-400 dark:via-zinc-600 to-transparent animate-flight-stream" />
+        <div className="absolute top-1/2 left-0 w-96 h-[1px] bg-gradient-to-r from-transparent via-emerald-500/30 to-transparent animate-flight-stream-fast" style={{ animationDelay: '1.2s' }} />
+        <div className="absolute top-3/4 left-0 w-64 h-[1px] bg-gradient-to-r from-transparent via-primary/25 to-transparent animate-flight-stream" style={{ animationDelay: '2.4s' }} />
+      </div>
 
       <div className="relative mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 text-center space-y-6">
         {/* Release Pill Tag */}
@@ -53,7 +69,7 @@ export function LandingHero({ onExploreClick }: LandingHeroProps) {
           <Button
             size="lg"
             onClick={() => navigate("/register")}
-            className="w-full sm:w-auto h-11 px-7 text-sm font-semibold gap-2 shadow-sm"
+            className="w-full sm:w-auto h-11 px-7 text-sm font-semibold gap-2 shadow-sm active:scale-95 transition-transform"
           >
             <span>{t("landing.hero.cta_primary")}</span>
             <ArrowRight className="h-4 w-4" />
@@ -63,7 +79,7 @@ export function LandingHero({ onExploreClick }: LandingHeroProps) {
             variant="outline"
             size="lg"
             onClick={onExploreClick}
-            className="w-full sm:w-auto h-11 px-6 text-sm font-medium gap-2 border-border/80 bg-background/50 hover:bg-muted/80"
+            className="w-full sm:w-auto h-11 px-6 text-sm font-medium gap-2 border-border/80 bg-background/50 hover:bg-muted/80 active:scale-95 transition-transform"
           >
             <Play className="h-3.5 w-3.5 fill-current opacity-70" />
             <span>{t("landing.hero.cta_secondary")}</span>
@@ -96,11 +112,11 @@ export function LandingHero({ onExploreClick }: LandingHeroProps) {
               <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
-                  onClick={() => setSelectedPrompt(0)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all cursor-pointer ${
+                  onClick={() => handleSelectPrompt(0)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all duration-200 cursor-pointer ${
                     selectedPrompt === 0
-                      ? "bg-primary text-primary-foreground border-primary shadow-xs font-semibold"
-                      : "bg-muted/40 hover:bg-muted text-muted-foreground border-border/70"
+                      ? "bg-primary text-primary-foreground border-primary shadow-xs font-semibold scale-102"
+                      : "bg-muted/40 hover:bg-muted text-muted-foreground border-border/70 hover:scale-101"
                   }`}
                 >
                   {t("landing.hero_playground.prompt_1_label")}
@@ -108,11 +124,11 @@ export function LandingHero({ onExploreClick }: LandingHeroProps) {
 
                 <button
                   type="button"
-                  onClick={() => setSelectedPrompt(1)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all cursor-pointer ${
+                  onClick={() => handleSelectPrompt(1)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all duration-200 cursor-pointer ${
                     selectedPrompt === 1
-                      ? "bg-primary text-primary-foreground border-primary shadow-xs font-semibold"
-                      : "bg-muted/40 hover:bg-muted text-muted-foreground border-border/70"
+                      ? "bg-primary text-primary-foreground border-primary shadow-xs font-semibold scale-102"
+                      : "bg-muted/40 hover:bg-muted text-muted-foreground border-border/70 hover:scale-101"
                   }`}
                 >
                   {t("landing.hero_playground.prompt_2_label")}
@@ -120,11 +136,11 @@ export function LandingHero({ onExploreClick }: LandingHeroProps) {
 
                 <button
                   type="button"
-                  onClick={() => setSelectedPrompt(2)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all cursor-pointer ${
+                  onClick={() => handleSelectPrompt(2)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all duration-200 cursor-pointer ${
                     selectedPrompt === 2
-                      ? "bg-primary text-primary-foreground border-primary shadow-xs font-semibold"
-                      : "bg-muted/40 hover:bg-muted text-muted-foreground border-border/70"
+                      ? "bg-primary text-primary-foreground border-primary shadow-xs font-semibold scale-102"
+                      : "bg-muted/40 hover:bg-muted text-muted-foreground border-border/70 hover:scale-101"
                   }`}
                 >
                   {t("landing.hero_playground.prompt_3_label")}
@@ -132,8 +148,10 @@ export function LandingHero({ onExploreClick }: LandingHeroProps) {
               </div>
             </div>
 
-            {/* Simulated Live Output Panel */}
-            <div className="rounded-lg border border-border/70 bg-background/90 p-3.5 space-y-2.5 font-mono text-xs">
+            {/* Simulated Live Output Panel with Kinetic Momentum */}
+            <div className={`rounded-lg border border-border/70 bg-background/90 p-3.5 space-y-2.5 font-mono text-xs transition-all duration-200 ${
+              isTriggering ? "opacity-60 translate-x-1" : "opacity-100 translate-x-0"
+            }`}>
               <div className="flex items-center gap-2 text-muted-foreground">
                 <Bot className="h-3.5 w-3.5 text-primary" />
                 <span className="text-[11px]">
@@ -143,10 +161,10 @@ export function LandingHero({ onExploreClick }: LandingHeroProps) {
                 </span>
               </div>
 
-              <div className="p-3 rounded-md bg-muted/30 border border-border/50 space-y-1.5 text-foreground">
+              <div className="p-3 rounded-md bg-muted/30 border border-border/50 space-y-1.5 text-foreground animate-forward-thrust">
                 <div className="flex items-center justify-between text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
                   <span className="flex items-center gap-1.5">
-                    <CheckCircle2 className="h-3 w-3" />
+                    <CheckCircle2 className="h-3 w-3 animate-spring-settle" />
                     {selectedPrompt === 0 && t("landing.hero_playground.prompt_1_res_title")}
                     {selectedPrompt === 1 && t("landing.hero_playground.prompt_2_res_title")}
                     {selectedPrompt === 2 && t("landing.hero_playground.prompt_3_res_title")}

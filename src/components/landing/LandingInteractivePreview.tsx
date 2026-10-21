@@ -11,7 +11,8 @@ import {
   Search,
   Sliders,
   RefreshCw,
-  ArrowRight
+  ArrowRight,
+  Activity
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -24,23 +25,28 @@ export function LandingInteractivePreview() {
   const [blurActive, setBlurActive] = useState(true);
   const [isSimulatingAgent, setIsSimulatingAgent] = useState(false);
   const [kanbanStage, setKanbanStage] = useState<number>(0);
+  const [isGlidingKanban, setIsGlidingKanban] = useState(false);
   const [selectedRagQuery, setSelectedRagQuery] = useState<number>(0);
 
   const triggerAgentSimulation = () => {
     setIsSimulatingAgent(true);
     setTimeout(() => {
       setIsSimulatingAgent(false);
-    }, 600);
+    }, 500);
   };
 
   const advanceKanbanTask = () => {
-    setKanbanStage((prev) => (prev + 1) % 3);
+    setIsGlidingKanban(true);
+    setTimeout(() => {
+      setKanbanStage((prev) => (prev + 1) % 3);
+      setIsGlidingKanban(false);
+    }, 300);
   };
 
   return (
     <section id="demo" className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 pb-20">
-      {/* Outer Shell Frame */}
-      <div className="rounded-xl border border-border/90 bg-card/60 p-2 sm:p-3 shadow-xl backdrop-blur-md">
+      {/* Outer Shell Frame with Kinetic Depth */}
+      <div className="rounded-xl border border-border/90 bg-card/60 p-2 sm:p-3 shadow-xl backdrop-blur-md transition-all duration-300">
         {/* Browser Top Window Bar */}
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/70 pb-3 px-2 pt-1">
           {/* Traffic lights + URL */}
@@ -56,14 +62,14 @@ export function LandingInteractivePreview() {
             </div>
           </div>
 
-          {/* Interactive Tab Switcher */}
+          {/* Flow State Tab Switcher with Gliding Feedback */}
           <div className="flex items-center gap-1 bg-muted/60 p-1 rounded-lg border border-border/60">
             <button
               onClick={() => setActiveTab("copilot")}
-              className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium transition-all cursor-pointer ${
+              className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium transition-all duration-200 cursor-pointer ${
                 activeTab === "copilot"
-                  ? "bg-background text-foreground shadow-2xs font-semibold"
-                  : "text-muted-foreground hover:text-foreground"
+                  ? "bg-background text-foreground shadow-2xs font-semibold scale-100"
+                  : "text-muted-foreground hover:text-foreground hover:scale-102"
               }`}
             >
               <Bot className="h-3.5 w-3.5" />
@@ -72,10 +78,10 @@ export function LandingInteractivePreview() {
 
             <button
               onClick={() => setActiveTab("kanban")}
-              className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium transition-all cursor-pointer ${
+              className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium transition-all duration-200 cursor-pointer ${
                 activeTab === "kanban"
-                  ? "bg-background text-foreground shadow-2xs font-semibold"
-                  : "text-muted-foreground hover:text-foreground"
+                  ? "bg-background text-foreground shadow-2xs font-semibold scale-100"
+                  : "text-muted-foreground hover:text-foreground hover:scale-102"
               }`}
             >
               <Kanban className="h-3.5 w-3.5" />
@@ -84,10 +90,10 @@ export function LandingInteractivePreview() {
 
             <button
               onClick={() => setActiveTab("meetings")}
-              className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium transition-all cursor-pointer ${
+              className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium transition-all duration-200 cursor-pointer ${
                 activeTab === "meetings"
-                  ? "bg-background text-foreground shadow-2xs font-semibold"
-                  : "text-muted-foreground hover:text-foreground"
+                  ? "bg-background text-foreground shadow-2xs font-semibold scale-100"
+                  : "text-muted-foreground hover:text-foreground hover:scale-102"
               }`}
             >
               <Video className="h-3.5 w-3.5" />
@@ -96,10 +102,10 @@ export function LandingInteractivePreview() {
 
             <button
               onClick={() => setActiveTab("rag")}
-              className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium transition-all cursor-pointer ${
+              className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium transition-all duration-200 cursor-pointer ${
                 activeTab === "rag"
-                  ? "bg-background text-foreground shadow-2xs font-semibold"
-                  : "text-muted-foreground hover:text-foreground"
+                  ? "bg-background text-foreground shadow-2xs font-semibold scale-100"
+                  : "text-muted-foreground hover:text-foreground hover:scale-102"
               }`}
             >
               <FileText className="h-3.5 w-3.5" />
@@ -108,18 +114,23 @@ export function LandingInteractivePreview() {
           </div>
         </div>
 
-        {/* Dynamic Interactive Stage */}
+        {/* Dynamic Kinetic Stage */}
         <div className="min-h-[420px] rounded-lg bg-background/90 p-4 sm:p-6 border border-border/50 transition-all">
           {/* TAB 1: COPILOT PREVIEW */}
           {activeTab === "copilot" && (
-            <div className="space-y-4 max-w-3xl mx-auto">
+            <div className="space-y-4 max-w-3xl mx-auto animate-forward-thrust">
               <div className="flex items-center justify-between pb-3 border-b border-border/60">
                 <div className="flex items-center gap-2">
-                  <div className="h-7 w-7 rounded-md bg-primary/10 text-primary flex items-center justify-center font-bold text-xs">
+                  <div className="h-7 w-7 rounded-md bg-primary/10 text-primary flex items-center justify-center font-bold text-xs relative overflow-hidden">
                     AI
+                    {/* Rotating scanning radar line */}
+                    <span className="absolute inset-0 border border-primary/40 rounded-md border-t-transparent animate-radar-sweep" />
                   </div>
                   <div>
-                    <h3 className="text-sm font-semibold text-foreground">{t("landing.preview.copilot_title")}</h3>
+                    <h3 className="text-sm font-semibold text-foreground flex items-center gap-1.5">
+                      <span>{t("landing.preview.copilot_title")}</span>
+                      <Activity className="h-3 w-3 text-emerald-500 animate-pulse" />
+                    </h3>
                     <p className="text-[11px] text-muted-foreground font-mono">{t("landing.preview.copilot_model")}</p>
                   </div>
                 </div>
@@ -128,38 +139,38 @@ export function LandingInteractivePreview() {
                     size="sm"
                     variant="outline"
                     onClick={triggerAgentSimulation}
-                    className="h-7 text-[11px] font-mono gap-1"
+                    className="h-7 text-[11px] font-mono gap-1 active:scale-95 transition-transform"
                   >
                     <RefreshCw className={`h-3 w-3 ${isSimulatingAgent ? "animate-spin text-primary" : ""}`} />
-                    <span className="hidden sm:inline">Simulate</span>
+                    <span className="hidden sm:inline">Simulate Dispatch</span>
                   </Button>
-                  <Badge variant="outline" className="text-[10px] text-emerald-500 border-emerald-500/30 gap-1">
+                  <Badge variant="outline" className="text-[10px] text-emerald-500 border-emerald-500/30 gap-1 font-mono">
                     <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
                     {t("landing.preview.copilot_streaming")}
                   </Badge>
                 </div>
               </div>
 
-              {/* User Prompt Bubble */}
-              <div className="flex justify-end">
+              {/* User Prompt Bubble with Forward Momentum */}
+              <div className="flex justify-end animate-forward-thrust">
                 <div className="rounded-xl rounded-tr-xs bg-primary text-primary-foreground px-4 py-2.5 text-xs sm:text-sm max-w-lg shadow-2xs">
                   {t("landing.preview.copilot_user_prompt")}
                 </div>
               </div>
 
-              {/* AI Agent Answer Box */}
-              <div className={`rounded-xl rounded-tl-xs border border-border/80 bg-card p-4 sm:p-5 space-y-3 shadow-2xs transition-opacity ${
-                isSimulatingAgent ? "opacity-40" : "opacity-100"
+              {/* AI Agent Answer Box with Kinetic Stagger */}
+              <div className={`rounded-xl rounded-tl-xs border border-border/80 bg-card p-4 sm:p-5 space-y-3 shadow-2xs transition-all duration-300 ${
+                isSimulatingAgent ? "opacity-40 scale-99" : "opacity-100 scale-100"
               }`}>
                 <div className="flex items-center gap-2 text-xs font-mono text-primary font-semibold">
-                  <Sparkles className="h-3.5 w-3.5" />
+                  <Sparkles className="h-3.5 w-3.5 text-primary" />
                   <span>{t("landing.preview.copilot_analysis_title")}</span>
                 </div>
 
                 {/* Reasoning Steps Accordion */}
-                <div className="rounded-md border border-border/60 bg-muted/30 p-2.5 text-xs space-y-1.5 font-mono text-muted-foreground">
+                <div className="rounded-md border border-border/60 bg-muted/30 p-2.5 text-xs space-y-1.5 font-mono text-muted-foreground animate-forward-thrust">
                   <p className="text-foreground font-medium flex items-center gap-1.5">
-                    <CheckCircle2 className="h-3 w-3 text-emerald-500" />
+                    <CheckCircle2 className="h-3 w-3 text-emerald-500 animate-spring-settle" />
                     {t("landing.preview.copilot_reasoning_1")}
                   </p>
                   <p className="pl-4">{t("landing.preview.copilot_reasoning_2")}</p>
@@ -171,22 +182,22 @@ export function LandingInteractivePreview() {
                 </p>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
-                  <div className="p-3 rounded-lg border border-border/70 bg-background/80 flex items-center justify-between">
+                  <div className="p-3 rounded-lg border border-border/70 bg-background/80 flex items-center justify-between hover:border-primary/40 transition-colors">
                     <div>
                       <span className="text-xs font-semibold block text-foreground">{t("landing.preview.copilot_task_1_title")}</span>
                       <span className="text-[11px] text-muted-foreground">{t("landing.preview.copilot_task_1_assignee")}</span>
                     </div>
-                    <Badge variant="secondary" className="text-[10px] text-emerald-600 dark:text-emerald-400">
+                    <Badge variant="secondary" className="text-[10px] text-emerald-600 dark:text-emerald-400 font-mono">
                       {t("landing.preview.copilot_task_1_match")}
                     </Badge>
                   </div>
 
-                  <div className="p-3 rounded-lg border border-border/70 bg-background/80 flex items-center justify-between">
+                  <div className="p-3 rounded-lg border border-border/70 bg-background/80 flex items-center justify-between hover:border-primary/40 transition-colors">
                     <div>
                       <span className="text-xs font-semibold block text-foreground">{t("landing.preview.copilot_task_2_title")}</span>
                       <span className="text-[11px] text-muted-foreground">{t("landing.preview.copilot_task_2_assignee")}</span>
                     </div>
-                    <Badge variant="secondary" className="text-[10px] text-emerald-600 dark:text-emerald-400">
+                    <Badge variant="secondary" className="text-[10px] text-emerald-600 dark:text-emerald-400 font-mono">
                       {t("landing.preview.copilot_task_2_match")}
                     </Badge>
                   </div>
@@ -195,9 +206,9 @@ export function LandingInteractivePreview() {
             </div>
           )}
 
-          {/* TAB 2: KANBAN SPRINT PREVIEW */}
+          {/* TAB 2: KANBAN SPRINT PREVIEW WITH VISUAL FLIGHT TRAJECTORY */}
           {activeTab === "kanban" && (
-            <div className="space-y-4">
+            <div className="space-y-4 animate-forward-thrust">
               <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-border/60">
                 <span className="text-xs font-mono font-medium text-muted-foreground">
                   {t("landing.preview.kanban_header")}
@@ -207,56 +218,78 @@ export function LandingInteractivePreview() {
                     size="sm"
                     variant="outline"
                     onClick={advanceKanbanTask}
-                    className="h-6 text-[11px] font-mono gap-1"
+                    className="h-6 text-[11px] font-mono gap-1 active:scale-95 transition-transform cursor-pointer"
                   >
-                    <span>Move Task</span>
+                    <span>Glide Task</span>
                     <ArrowRight className="h-2.5 w-2.5" />
                   </Button>
-                  <Badge variant="outline" className="text-[10px]">{t("landing.preview.kanban_sync")}</Badge>
+                  <Badge variant="outline" className="text-[10px] font-mono">{t("landing.preview.kanban_sync")}</Badge>
                 </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                {/* Column: To Do */}
-                <div className="p-3 rounded-lg bg-muted/40 border border-border/60 space-y-2.5">
+                {/* Column 1: To Do */}
+                <div className="p-3 rounded-lg bg-muted/40 border border-border/60 space-y-2.5 transition-colors">
                   <div className="flex items-center justify-between text-xs font-semibold text-foreground">
                     <span>{t("landing.preview.kanban_col_todo")}</span>
-                    <span className="h-5 w-5 rounded-full bg-muted flex items-center justify-center text-[10px]">
+                    <span className="h-5 w-5 rounded-full bg-muted flex items-center justify-center text-[10px] font-mono">
                       {kanbanStage === 0 ? 2 : 1}
                     </span>
                   </div>
+
+                  {/* Dynamic Gliding Card in Col 1 */}
                   {kanbanStage === 0 && (
-                    <div className="p-2.5 rounded-md bg-card border border-border/80 shadow-2xs space-y-1.5 transition-all">
+                    <div 
+                      onClick={advanceKanbanTask}
+                      className={`p-2.5 rounded-md bg-card border border-border/80 shadow-2xs space-y-1.5 cursor-pointer transition-all duration-300 ${
+                        isGlidingKanban ? "scale-103 -rotate-1 shadow-lg border-primary" : "animate-spring-settle hover:border-primary/40"
+                      }`}
+                    >
                       <span className="text-xs font-medium block text-foreground">{t("landing.preview.kanban_task_1")}</span>
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-600 dark:text-blue-400 font-mono">SEO</span>
-                        <span className="text-[10px] text-muted-foreground flex items-center gap-1"><Clock className="h-2.5 w-2.5" /> 2h</span>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-600 dark:text-blue-400 font-mono">SEO</span>
+                          <span className="text-[10px] text-muted-foreground flex items-center gap-1"><Clock className="h-2.5 w-2.5" /> 2h</span>
+                        </div>
+                        <span className="text-[10px] text-primary font-mono flex items-center gap-0.5">Click to fly <ArrowRight className="h-2 w-2" /></span>
                       </div>
                     </div>
                   )}
-                  <div className="p-2.5 rounded-md bg-card border border-border/80 shadow-2xs space-y-1.5">
+
+                  <div className="p-2.5 rounded-md bg-card border border-border/80 shadow-2xs space-y-1.5 opacity-80">
                     <span className="text-xs font-medium block text-foreground">Analytics Event Triggers</span>
                     <span className="text-[10px] text-muted-foreground flex items-center gap-1"><Clock className="h-2.5 w-2.5" /> 3h</span>
                   </div>
                 </div>
 
-                {/* Column: In Progress */}
-                <div className="p-3 rounded-lg bg-muted/40 border border-border/60 space-y-2.5">
+                {/* Column 2: In Progress */}
+                <div className="p-3 rounded-lg bg-muted/40 border border-border/60 space-y-2.5 transition-colors">
                   <div className="flex items-center justify-between text-xs font-semibold text-foreground">
                     <span>{t("landing.preview.kanban_col_in_progress")}</span>
-                    <span className="h-5 w-5 rounded-full bg-muted flex items-center justify-center text-[10px]">
+                    <span className="h-5 w-5 rounded-full bg-muted flex items-center justify-center text-[10px] font-mono">
                       {kanbanStage === 1 ? 2 : 1}
                     </span>
                   </div>
+
+                  {/* Dynamic Gliding Card in Col 2 */}
                   {kanbanStage === 1 && (
-                    <div className="p-2.5 rounded-md bg-card border-2 border-primary/50 shadow-2xs space-y-1.5 transition-all">
+                    <div 
+                      onClick={advanceKanbanTask}
+                      className={`p-2.5 rounded-md bg-card border-2 border-primary/60 shadow-2xs space-y-1.5 cursor-pointer transition-all duration-300 ${
+                        isGlidingKanban ? "scale-103 rotate-2 shadow-lg" : "animate-spring-settle hover:border-primary"
+                      }`}
+                    >
                       <span className="text-xs font-medium block text-foreground">{t("landing.preview.kanban_task_1")}</span>
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-600 dark:text-blue-400 font-mono">SEO</span>
-                        <span className="text-[10px] text-emerald-500 font-mono">Active</span>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-600 dark:text-blue-400 font-mono">SEO</span>
+                          <span className="text-[10px] text-emerald-500 font-mono animate-pulse">● Gliding to Done</span>
+                        </div>
+                        <ArrowRight className="h-3 w-3 text-primary animate-pulse" />
                       </div>
                     </div>
                   )}
+
                   <div className="p-2.5 rounded-md bg-card border border-border/80 shadow-2xs space-y-1.5">
                     <span className="text-xs font-medium block text-foreground">{t("landing.preview.kanban_task_2")}</span>
                     <div className="flex items-center gap-1.5">
@@ -266,23 +299,34 @@ export function LandingInteractivePreview() {
                   </div>
                 </div>
 
-                {/* Column: Done */}
-                <div className="p-3 rounded-lg bg-muted/40 border border-border/60 space-y-2.5">
+                {/* Column 3: Done */}
+                <div className="p-3 rounded-lg bg-muted/40 border border-border/60 space-y-2.5 transition-colors">
                   <div className="flex items-center justify-between text-xs font-semibold text-foreground">
                     <span>{t("landing.preview.kanban_col_done")}</span>
-                    <span className="h-5 w-5 rounded-full bg-muted flex items-center justify-center text-[10px]">
+                    <span className="h-5 w-5 rounded-full bg-muted flex items-center justify-center text-[10px] font-mono">
                       {kanbanStage === 2 ? 8 : 7}
                     </span>
                   </div>
+
+                  {/* Dynamic Gliding Card in Col 3 (Settled in Done) */}
                   {kanbanStage === 2 && (
-                    <div className="p-2.5 rounded-md bg-card border border-emerald-500/40 shadow-2xs space-y-1.5 transition-all">
+                    <div 
+                      onClick={advanceKanbanTask}
+                      className={`p-2.5 rounded-md bg-card border border-emerald-500/50 shadow-2xs space-y-1.5 cursor-pointer transition-all duration-300 ${
+                        isGlidingKanban ? "scale-98 opacity-70" : "animate-spring-settle"
+                      }`}
+                    >
                       <span className="text-xs font-medium block text-foreground">{t("landing.preview.kanban_task_1")}</span>
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-mono">Done</span>
-                        <CheckCircle2 className="h-3 w-3 text-emerald-500" />
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-mono">Arrived at Goal</span>
+                          <CheckCircle2 className="h-3 w-3 text-emerald-500 animate-spring-settle" />
+                        </div>
+                        <span className="text-[10px] text-muted-foreground font-mono">Reset ↺</span>
                       </div>
                     </div>
                   )}
+
                   <div className="p-2.5 rounded-md bg-card border border-border/80 shadow-2xs space-y-1.5">
                     <span className="text-xs font-medium block text-foreground">{t("landing.preview.kanban_task_3")}</span>
                     <div className="flex items-center gap-1.5">
@@ -297,7 +341,7 @@ export function LandingInteractivePreview() {
 
           {/* TAB 3: HD MEETINGS PREVIEW */}
           {activeTab === "meetings" && (
-            <div className="space-y-4">
+            <div className="space-y-4 animate-forward-thrust">
               <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-border/60">
                 <div className="flex items-center gap-2">
                   <span className="h-2 w-2 rounded-full bg-red-500 animate-ping" />
@@ -308,34 +352,44 @@ export function LandingInteractivePreview() {
                     size="sm"
                     variant="outline"
                     onClick={() => setBlurActive(!blurActive)}
-                    className="h-6 text-[11px] font-mono gap-1 cursor-pointer"
+                    className="h-6 text-[11px] font-mono gap-1 cursor-pointer active:scale-95 transition-transform"
                   >
                     <Sliders className="h-3 w-3" />
                     <span>{t("landing.preview.meeting_toggle_blur")}</span>
                   </Button>
-                  <Badge variant="outline" className="text-[10px] text-red-500 border-red-500/30">
+                  <Badge variant="outline" className="text-[10px] text-red-500 border-red-500/30 font-mono">
                     {t("landing.preview.meeting_rec")}
                   </Badge>
                 </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {/* Host Tile with Virtual Background */}
-                <div className="relative aspect-video rounded-lg overflow-hidden bg-zinc-950 border border-border/70 flex items-center justify-center transition-all">
+                {/* Host Tile with Virtual Background & Audio Equalizer */}
+                <div className="relative aspect-video rounded-lg overflow-hidden bg-zinc-950 border border-border/70 flex items-center justify-center transition-all duration-300">
                   <div className="text-center space-y-1.5 relative z-10">
-                    <div className={`h-12 w-12 rounded-full mx-auto flex items-center justify-center font-bold text-sm transition-all ${
+                    <div className={`h-12 w-12 rounded-full mx-auto flex items-center justify-center font-bold text-sm transition-all duration-300 ${
                       blurActive ? "bg-emerald-500/20 text-emerald-400 ring-2 ring-emerald-500/40" : "bg-zinc-800 text-zinc-300"
                     }`}>
                       Admin
                     </div>
-                    <span className="text-xs text-zinc-200 block font-medium">{t("landing.preview.meeting_host")}</span>
+                    <div className="flex items-center justify-center gap-2">
+                      <span className="text-xs text-zinc-200 font-medium">{t("landing.preview.meeting_host")}</span>
+                      {/* Kinetic Audio Bars */}
+                      <div className="flex items-end gap-0.5 h-3 px-1">
+                        <span className="w-0.5 bg-emerald-400 h-full animate-audio-bounce-1 rounded-full" />
+                        <span className="w-0.5 bg-emerald-400 h-full animate-audio-bounce-2 rounded-full" />
+                        <span className="w-0.5 bg-emerald-400 h-full animate-audio-bounce-3 rounded-full" />
+                        <span className="w-0.5 bg-emerald-400 h-full animate-audio-bounce-4 rounded-full" />
+                        <span className="w-0.5 bg-emerald-400 h-full animate-audio-bounce-5 rounded-full" />
+                      </div>
+                    </div>
                   </div>
 
-                  {/* Simulated Bokeh Blur background */}
-                  <div className={`absolute inset-0 transition-all duration-300 pointer-events-none ${
+                  {/* Simulated Optical Blur Background */}
+                  <div className={`absolute inset-0 transition-all duration-500 pointer-events-none ${
                     blurActive 
-                      ? "bg-[radial-gradient(circle_at_center,#10b98118_0%,#09090b_70%)] backdrop-blur-md" 
-                      : "bg-zinc-900"
+                      ? "bg-[radial-gradient(circle_at_center,#10b98118_0%,#09090b_70%)] backdrop-blur-md scale-102" 
+                      : "bg-zinc-900 scale-100"
                   }`} />
 
                   <div className="absolute top-2 left-2 bg-black/70 backdrop-blur-xs px-2 py-0.5 rounded text-[10px] font-mono text-emerald-400 border border-emerald-500/30 z-20">
@@ -349,13 +403,13 @@ export function LandingInteractivePreview() {
                 {/* Screen Share Tile */}
                 <div className="relative aspect-video rounded-lg overflow-hidden bg-zinc-900 border border-border/70 p-4 flex flex-col justify-between">
                   <div className="flex items-center justify-between">
-                    <Badge variant="secondary" className="text-[10px]">{t("landing.preview.meeting_share_title")}</Badge>
+                    <Badge variant="secondary" className="text-[10px] font-mono">{t("landing.preview.meeting_share_title")}</Badge>
                     <span className="text-[10px] font-mono text-zinc-400">WebRTC LiveKit</span>
                   </div>
-                  <div className="bg-zinc-950/90 rounded border border-zinc-800 p-2.5 font-mono text-[11px] text-emerald-400">
+                  <div className="bg-zinc-950/90 rounded border border-zinc-800 p-2.5 font-mono text-[11px] text-emerald-400 animate-forward-thrust">
                     <code>git commit -m "fix(meetings): enhance background blur matting"</code>
                   </div>
-                  <span className="text-[10px] text-zinc-400">{t("landing.preview.meeting_share_by")}</span>
+                  <span className="text-[10px] text-zinc-400 font-mono">{t("landing.preview.meeting_share_by")}</span>
                 </div>
               </div>
             </div>
@@ -363,11 +417,11 @@ export function LandingInteractivePreview() {
 
           {/* TAB 4: RAG KNOWLEDGE PREVIEW */}
           {activeTab === "rag" && (
-            <div className="space-y-4 max-w-3xl mx-auto">
+            <div className="space-y-4 max-w-3xl mx-auto animate-forward-thrust">
               {/* Search Bar Simulator with Clickable Prompts */}
               <div className="space-y-2">
                 <div className="flex items-center gap-2 rounded-md border border-border/80 bg-muted/40 px-3 py-2 text-xs text-foreground">
-                  <Search className="h-3.5 w-3.5 text-primary" />
+                  <Search className="h-3.5 w-3.5 text-primary animate-pulse" />
                   <span className="font-mono">
                     {selectedRagQuery === 0 && t("landing.preview.rag_search_placeholder")}
                     {selectedRagQuery === 1 && "Tìm kiếm: 'Cấu hình bảo mật JWT và CORS trong Spring Security?'"}
@@ -378,24 +432,24 @@ export function LandingInteractivePreview() {
                 <div className="flex flex-wrap gap-1.5">
                   <button
                     onClick={() => setSelectedRagQuery(0)}
-                    className={`text-[10px] px-2 py-0.5 rounded border transition-colors cursor-pointer ${
-                      selectedRagQuery === 0 ? "bg-primary text-primary-foreground border-primary" : "bg-muted text-muted-foreground border-border"
+                    className={`text-[10px] font-mono px-2 py-0.5 rounded border transition-all duration-200 cursor-pointer ${
+                      selectedRagQuery === 0 ? "bg-primary text-primary-foreground border-primary scale-102" : "bg-muted text-muted-foreground border-border"
                     }`}
                   >
                     Query: pgvector HNSW
                   </button>
                   <button
                     onClick={() => setSelectedRagQuery(1)}
-                    className={`text-[10px] px-2 py-0.5 rounded border transition-colors cursor-pointer ${
-                      selectedRagQuery === 1 ? "bg-primary text-primary-foreground border-primary" : "bg-muted text-muted-foreground border-border"
+                    className={`text-[10px] font-mono px-2 py-0.5 rounded border transition-all duration-200 cursor-pointer ${
+                      selectedRagQuery === 1 ? "bg-primary text-primary-foreground border-primary scale-102" : "bg-muted text-muted-foreground border-border"
                     }`}
                   >
                     Query: Spring Security
                   </button>
                   <button
                     onClick={() => setSelectedRagQuery(2)}
-                    className={`text-[10px] px-2 py-0.5 rounded border transition-colors cursor-pointer ${
-                      selectedRagQuery === 2 ? "bg-primary text-primary-foreground border-primary" : "bg-muted text-muted-foreground border-border"
+                    className={`text-[10px] font-mono px-2 py-0.5 rounded border transition-all duration-200 cursor-pointer ${
+                      selectedRagQuery === 2 ? "bg-primary text-primary-foreground border-primary scale-102" : "bg-muted text-muted-foreground border-border"
                     }`}
                   >
                     Query: LiveKit SFU
@@ -403,7 +457,7 @@ export function LandingInteractivePreview() {
                 </div>
               </div>
 
-              <div className="rounded-lg border border-border/70 bg-card p-4 space-y-3 shadow-2xs">
+              <div className="rounded-lg border border-border/70 bg-card p-4 space-y-3 shadow-2xs animate-forward-thrust">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-semibold text-foreground flex items-center gap-1.5">
                     <FileText className="h-3.5 w-3.5 text-primary" />
@@ -411,7 +465,7 @@ export function LandingInteractivePreview() {
                     {selectedRagQuery === 1 && "Trích dẫn: security_specification_v2.pdf (Trang 8)"}
                     {selectedRagQuery === 2 && "Trích dẫn: webrtc_livekit_architecture.md (Dòng 142)"}
                   </span>
-                  <Badge variant="outline" className="text-[10px] text-emerald-600 dark:text-emerald-400 border-emerald-500/30">
+                  <Badge variant="outline" className="text-[10px] text-emerald-600 dark:text-emerald-400 border-emerald-500/30 font-mono">
                     {selectedRagQuery === 0 ? t("landing.preview.rag_similarity") : "Similarity 96.8%"}
                   </Badge>
                 </div>
