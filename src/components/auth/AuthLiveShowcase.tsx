@@ -34,6 +34,19 @@ export function AuthLiveShowcase() {
     return () => clearInterval(timer);
   }, []);
 
+  // Auto-advance kanban task while on kanban tab for visible kinetic motion
+  useEffect(() => {
+    if (activeTab !== "kanban") return;
+    const taskTimer = setInterval(() => {
+      setIsGliding(true);
+      setTimeout(() => {
+        setKanbanStage((prev) => (prev + 1) % 3);
+        setIsGliding(false);
+      }, 320);
+    }, 2800);
+    return () => clearInterval(taskTimer);
+  }, [activeTab]);
+
   const handleAdvanceTask = () => {
     setIsGliding(true);
     setTimeout(() => {
@@ -156,13 +169,15 @@ export function AuthLiveShowcase() {
                 <div>
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-medium text-zinc-200">{t("auth.live_showcase.meeting_host")}</span>
-                    {/* Kinetic Audio Frequency Equalizer */}
-                    <div className="flex items-end gap-0.5 h-3 px-1">
+                    {/* Kinetic Audio Frequency Equalizer (7 bands) */}
+                    <div className="flex items-end gap-0.5 h-3.5 px-1 bg-black/40 rounded-sm">
                       <span className="w-0.5 bg-emerald-400 h-full animate-audio-bounce-1 rounded-full" />
                       <span className="w-0.5 bg-emerald-400 h-full animate-audio-bounce-2 rounded-full" />
                       <span className="w-0.5 bg-emerald-400 h-full animate-audio-bounce-3 rounded-full" />
                       <span className="w-0.5 bg-emerald-400 h-full animate-audio-bounce-4 rounded-full" />
                       <span className="w-0.5 bg-emerald-400 h-full animate-audio-bounce-5 rounded-full" />
+                      <span className="w-0.5 bg-emerald-400 h-full animate-audio-bounce-6 rounded-full" />
+                      <span className="w-0.5 bg-emerald-400 h-full animate-audio-bounce-7 rounded-full" />
                     </div>
                   </div>
                   <span className="text-[10px] text-emerald-400 font-mono">{t("auth.live_showcase.meeting_status")}</span>
@@ -219,11 +234,11 @@ export function AuthLiveShowcase() {
                 onClick={handleAdvanceTask}
                 className={`p-2.5 rounded-lg border text-xs cursor-pointer transition-all duration-300 flex items-center justify-between ${
                   isGliding
-                    ? "scale-102 -rotate-1 shadow-md bg-zinc-100 dark:bg-zinc-800 border-primary/50"
+                    ? "scale-104 -rotate-1.5 shadow-lg bg-zinc-100 dark:bg-zinc-800 border-primary ring-2 ring-primary/40"
                     : kanbanStage === 2
                     ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-700 dark:text-emerald-300 animate-spring-settle"
                     : kanbanStage === 1
-                    ? "bg-zinc-50 dark:bg-zinc-800/70 border-zinc-200 dark:border-zinc-700 text-zinc-900 dark:text-zinc-100"
+                    ? "bg-zinc-50 dark:bg-zinc-800/70 border-zinc-200 dark:border-zinc-700 text-zinc-900 dark:text-zinc-100 animate-spring-settle"
                     : "bg-zinc-50/50 dark:bg-zinc-900/40 border-zinc-200/60 dark:border-zinc-800 text-zinc-500"
                 }`}
               >

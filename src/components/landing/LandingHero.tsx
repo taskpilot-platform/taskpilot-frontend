@@ -36,11 +36,17 @@ export function LandingHero({ onExploreClick }: LandingHeroProps) {
       {/* Architectural Grid Pattern */}
       <div className="absolute inset-0 bg-[linear-gradient(to_right,#e4e4e760_1px,transparent_1px),linear-gradient(to_bottom,#e4e4e760_1px,transparent_1px)] dark:bg-[linear-gradient(to_right,#3f3f4615_1px,transparent_1px),linear-gradient(to_bottom,#3f3f4615_1px,transparent_1px)] bg-[size:48px_48px] pointer-events-none" />
 
-      {/* Aerodynamic Velocity Trails - Simulating forward flight velocity */}
+      {/* Aerodynamic Velocity Trails - High-contrast kinetic flight streams with glowing comet heads */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-1/4 left-0 w-80 h-[1px] bg-gradient-to-r from-transparent via-zinc-400 dark:via-zinc-600 to-transparent animate-flight-stream" />
-        <div className="absolute top-1/2 left-0 w-96 h-[1px] bg-gradient-to-r from-transparent via-emerald-500/30 to-transparent animate-flight-stream-fast" style={{ animationDelay: '1.2s' }} />
-        <div className="absolute top-3/4 left-0 w-64 h-[1px] bg-gradient-to-r from-transparent via-primary/25 to-transparent animate-flight-stream" style={{ animationDelay: '2.4s' }} />
+        <div className="absolute top-[18%] left-0 w-96 h-[2px] bg-gradient-to-r from-transparent via-cyan-400/60 dark:via-cyan-400/80 to-transparent animate-flight-stream flex items-center">
+          <span className="w-2 h-2 rounded-full bg-cyan-400 shadow-[0_0_12px_#38bdf8] ml-auto animate-pulse" />
+        </div>
+        <div className="absolute top-[45%] left-0 w-[420px] h-[2px] bg-gradient-to-r from-transparent via-emerald-500/50 dark:via-emerald-400/80 to-transparent animate-flight-stream-fast flex items-center" style={{ animationDelay: '1.4s' }}>
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_10px_#34d399] ml-auto" />
+        </div>
+        <div className="absolute top-[75%] left-0 w-[360px] h-[2px] bg-gradient-to-r from-transparent via-primary/50 to-transparent animate-flight-stream-slow flex items-center" style={{ animationDelay: '2.8s' }}>
+          <span className="w-2 h-2 rounded-full bg-primary shadow-[0_0_12px_#0394B1] ml-auto" />
+        </div>
       </div>
 
       <div className="relative mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 text-center space-y-6">
@@ -154,10 +160,11 @@ export function LandingHero({ onExploreClick }: LandingHeroProps) {
             }`}>
               <div className="flex items-center gap-2 text-muted-foreground">
                 <Bot className="h-3.5 w-3.5 text-primary" />
-                <span className="text-[11px]">
+                <span className="text-[11px] inline-flex items-center">
                   &gt; {selectedPrompt === 0 && t("landing.hero_playground.prompt_1_text")}
                   {selectedPrompt === 1 && t("landing.hero_playground.prompt_2_text")}
                   {selectedPrompt === 2 && t("landing.hero_playground.prompt_3_text")}
+                  <span className="inline-block w-1.5 h-3.5 bg-primary ml-1 animate-cockpit-cursor" />
                 </span>
               </div>
 
@@ -197,6 +204,64 @@ export function LandingHero({ onExploreClick }: LandingHeroProps) {
                     </>
                   )}
                 </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Continuous Kinetic Telemetry Ribbon - Real-time system pulse */}
+        <div className="pt-2 max-w-4xl mx-auto overflow-hidden rounded-lg border border-border/70 bg-card/40 backdrop-blur-xs py-2 px-3 shadow-2xs">
+          <div className="flex items-center gap-2 overflow-hidden">
+            <span className="flex items-center gap-1.5 text-[10px] font-mono font-semibold uppercase tracking-wider text-primary whitespace-nowrap pr-2 border-r border-border/80">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+              </span>
+              <span>Telemetry HUD</span>
+            </span>
+
+            <div className="relative overflow-hidden w-full flex-1">
+              <div className="animate-telemetry-marquee flex items-center gap-6 text-[11px] font-mono text-muted-foreground whitespace-nowrap">
+                <span className="flex items-center gap-1.5">
+                  <span className="text-emerald-500 font-bold">⚡ ORBITAL SPRINT:</span> Velocity 48 pts/wk (+18% momentum)
+                </span>
+                <span className="text-border">•</span>
+                <span className="flex items-center gap-1.5">
+                  <span className="text-cyan-500 font-bold">🤖 COPILOT RADAR:</span> Autonomous background triage active
+                </span>
+                <span className="text-border">•</span>
+                <span className="flex items-center gap-1.5">
+                  <span className="text-primary font-bold">📡 WEBRTC SFU:</span> 0.2ms jitter, 1080p 60fps HD stream
+                </span>
+                <span className="text-border">•</span>
+                <span className="flex items-center gap-1.5">
+                  <span className="text-amber-500 font-bold">🚀 PIPELINE FLIGHT:</span> Commit #9aaf040 auto-verified
+                </span>
+                <span className="text-border">•</span>
+                <span className="flex items-center gap-1.5">
+                  <span className="text-emerald-500 font-bold">🔍 VECTOR RAG:</span> 98.4% cosine similarity across 1,420 chunks
+                </span>
+                <span className="text-border">•</span>
+                {/* Seamless loop segment */}
+                <span className="flex items-center gap-1.5">
+                  <span className="text-emerald-500 font-bold">⚡ ORBITAL SPRINT:</span> Velocity 48 pts/wk (+18% momentum)
+                </span>
+                <span className="text-border">•</span>
+                <span className="flex items-center gap-1.5">
+                  <span className="text-cyan-500 font-bold">🤖 COPILOT RADAR:</span> Autonomous background triage active
+                </span>
+                <span className="text-border">•</span>
+                <span className="flex items-center gap-1.5">
+                  <span className="text-primary font-bold">📡 WEBRTC SFU:</span> 0.2ms jitter, 1080p 60fps HD stream
+                </span>
+                <span className="text-border">•</span>
+                <span className="flex items-center gap-1.5">
+                  <span className="text-amber-500 font-bold">🚀 PIPELINE FLIGHT:</span> Commit #9aaf040 auto-verified
+                </span>
+                <span className="text-border">•</span>
+                <span className="flex items-center gap-1.5">
+                  <span className="text-emerald-500 font-bold">🔍 VECTOR RAG:</span> 98.4% cosine similarity across 1,420 chunks
+                </span>
               </div>
             </div>
           </div>

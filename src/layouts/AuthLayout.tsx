@@ -60,11 +60,17 @@ export default function AuthLayout() {
       {/* Clean architectural grid texture - Adapts to Light and Dark mode without AI cosmic glows */}
       <div className="absolute inset-0 bg-[linear-gradient(to_right,#e4e4e780_1px,transparent_1px),linear-gradient(to_bottom,#e4e4e780_1px,transparent_1px)] dark:bg-[linear-gradient(to_right,#3f3f4618_1px,transparent_1px),linear-gradient(to_bottom,#3f3f4618_1px,transparent_1px)] bg-[size:40px_40px] pointer-events-none" />
 
-      {/* Aerodynamic Cockpit Flight Stream Trails */}
+      {/* Aerodynamic Cockpit Flight Stream Trails - High-contrast kinetic flight lines */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-1/4 left-0 w-64 h-[1px] bg-gradient-to-r from-transparent via-zinc-400 dark:via-zinc-500 to-transparent animate-flight-stream" />
-        <div className="absolute top-2/3 left-0 w-96 h-[1px] bg-gradient-to-r from-transparent via-emerald-500/40 to-transparent animate-flight-stream-fast" style={{ animationDelay: '1.8s' }} />
-        <div className="absolute top-1/2 left-0 w-48 h-[1px] bg-gradient-to-r from-transparent via-blue-500/30 to-transparent animate-flight-stream" style={{ animationDelay: '3.2s' }} />
+        <div className="absolute top-[22%] left-0 w-80 h-[2px] bg-gradient-to-r from-transparent via-cyan-500/50 dark:via-cyan-400/80 to-transparent animate-flight-stream flex items-center">
+          <span className="w-2 h-2 rounded-full bg-cyan-400 shadow-[0_0_10px_#38bdf8] ml-auto animate-pulse" />
+        </div>
+        <div className="absolute top-[68%] left-0 w-96 h-[2px] bg-gradient-to-r from-transparent via-emerald-500/50 dark:via-emerald-400/80 to-transparent animate-flight-stream-fast flex items-center" style={{ animationDelay: '1.5s' }}>
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_#34d399] ml-auto" />
+        </div>
+        <div className="absolute top-[48%] left-0 w-64 h-[2px] bg-gradient-to-r from-transparent via-primary/40 to-transparent animate-flight-stream-slow flex items-center" style={{ animationDelay: '3.0s' }}>
+          <span className="w-2 h-2 rounded-full bg-primary shadow-[0_0_10px_#0394B1] ml-auto" />
+        </div>
       </div>
 
       <div className="relative mx-auto flex min-h-screen w-full max-w-6xl items-center px-4 py-16 sm:px-6 lg:px-8">

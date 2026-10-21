@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { 
   Bot, 
@@ -12,7 +12,9 @@ import {
   Sliders,
   RefreshCw,
   ArrowRight,
-  Activity
+  Activity,
+  Pause,
+  Rocket
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -26,7 +28,21 @@ export function LandingInteractivePreview() {
   const [isSimulatingAgent, setIsSimulatingAgent] = useState(false);
   const [kanbanStage, setKanbanStage] = useState<number>(0);
   const [isGlidingKanban, setIsGlidingKanban] = useState(false);
+  const [autoFlightEnabled, setAutoFlightEnabled] = useState(true);
   const [selectedRagQuery, setSelectedRagQuery] = useState<number>(0);
+
+  // Auto-glide kanban task simulation every 4.2s for continuous visible motion
+  useEffect(() => {
+    if (!autoFlightEnabled || activeTab !== "kanban") return;
+    const timer = setInterval(() => {
+      setIsGlidingKanban(true);
+      setTimeout(() => {
+        setKanbanStage((prev) => (prev + 1) % 3);
+        setIsGlidingKanban(false);
+      }, 380);
+    }, 4200);
+    return () => clearInterval(timer);
+  }, [autoFlightEnabled, activeTab]);
 
   const triggerAgentSimulation = () => {
     setIsSimulatingAgent(true);
@@ -148,6 +164,10 @@ export function LandingInteractivePreview() {
                     <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
                     {t("landing.preview.copilot_streaming")}
                   </Badge>
+                  <Badge variant="outline" className="hidden sm:flex text-[10px] text-cyan-600 dark:text-cyan-400 border-cyan-500/30 gap-1 font-mono">
+                    <span className="h-1.5 w-1.5 rounded-full bg-cyan-400 animate-ping" />
+                    <span>54 tok/s</span>
+                  </Badge>
                 </div>
               </div>
 
@@ -210,20 +230,84 @@ export function LandingInteractivePreview() {
           {activeTab === "kanban" && (
             <div className="space-y-4 animate-forward-thrust">
               <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-border/60">
-                <span className="text-xs font-mono font-medium text-muted-foreground">
+                <span className="text-xs font-mono font-medium text-muted-foreground flex items-center gap-1.5">
+                  <Kanban className="h-3.5 w-3.5 text-primary" />
                   {t("landing.preview.kanban_header")}
                 </span>
                 <div className="flex items-center gap-2">
+                  {/* Auto-Flight Simulation Switcher */}
+                  <button
+                    type="button"
+                    onClick={() => setAutoFlightEnabled((prev) => !prev)}
+                    className={`h-6 px-2.5 rounded text-[11px] font-mono flex items-center gap-1.5 border transition-all cursor-pointer ${
+                      autoFlightEnabled
+                        ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 font-semibold"
+                        : "bg-muted/60 text-muted-foreground border-border hover:text-foreground"
+                    }`}
+                  >
+                    {autoFlightEnabled ? (
+                      <>
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                        <span>Auto-Glide: ON</span>
+                      </>
+                    ) : (
+                      <>
+                        <Pause className="h-2.5 w-2.5 text-zinc-400" />
+                        <span>Auto-Glide: PAUSED</span>
+                      </>
+                    )}
+                  </button>
+
                   <Button
                     size="sm"
                     variant="outline"
                     onClick={advanceKanbanTask}
                     className="h-6 text-[11px] font-mono gap-1 active:scale-95 transition-transform cursor-pointer"
                   >
-                    <span>Glide Task</span>
+                    <Rocket className="h-2.5 w-2.5 text-primary" />
+                    <span>Launch Glide</span>
                     <ArrowRight className="h-2.5 w-2.5" />
                   </Button>
-                  <Badge variant="outline" className="text-[10px] font-mono">{t("landing.preview.kanban_sync")}</Badge>
+                </div>
+              </div>
+
+              {/* Physical Flight Trajectory Vector Path Bar */}
+              <div className="rounded-lg border border-border/70 bg-muted/20 p-2.5 space-y-1.5">
+                <div className="flex items-center justify-between text-[11px] font-mono">
+                  <span className="flex items-center gap-1.5 text-foreground font-semibold">
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
+                    </span>
+                    <span>{t("landing.preview.kanban_flight_path")}</span>
+                  </span>
+                  <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-mono font-medium">
+                    {kanbanStage === 0 && t("landing.preview.kanban_stage_todo")}
+                    {kanbanStage === 1 && t("landing.preview.kanban_stage_progress")}
+                    {kanbanStage === 2 && t("landing.preview.kanban_stage_done")}
+                  </span>
+                </div>
+
+                {/* Animated Trajectory Pipeline Line */}
+                <div className="relative h-2 rounded-full bg-muted border border-border/70 overflow-hidden">
+                  <div 
+                    className="h-full bg-gradient-to-r from-primary via-cyan-400 to-emerald-500 transition-all duration-700 ease-out rounded-full"
+                    style={{ width: kanbanStage === 0 ? "18%" : kanbanStage === 1 ? "58%" : "100%" }}
+                  />
+                  {/* Glowing Comet Head indicator */}
+                  <div 
+                    className="absolute top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full bg-white dark:bg-zinc-100 shadow-[0_0_12px_#0394B1] transition-all duration-700 ease-out flex items-center justify-center -ml-1.5"
+                    style={{ left: kanbanStage === 0 ? "18%" : kanbanStage === 1 ? "58%" : "100%" }}
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full bg-primary" />
+                  </div>
+                </div>
+
+                {/* 3 Waypoint Stations */}
+                <div className="flex justify-between text-[10px] font-mono text-muted-foreground pt-0.5">
+                  <span className={kanbanStage >= 0 ? "text-primary font-bold" : ""}>WP-1: Backlog</span>
+                  <span className={kanbanStage >= 1 ? "text-cyan-500 font-bold" : ""}>WP-2: Cruising (Velocity 42 pts)</span>
+                  <span className={kanbanStage >= 2 ? "text-emerald-500 font-bold" : ""}>WP-3: Goal Landed ✓</span>
                 </div>
               </div>
 
@@ -241,8 +325,10 @@ export function LandingInteractivePreview() {
                   {kanbanStage === 0 && (
                     <div 
                       onClick={advanceKanbanTask}
-                      className={`p-2.5 rounded-md bg-card border border-border/80 shadow-2xs space-y-1.5 cursor-pointer transition-all duration-300 ${
-                        isGlidingKanban ? "scale-103 -rotate-1 shadow-lg border-primary" : "animate-spring-settle hover:border-primary/40"
+                      className={`p-2.5 rounded-md bg-card border shadow-2xs space-y-1.5 cursor-pointer transition-all duration-300 ${
+                        isGlidingKanban 
+                          ? "scale-104 -rotate-2 shadow-xl ring-2 ring-primary/60 border-primary" 
+                          : "animate-spring-settle border-border/80 hover:border-primary/50"
                       }`}
                     >
                       <span className="text-xs font-medium block text-foreground">{t("landing.preview.kanban_task_1")}</span>
@@ -251,7 +337,7 @@ export function LandingInteractivePreview() {
                           <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-600 dark:text-blue-400 font-mono">SEO</span>
                           <span className="text-[10px] text-muted-foreground flex items-center gap-1"><Clock className="h-2.5 w-2.5" /> 2h</span>
                         </div>
-                        <span className="text-[10px] text-primary font-mono flex items-center gap-0.5">Click to fly <ArrowRight className="h-2 w-2" /></span>
+                        <span className="text-[10px] text-primary font-mono flex items-center gap-0.5">Thrust <ArrowRight className="h-2 w-2" /></span>
                       </div>
                     </div>
                   )}
@@ -275,17 +361,19 @@ export function LandingInteractivePreview() {
                   {kanbanStage === 1 && (
                     <div 
                       onClick={advanceKanbanTask}
-                      className={`p-2.5 rounded-md bg-card border-2 border-primary/60 shadow-2xs space-y-1.5 cursor-pointer transition-all duration-300 ${
-                        isGlidingKanban ? "scale-103 rotate-2 shadow-lg" : "animate-spring-settle hover:border-primary"
+                      className={`p-2.5 rounded-md bg-card border-2 shadow-lg space-y-1.5 cursor-pointer transition-all duration-300 ${
+                        isGlidingKanban 
+                          ? "scale-104 rotate-2 ring-2 ring-cyan-500/60 border-cyan-500" 
+                          : "animate-spring-settle border-primary/70 hover:border-primary"
                       }`}
                     >
                       <span className="text-xs font-medium block text-foreground">{t("landing.preview.kanban_task_1")}</span>
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-1.5">
                           <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-600 dark:text-blue-400 font-mono">SEO</span>
-                          <span className="text-[10px] text-emerald-500 font-mono animate-pulse">● Gliding to Done</span>
+                          <span className="text-[10px] text-cyan-500 font-mono animate-pulse">● In Orbit</span>
                         </div>
-                        <ArrowRight className="h-3 w-3 text-primary animate-pulse" />
+                        <ArrowRight className="h-3 w-3 text-cyan-500 animate-pulse" />
                       </div>
                     </div>
                   )}
@@ -313,16 +401,16 @@ export function LandingInteractivePreview() {
                     <div 
                       onClick={advanceKanbanTask}
                       className={`p-2.5 rounded-md bg-card border border-emerald-500/50 shadow-2xs space-y-1.5 cursor-pointer transition-all duration-300 ${
-                        isGlidingKanban ? "scale-98 opacity-70" : "animate-spring-settle"
+                        isGlidingKanban ? "scale-98 opacity-70" : "animate-spring-settle ring-1 ring-emerald-500/30"
                       }`}
                     >
                       <span className="text-xs font-medium block text-foreground">{t("landing.preview.kanban_task_1")}</span>
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-1.5">
                           <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-mono">Arrived at Goal</span>
-                          <CheckCircle2 className="h-3 w-3 text-emerald-500 animate-spring-settle" />
+                          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 animate-spring-settle" />
                         </div>
-                        <span className="text-[10px] text-muted-foreground font-mono">Reset ↺</span>
+                        <span className="text-[10px] text-muted-foreground font-mono">Recycle ↺</span>
                       </div>
                     </div>
                   )}
@@ -374,15 +462,24 @@ export function LandingInteractivePreview() {
                     </div>
                     <div className="flex items-center justify-center gap-2">
                       <span className="text-xs text-zinc-200 font-medium">{t("landing.preview.meeting_host")}</span>
-                      {/* Kinetic Audio Bars */}
-                      <div className="flex items-end gap-0.5 h-3 px-1">
+                      {/* Kinetic Audio Bars (7 bands) */}
+                      <div className="flex items-end gap-0.5 h-3.5 px-1 bg-black/40 rounded-sm">
                         <span className="w-0.5 bg-emerald-400 h-full animate-audio-bounce-1 rounded-full" />
                         <span className="w-0.5 bg-emerald-400 h-full animate-audio-bounce-2 rounded-full" />
                         <span className="w-0.5 bg-emerald-400 h-full animate-audio-bounce-3 rounded-full" />
                         <span className="w-0.5 bg-emerald-400 h-full animate-audio-bounce-4 rounded-full" />
                         <span className="w-0.5 bg-emerald-400 h-full animate-audio-bounce-5 rounded-full" />
+                        <span className="w-0.5 bg-emerald-400 h-full animate-audio-bounce-6 rounded-full" />
+                        <span className="w-0.5 bg-emerald-400 h-full animate-audio-bounce-7 rounded-full" />
                       </div>
                     </div>
+                  </div>
+
+                  {/* Floating Kinetic Audio Telemetry Badge */}
+                  <div className="absolute top-2 right-2 pointer-events-none z-20">
+                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/20 border border-emerald-500/40 px-2 py-0.5 text-[10px] font-mono text-emerald-400 animate-float-reaction">
+                      🎙️ 48kHz WebRTC HD
+                    </span>
                   </div>
 
                   {/* Simulated Optical Blur Background */}
@@ -457,7 +554,9 @@ export function LandingInteractivePreview() {
                 </div>
               </div>
 
-              <div className="rounded-lg border border-border/70 bg-card p-4 space-y-3 shadow-2xs animate-forward-thrust">
+              <div className="relative overflow-hidden rounded-lg border border-border/70 bg-card p-4 space-y-3 shadow-2xs animate-forward-thrust">
+                {/* Kinetic Vector Scanner Line */}
+                <div className="absolute inset-x-0 h-[1.5px] bg-gradient-to-r from-transparent via-emerald-400 to-transparent animate-flight-stream-fast pointer-events-none opacity-80" />
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-semibold text-foreground flex items-center gap-1.5">
                     <FileText className="h-3.5 w-3.5 text-primary" />

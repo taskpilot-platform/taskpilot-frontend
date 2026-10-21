@@ -354,15 +354,24 @@ export function LandingFeaturesDeepDive() {
                     </div>
                     <div className="flex items-center justify-center gap-2">
                       <span className="text-xs text-zinc-300 font-medium">Daily Engineering Sync</span>
-                      {/* Audio frequency bars */}
-                      <div className="flex items-end gap-0.5 h-3 px-1">
+                      {/* Audio frequency bars (7 bands) */}
+                      <div className="flex items-end gap-0.5 h-3.5 px-1 bg-black/40 rounded-sm">
                         <span className="w-0.5 bg-emerald-400 h-full animate-audio-bounce-1 rounded-full" />
                         <span className="w-0.5 bg-emerald-400 h-full animate-audio-bounce-2 rounded-full" />
                         <span className="w-0.5 bg-emerald-400 h-full animate-audio-bounce-3 rounded-full" />
                         <span className="w-0.5 bg-emerald-400 h-full animate-audio-bounce-4 rounded-full" />
                         <span className="w-0.5 bg-emerald-400 h-full animate-audio-bounce-5 rounded-full" />
+                        <span className="w-0.5 bg-emerald-400 h-full animate-audio-bounce-6 rounded-full" />
+                        <span className="w-0.5 bg-emerald-400 h-full animate-audio-bounce-7 rounded-full" />
                       </div>
                     </div>
+                  </div>
+
+                  {/* Floating Kinetic Audio Telemetry Badge */}
+                  <div className="absolute top-2 right-2 pointer-events-none z-20">
+                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/20 border border-emerald-500/40 px-2 py-0.5 text-[10px] font-mono text-emerald-400 animate-float-reaction">
+                      🎙️ 48kHz WebRTC HD
+                    </span>
                   </div>
 
                   {/* Dynamic blur aura adjusted by slider */}
