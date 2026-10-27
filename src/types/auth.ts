@@ -22,6 +22,10 @@ export interface RefreshTokenRequest {
   refreshToken: string;
 }
 
+export interface OAuth2ExchangeRequest {
+  code: string;
+}
+
 export interface AuthResponse {
   token: string;
   refreshToken: string;

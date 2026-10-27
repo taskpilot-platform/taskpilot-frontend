@@ -1,4 +1,5 @@
 import AuthShell from "@/components/auth/AuthShell";
+import SocialLoginButtons from "@/components/auth/SocialLoginButtons";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -89,6 +90,8 @@ export default function LoginPage() {
         <Button type="submit" className="w-full" disabled={isLoading || !isFormValid}>
           {isLoading ? t("auth.login_btn_loading") : t("auth.login_btn")}
         </Button>
+
+        <SocialLoginButtons />
       </form>
     </AuthShell>
   );

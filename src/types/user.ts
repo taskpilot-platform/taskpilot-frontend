@@ -8,6 +8,8 @@ export interface UserProfile {
   currentWorkload: number | null;
   createdAt: string;
   updatedAt: string;
+  hasPassword?: boolean;
+  linkedProviders?: string[];
 }
 
 export interface UserSkill {
@@ -28,7 +30,7 @@ export interface UpdateProfileRequest {
 }
 
 export interface ChangePasswordRequest {
-  oldPassword: string;
+  oldPassword?: string;
   newPassword: string;
 }
 

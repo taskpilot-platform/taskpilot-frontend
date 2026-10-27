@@ -14,6 +14,7 @@ interface AuthState {
   hydrate: () => void;
   register: (payload: RegisterRequest) => Promise<void>;
   login: (payload: LoginRequest) => Promise<void>;
+  loginWithOAuthCode: (code: string) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -63,6 +64,30 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ isLoading: true });
     try {
       const response = await authService.login(payload);
+      const { token, refreshToken } = response.data;
+
+      applyTokens(token, refreshToken);
+      set({
+        accessToken: token,
+        refreshToken,
+        isAuthenticated: true,
+      });
+
+      try {
+        const profile = await profileService.getMe();
+        await oneSignalLogin(profile.data.id);
+      } catch {
+        // Do not block login flow if OneSignal alias sync fails.
+      }
+    } finally {
+      set({ isLoading: false });
+    }
+  },
+
+  loginWithOAuthCode: async (code: string) => {
+    set({ isLoading: true });
+    try {
+      const response = await authService.exchangeOAuthCode(code);
       const { token, refreshToken } = response.data;
 
       applyTokens(token, refreshToken);
