@@ -6,6 +6,7 @@ import { ProjectMeetingsTab } from "@/components/meetings/ProjectMeetingsTab";
 import { LiveMeetingRoom } from "@/components/meetings/LiveMeetingRoom";
 import { ConfirmProvider } from "@/components/ui/confirm-dialog";
 import { meetingService } from "@/services/meeting.service";
+import { projectFilesService } from "@/services/project-files.service";
 import type { ProjectMeetingDto } from "@/types/meeting";
 
 // Mock services
@@ -15,13 +16,19 @@ vi.mock("@/services/meeting.service", () => ({
     joinMeeting: vi.fn(),
     leaveMeeting: vi.fn(),
     endMeeting: vi.fn(),
+    updateRecordingFile: vi.fn().mockResolvedValue({}),
   },
 }));
 
 vi.mock("@/services/project-files.service", () => ({
   projectFilesService: {
+    getFiles: vi.fn().mockResolvedValue({
+      status: 200,
+      message: "Success",
+      data: { content: [], totalElements: 0, totalPages: 0, size: 50, number: 0 },
+    }),
     uploadFile: vi.fn().mockResolvedValue({ data: { id: 999 } }),
-    downloadFileUrl: vi.fn().mockReturnValue("/api/v1/projects/1/files/999/download"),
+    downloadFileBlob: vi.fn().mockResolvedValue(new Blob(["server video"], { type: "video/webm" })),
   },
 }));
 
@@ -45,6 +52,8 @@ const mockEndedMeeting: ProjectMeetingDto = {
 describe("Meeting Recording and Screen Sharing Features", () => {
   beforeEach(async () => {
     vi.clearAllMocks();
+    globalThis.URL.createObjectURL = vi.fn().mockReturnValue("blob:http://localhost/mock-video");
+    globalThis.URL.revokeObjectURL = vi.fn();
     await meetingRecordingStore.deleteRecording(234);
     await meetingRecordingStore.deleteRecording(888);
   });
@@ -119,6 +128,23 @@ describe("Meeting Recording and Screen Sharing Features", () => {
       await waitFor(() => {
         expect(screen.getByTestId("recording-video-player")).toBeInTheDocument();
         expect(screen.getByTestId("download-recording-btn")).toBeInTheDocument();
+      });
+    });
+
+    it("downloads and plays server-side linked recordingFileId when local store is empty", async () => {
+      render(
+        <ConfirmProvider>
+          <MeetingRecordingModal
+            isOpen={true}
+            onClose={vi.fn()}
+            meeting={{ ...mockEndedMeeting, recordingFileId: 999 }}
+          />
+        </ConfirmProvider>
+      );
+
+      await waitFor(() => {
+        expect(projectFilesService.downloadFileBlob).toHaveBeenCalledWith(4, 999);
+        expect(screen.getByTestId("recording-video-player")).toBeInTheDocument();
       });
     });
   });

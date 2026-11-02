@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { ProjectFilesTab } from "@/components/files/ProjectFilesTab";
 import { projectFilesService } from "@/services/project-files.service";
 
@@ -82,6 +82,53 @@ describe("ProjectFilesTab Component", () => {
 
     await waitFor(() => {
       expect(screen.queryByText("Upload File")).toBeNull();
+    });
+  });
+
+  it("downloads file via downloadFileBlob with Bearer token when clicking Download button", async () => {
+    globalThis.URL.createObjectURL = vi.fn().mockReturnValue("blob:http://localhost/file");
+    globalThis.URL.revokeObjectURL = vi.fn();
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+
+    vi.spyOn(projectFilesService, "getFiles").mockResolvedValue({
+      status: 200,
+      message: "Success",
+      data: {
+        content: [
+          {
+            id: 1,
+            projectId: 100,
+            uploaderId: 5,
+            uploaderName: "Alex Rivera",
+            fileName: "system_architecture.pdf",
+            originalName: "system_architecture.pdf",
+            fileSize: 1024 * 500,
+            storageKey: "projects/100/files/uuid_spec.pdf",
+            storageBucket: "taskpilot-bucket",
+            createdAt: "2026-10-08T08:00:00Z",
+            updatedAt: "2026-10-08T08:00:00Z",
+          },
+        ],
+        totalElements: 1,
+        totalPages: 1,
+        size: 20,
+        number: 0,
+      },
+    });
+    const downloadSpy = vi
+      .spyOn(projectFilesService, "downloadFileBlob")
+      .mockResolvedValue(new Blob(["pdf content"], { type: "application/pdf" }));
+
+    render(<ProjectFilesTab projectId={100} />);
+
+    await waitFor(() => {
+      expect(screen.getByTitle("Download")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByTitle("Download"));
+
+    await waitFor(() => {
+      expect(downloadSpy).toHaveBeenCalledWith(100, 1);
     });
   });
 });

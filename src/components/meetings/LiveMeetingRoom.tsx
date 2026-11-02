@@ -676,9 +676,22 @@ export function LiveMeetingRoom({
           try {
             const fileName = `meeting_${meetingId}_rec_${Date.now()}.webm`;
             const file = new File([blob], fileName, { type: blob.type || "video/webm" });
-            await projectFilesService.uploadFile(projectId, file, `Bản ghi cuộc họp: ${meeting?.title || meetingId}`);
-          } catch {
-            // IndexedDB preserves copy
+            const uploaded = await projectFilesService.uploadFile(
+              projectId,
+              file,
+              `Bản ghi cuộc họp: ${meeting?.title || meetingId}`
+            );
+            if (uploaded?.data?.id) {
+              await meetingService.updateRecordingFile(projectId, meetingId, uploaded.data.id);
+            }
+          } catch (err) {
+            console.warn("Recording upload/link failed; local copy kept", err);
+            toast.warning(
+              t("meetings.recording_upload_failed", {
+                defaultValue:
+                  "Không thể tải bản ghi lên máy chủ; bản ghi vẫn được lưu trên thiết bị này.",
+              })
+            );
           }
         }
       };

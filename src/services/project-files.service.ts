@@ -49,10 +49,14 @@ export const projectFilesService = {
   },
 
   /**
-   * Download a project file blob.
+   * Authenticated download: the http interceptor adds the Bearer token and VITE_API_BASE_URL.
    */
-  downloadFileUrl: (projectId: number, fileId: number): string =>
-    `/api/v1/projects/${projectId}/files/${fileId}/download`,
+  downloadFileBlob: (projectId: number, fileId: number): Promise<Blob> =>
+    http
+      .get<Blob>(`/v1/projects/${projectId}/files/${fileId}/download`, {
+        responseType: "blob",
+      })
+      .then((r) => r.data),
 
   /**
    * Delete a project file (uploader or manager only).

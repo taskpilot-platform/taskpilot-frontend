@@ -6,8 +6,17 @@ import { Video, Download, Play, Clock, User, AlertCircle, Upload } from "lucide-
 import { useTranslation } from "react-i18next";
 import { meetingRecordingStore } from "@/services/meetingRecordingStore";
 import { projectFilesService } from "@/services/project-files.service";
+import { meetingService } from "@/services/meeting.service";
 import fixWebmDuration from "fix-webm-duration";
 import type { ProjectMeetingDto } from "@/types/meeting";
+
+async function findLegacyRecordingId(meeting: ProjectMeetingDto): Promise<number | null> {
+  if (!meeting.projectId) return null;
+  const prefix = `meeting_${meeting.id}_rec_`;
+  const res = await projectFilesService.getFiles(meeting.projectId, prefix, 0, 50);
+  const hits = (res?.data?.content ?? []).filter((f) => f.originalName?.startsWith(prefix));
+  return hits.length ? Math.max(...hits.map((f) => f.id)) : null;
+}
 
 interface MeetingRecordingModalProps {
   isOpen: boolean;
@@ -26,16 +35,43 @@ export function MeetingRecordingModal({
   const [isLoading, setIsLoading] = useState(false);
   const [isDemoMode, setIsDemoMode] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const objectUrlRef = useRef<string | null>(null);
+
+  const revokeCurrentObjectUrl = () => {
+    if (objectUrlRef.current) {
+      URL.revokeObjectURL(objectUrlRef.current);
+      objectUrlRef.current = null;
+    }
+  };
 
   useEffect(() => {
-    let activeUrl: string | null = null;
+    let cancelled = false;
     setIsDemoMode(false);
 
     if (!isOpen || !meeting) {
+      revokeCurrentObjectUrl();
       setVideoUrl(null);
       setVideoBlob(null);
       return;
     }
+
+    const show = (blob: Blob) => {
+      if (cancelled) return;
+      revokeCurrentObjectUrl();
+      const nextUrl = URL.createObjectURL(blob);
+      objectUrlRef.current = nextUrl;
+      setVideoBlob(blob);
+      setVideoUrl(nextUrl);
+      setIsDemoMode(false);
+    };
+
+    const showSample = () => {
+      if (cancelled) return;
+      revokeCurrentObjectUrl();
+      setVideoUrl("/sample-meeting-recording.webm");
+      setVideoBlob(null);
+      setIsDemoMode(true);
+    };
 
     const loadRecording = async () => {
       setIsLoading(true);
@@ -53,46 +89,36 @@ export function MeetingRecordingModal({
               playableBlob = record.blob;
             }
           }
-          activeUrl = URL.createObjectURL(playableBlob);
-          setVideoBlob(playableBlob);
-          setVideoUrl(activeUrl);
-          setIsDemoMode(false);
-          setIsLoading(false);
+          show(playableBlob);
           return;
         }
 
-        // 2. Try server-side uploaded recording file
-        if (meeting.recordingFileId && meeting.projectId) {
-          const downloadUrl = projectFilesService.downloadFileUrl(
-            meeting.projectId,
-            meeting.recordingFileId
-          );
-          setVideoUrl(downloadUrl);
-          setVideoBlob(null);
-          setIsDemoMode(false);
-          setIsLoading(false);
-          return;
+        // 2. Try server-side uploaded recording file (linked recordingFileId or legacy meeting_{id}_rec_*)
+        if (meeting.projectId) {
+          const fileId = meeting.recordingFileId ?? (await findLegacyRecordingId(meeting));
+          if (fileId) {
+            const blob = await projectFilesService.downloadFileBlob(meeting.projectId, fileId);
+            show(blob);
+            return;
+          }
         }
 
         // 3. Fallback to enterprise sample meeting recording video
-        setVideoUrl("/sample-meeting-recording.webm");
-        setVideoBlob(null);
-        setIsDemoMode(true);
+        showSample();
       } catch {
-        setVideoUrl("/sample-meeting-recording.webm");
-        setVideoBlob(null);
-        setIsDemoMode(true);
+        showSample();
       } finally {
-        setIsLoading(false);
+        if (!cancelled) {
+          setIsLoading(false);
+        }
       }
     };
 
     void loadRecording();
 
     return () => {
-      if (activeUrl) {
-        URL.revokeObjectURL(activeUrl);
-      }
+      cancelled = true;
+      revokeCurrentObjectUrl();
     };
   }, [isOpen, meeting]);
 
@@ -144,7 +170,7 @@ export function MeetingRecordingModal({
 
   const handleUploadCustomVideo = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !meeting) return;
+    if (!file || !meeting || meeting.isHost === false) return;
 
     let patchedFile: Blob = file;
     const durMs = Math.max(1000, (meeting.durationSeconds || 30) * 1000);
@@ -154,7 +180,9 @@ export function MeetingRecordingModal({
       } catch {}
     }
 
+    revokeCurrentObjectUrl();
     const url = URL.createObjectURL(patchedFile);
+    objectUrlRef.current = url;
     setVideoBlob(patchedFile);
     setVideoUrl(url);
     setIsDemoMode(false);
@@ -165,6 +193,24 @@ export function MeetingRecordingModal({
       projectId: meeting.projectId,
       durationSeconds: meeting.durationSeconds || 30,
     });
+
+    if (meeting.projectId && meeting.isHost !== false) {
+      try {
+        const ext = file.name.includes(".") ? file.name.slice(file.name.lastIndexOf(".")) : ".webm";
+        const uploadName = `meeting_${meeting.id}_rec_${Date.now()}${ext}`;
+        const uploadFileObj = new File([patchedFile], uploadName, { type: patchedFile.type || "video/webm" });
+        const uploaded = await projectFilesService.uploadFile(
+          meeting.projectId,
+          uploadFileObj,
+          `Bản ghi cuộc họp: ${meeting.title}`
+        );
+        if (uploaded?.data?.id) {
+          await meetingService.updateRecordingFile(meeting.projectId, meeting.id, uploaded.data.id);
+        }
+      } catch (err) {
+        console.warn("Could not upload/link custom recording file:", err);
+      }
+    }
   };
 
   const formatDuration = (seconds?: number | null) => {
@@ -269,22 +315,26 @@ export function MeetingRecordingModal({
                   {t("meetings.play_sample", { defaultValue: "Phát video mô phỏng mẫu" })}
                 </Button>
 
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="gap-1.5 text-xs"
-                >
-                  <Upload className="w-3.5 h-3.5" />
-                  {t("meetings.upload_video", { defaultValue: "Tải tệp video lên" })}
-                </Button>
-                <input
-                  type="file"
-                  ref={fileInputRef}
-                  accept="video/*"
-                  onChange={handleUploadCustomVideo}
-                  className="hidden"
-                />
+                {meeting?.isHost !== false && (
+                  <>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="gap-1.5 text-xs"
+                    >
+                      <Upload className="w-3.5 h-3.5" />
+                      {t("meetings.upload_video", { defaultValue: "Tải tệp video lên" })}
+                    </Button>
+                    <input
+                      type="file"
+                      ref={fileInputRef}
+                      accept="video/*"
+                      onChange={handleUploadCustomVideo}
+                      className="hidden"
+                    />
+                  </>
+                )}
               </div>
             </div>
           )}
