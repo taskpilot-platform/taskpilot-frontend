@@ -194,7 +194,7 @@ export function MeetingRecordingModal({
       durationSeconds: meeting.durationSeconds || 30,
     });
 
-    if (meeting.projectId && meeting.isHost !== false) {
+    if (meeting.projectId) {
       try {
         const ext = file.name.includes(".") ? file.name.slice(file.name.lastIndexOf(".")) : ".webm";
         const uploadName = `meeting_${meeting.id}_rec_${Date.now()}${ext}`;
