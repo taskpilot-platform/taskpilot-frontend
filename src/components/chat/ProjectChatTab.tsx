@@ -18,6 +18,7 @@ import { projectFilesService } from "@/services/project-files.service";
 import { useAuthStore } from "@/stores/auth.store";
 import { profileService } from "@/services/profile.service";
 import { getApiErrorMessage } from "@/lib/http";
+import { saveBlob } from "@/lib/download";
 import type { ProjectChatMessage } from "@/types/collab";
 
 interface ProjectChatTabProps {
@@ -261,13 +262,18 @@ export const ProjectChatTab: React.FC<ProjectChatTabProps> = ({
                       {msg.fileId && msg.fileName && (
                         <div className="mt-2 pt-2 border-t border-current/20 flex items-center gap-2 text-xs">
                           <FileText className="h-4 w-4 shrink-0" />
-                          <a
-                            href={projectFilesService.downloadFileUrl(projectId, msg.fileId)}
-                            className="underline truncate hover:opacity-80"
-                            download={msg.fileName}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              void projectFilesService
+                                .downloadFileBlob(projectId, msg.fileId!)
+                                .then((blob) => saveBlob(blob, msg.fileName!))
+                                .catch((err: unknown) => setError(getApiErrorMessage(err) || "Download failed"));
+                            }}
+                            className="underline truncate hover:opacity-80 cursor-pointer bg-transparent border-0 p-0 text-inherit"
                           >
                             {msg.fileName}
-                          </a>
+                          </button>
                         </div>
                       )}
                     </div>

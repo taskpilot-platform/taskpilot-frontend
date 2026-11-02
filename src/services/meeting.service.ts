@@ -53,6 +53,18 @@ export const meetingService = {
       .patch<ProjectMeetingDto>(`/v1/projects/${projectId}/meetings/${meetingId}/end`)
       .then(unwrap<ProjectMeetingDto>),
 
+  updateRecordingFile: (
+    projectId: number,
+    meetingId: number,
+    recordingFileId: number
+  ): Promise<ProjectMeetingDto> =>
+    api
+      .patch<ProjectMeetingDto>(
+        `/v1/projects/${projectId}/meetings/${meetingId}/recording`,
+        { recordingFileId }
+      )
+      .then(unwrap<ProjectMeetingDto>),
+
   getParticipants: (projectId: number, meetingId: number): Promise<MeetingParticipantDto[]> =>
     api
       .get<MeetingParticipantDto[]>(`/v1/projects/${projectId}/meetings/${meetingId}/participants`)

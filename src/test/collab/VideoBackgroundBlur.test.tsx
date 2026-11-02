@@ -17,13 +17,19 @@ vi.mock("@/services/meeting.service", () => ({
     joinMeeting: vi.fn(),
     leaveMeeting: vi.fn(),
     endMeeting: vi.fn(),
+    updateRecordingFile: vi.fn().mockResolvedValue({}),
   },
 }));
 
 vi.mock("@/services/project-files.service", () => ({
   projectFilesService: {
+    getFiles: vi.fn().mockResolvedValue({
+      status: 200,
+      message: "Success",
+      data: { content: [], totalElements: 0, totalPages: 0, size: 50, number: 0 },
+    }),
     uploadFile: vi.fn().mockResolvedValue({ data: { id: 999 } }),
-    downloadFileUrl: vi.fn().mockReturnValue("/api/v1/projects/1/files/999/download"),
+    downloadFileBlob: vi.fn().mockResolvedValue(new Blob(["server video"], { type: "video/webm" })),
   },
 }));
 

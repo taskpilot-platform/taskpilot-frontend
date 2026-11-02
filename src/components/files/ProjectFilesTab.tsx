@@ -22,6 +22,7 @@ import { useTranslation } from "react-i18next";
 import { projectFilesService } from "@/services/project-files.service";
 import { profileService } from "@/services/profile.service";
 import { getApiErrorMessage } from "@/lib/http";
+import { saveBlob } from "@/lib/download";
 import type { ProjectFile } from "@/types/collab";
 
 interface ProjectFilesTabProps {
@@ -45,6 +46,7 @@ export const ProjectFilesTab: React.FC<ProjectFilesTabProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [downloadingId, setDownloadingId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -117,6 +119,20 @@ export const ProjectFilesTab: React.FC<ProjectFilesTabProps> = ({
       setError(msg);
     } finally {
       setDeletingId(null);
+    }
+  };
+
+  const handleDownload = async (file: ProjectFile) => {
+    setDownloadingId(file.id);
+    setError(null);
+    try {
+      const blob = await projectFilesService.downloadFileBlob(projectId, file.id);
+      saveBlob(blob, file.originalName);
+    } catch (err: unknown) {
+      const msg = getApiErrorMessage(err) || "Download failed";
+      setError(msg);
+    } finally {
+      setDownloadingId(null);
     }
   };
 
@@ -265,14 +281,20 @@ export const ProjectFilesTab: React.FC<ProjectFilesTabProps> = ({
                   </div>
 
                   <div className="flex items-center gap-1 shrink-0 ml-4">
-                    <a
-                      href={projectFilesService.downloadFileUrl(projectId, file.id)}
-                      download={file.originalName}
-                      className="inline-flex items-center justify-center h-8 w-8 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                      onClick={() => void handleDownload(file)}
+                      disabled={downloadingId === file.id}
                       title="Download"
                     >
-                      <Download className="h-4 w-4" />
-                    </a>
+                      {downloadingId === file.id ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Download className="h-4 w-4" />
+                      )}
+                    </Button>
 
                     {!isArchived && (isManager || (currentUserId != null && file.uploaderId === currentUserId)) && (
                       <Button

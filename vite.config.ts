@@ -18,6 +18,8 @@ export default defineConfig(({ mode }) => {
       globals: true,
       environment: "jsdom",
       setupFiles: "./src/test/setup.ts",
+      pool: "threads",
+      fileParallelism: false,
       exclude: ["**/node_modules/**", "**/dist/**", "**/e2e/**"],
     },
     server: {
