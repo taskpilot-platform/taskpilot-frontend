@@ -37,6 +37,9 @@ const WRITE_TOOL_NAMES = new Set([
   "addComment",
   "updateComment",
   "deleteComment",
+  "sendChannelAnnouncement",
+  "scheduleMeeting",
+  "createTasksFromMeetingActionItems",
 ]);
 
 interface UseAiChatStreamOptions {

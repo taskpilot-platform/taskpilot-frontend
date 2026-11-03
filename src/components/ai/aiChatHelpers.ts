@@ -11,7 +11,7 @@ import type {
 } from "./aiChatTypes";
 import i18n from "../../lib/i18n";
 
-export const WRITE_TOOL_NAMES = new Set(["assignTaskToMember", "assignTaskToMemberByName", "recommendAndAssignTask", "updateTaskRequiredSkills", "updateTaskStatus", "patchTask", "patchProject", "patchSprint", "patchTaskComment", "createSystemSkill", "patchSystemSkill", "deleteSystemSkill", "addMySkill", "patchMySkill", "deleteMySkill", "markNotificationRead", "markAllNotificationsRead", "createTask", "createSprint", "startSprint", "completeSprint", "assignTaskToSprint"]);
+export const WRITE_TOOL_NAMES = new Set(["assignTaskToMember", "assignTaskToMemberByName", "recommendAndAssignTask", "updateTaskRequiredSkills", "updateTaskStatus", "patchTask", "patchProject", "patchSprint", "patchTaskComment", "createSystemSkill", "patchSystemSkill", "deleteSystemSkill", "addMySkill", "patchMySkill", "deleteMySkill", "markNotificationRead", "markAllNotificationsRead", "createTask", "createSprint", "startSprint", "completeSprint", "assignTaskToSprint", "sendChannelAnnouncement", "scheduleMeeting", "createTasksFromMeetingActionItems"]);
 
 export function createAssignmentRow(taskId = "", id?: string): AssignmentRequirementRow {
   return {
