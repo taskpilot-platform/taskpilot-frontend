@@ -34,6 +34,7 @@ export async function setupWorkspaceMocks(
     initialFiles?: any[];
     initialMessages?: any[];
     initialMeetings?: any[];
+    language?: "en" | "vi";
   } = {}
 ) {
   const user = options.user || DEFAULT_MOCK_USER;
@@ -45,13 +46,14 @@ export async function setupWorkspaceMocks(
 
   // Seed localStorage with valid auth token before page load
   await page.addInitScript(
-    ({ token, userData }) => {
+    ({ token, userData, language }) => {
+      localStorage.setItem("i18nextLng", language);
       localStorage.setItem("taskpilot_access_token", token);
       localStorage.setItem("taskpilot_refresh_token", token);
       localStorage.setItem("auth_token", token);
       localStorage.setItem("user", JSON.stringify(userData));
     },
-    { token: VALID_MOCK_JWT, userData: user }
+    { token: VALID_MOCK_JWT, userData: user, language: options.language ?? "en" }
   );
 
   // Mock Notifications stream & APIs (SSE & REST)
@@ -252,6 +254,16 @@ export async function setupWorkspaceMocks(
     const url = new URL(request.url());
 
     if (request.method() === "GET") {
+      const downloadMatch = url.pathname.match(/\/files\/(\d+)\/download$/);
+      if (downloadMatch) {
+        const file = files.find((f) => f.id === Number(downloadMatch[1]));
+        await route.fulfill({
+          status: file ? 200 : 404,
+          contentType: file?.contentType || "application/octet-stream",
+          body: file ? `Mock file bytes: ${file.originalName}` : "File not found",
+        });
+        return;
+      }
       const keyword = url.searchParams.get("keyword")?.toLowerCase();
       let filtered = [...files];
       if (keyword) {

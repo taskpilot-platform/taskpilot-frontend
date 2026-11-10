@@ -224,7 +224,7 @@ test.describe("Capture UAT Report Screenshots", () => {
     await setupWorkspaceMocks(page, { initialFiles: REPORT_FILES, initialMessages: REPORT_MESSAGES });
     await page.goto("/projects/100/chat");
     await expect(page.getByText("Project Chat Room")).toBeVisible();
-    await expect(page.getByText(/Connected|Reconnecting/i)).toBeVisible();
+    await expect(page.getByText(/^(Connected|Connecting\.\.\.)$/)).toBeVisible();
     await saveScreenshot(page, "05_project_chat_room_desktop.png");
 
     // 6. Chat Tab - File attachment card detail
@@ -233,7 +233,7 @@ test.describe("Capture UAT Report Screenshots", () => {
     await saveScreenshot(page, "06_project_chat_file_attachment.png");
 
     // 7. Chat Tab - Input focus & typing state
-    const chatInput = page.getByPlaceholder("Type a message...");
+    const chatInput = page.getByPlaceholder("Type a message... (Press Enter to send)", { exact: true });
     await chatInput.fill("Đã cập nhật tài liệu báo cáo định kỳ và sẵn sàng demo!");
     await saveScreenshot(page, "07_project_chat_composer_active.png");
 

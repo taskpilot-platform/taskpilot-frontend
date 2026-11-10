@@ -29,7 +29,7 @@ test.describe("Phase 5 MS Teams Collab & Adaptive AI Screenshots", () => {
 
     // 18. MS Teams Unified Chat Desktop View
     await page.setViewportSize({ width: 1366, height: 850 });
-    await setupWorkspaceMocks(page);
+    await setupWorkspaceMocks(page, { language: "vi" });
     await page.goto("/chat");
     await expect(page.locator('[data-testid="global-chat-page"]')).toBeVisible({ timeout: 15000 });
     await expect(page.locator('[data-testid="active-channel-name"]')).toBeVisible();

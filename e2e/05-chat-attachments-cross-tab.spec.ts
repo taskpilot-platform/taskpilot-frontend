@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
-import { setupWorkspaceMocks } from "./helpers/mock-setup";
+import { readFile } from "node:fs/promises";
+import { setupWorkspaceMocks, VALID_MOCK_JWT } from "./helpers/mock-setup";
 
 const ATTACHMENT_MESSAGES = [
   {
@@ -58,18 +59,28 @@ test.describe("Suite 5: Chat Attachments, Navigation & Cross-Tab E2E (TC086 - TC
   });
 
   // TC087: File attachment displays file icon and download action
-  test("TC087: File attachment card displays FileText icon and download anchor", async ({ page }) => {
+  test("TC087: File attachment card displays FileText icon and download button", async ({ page }) => {
     await page.goto("/projects/100/chat");
-    const attachmentAnchor = page.locator('a[href*="/files/42/download"]');
-    await expect(attachmentAnchor).toBeVisible();
+    const attachment = page.getByRole("button", { name: "Sprint_Retrospective_Report.pdf", exact: true });
+    await expect(attachment).toBeVisible();
+    await expect(attachment.locator("..").locator("svg.lucide-file-text")).toBeVisible();
   });
 
   // TC088: Clicking attachment triggers download URL
-  test("TC088: Clicking file attachment card points to correct download endpoint", async ({ page }) => {
+  test("TC088: Clicking file attachment downloads from the authenticated project/file endpoint", async ({ page }) => {
     await page.goto("/projects/100/chat");
-    const attachmentAnchor = page.locator('a[href*="/files/42/download"]');
-    const href = await attachmentAnchor.getAttribute("href");
-    expect(href).toContain("/v1/projects/100/files/42/download");
+    const requestPromise = page.waitForRequest((request) =>
+      new URL(request.url()).pathname === "/api/v1/projects/100/files/42/download"
+    );
+    const downloadPromise = page.waitForEvent("download");
+    await page.getByRole("button", { name: "Sprint_Retrospective_Report.pdf", exact: true }).click();
+    const request = await requestPromise;
+    expect(request.method()).toBe("GET");
+    expect(request.headers().authorization).toBe(`Bearer ${VALID_MOCK_JWT}`);
+    const download = await downloadPromise;
+    expect(download.suggestedFilename()).toBe("Sprint_Retrospective_Report.pdf");
+    expect(await download.failure()).toBeNull();
+    expect(await readFile((await download.path())!, "utf8")).toBe("Mock file bytes: Sprint_Retrospective_Report.pdf");
   });
 
   // TC089: Tab navigation: Click Files button switches to Files tab
@@ -158,7 +169,7 @@ test.describe("Suite 5: Chat Attachments, Navigation & Cross-Tab E2E (TC086 - TC
   // TC099: Stress burst: Multiple messages in order
   test("TC099: Stress burst of 5 messages renders all in chronological sequence", async ({ page }) => {
     await page.goto("/projects/100/chat");
-    const input = page.getByPlaceholder("Type a message...");
+    const input = page.getByPlaceholder("Type a message... (Press Enter to send)", { exact: true });
 
     for (let i = 1; i <= 5; i++) {
       await input.fill(`Burst message sequence #${i}`);
@@ -191,7 +202,7 @@ test.describe("Suite 5: Chat Attachments, Navigation & Cross-Tab E2E (TC086 - TC
     await expect(page.getByText("Project Chat Room")).toBeVisible();
 
     // 4. Send announcement message to team
-    const chatInput = page.getByPlaceholder("Type a message...");
+    const chatInput = page.getByPlaceholder("Type a message... (Press Enter to send)", { exact: true });
     await chatInput.fill("Team, I have uploaded the Phase 3 specification in Files tab!");
     await chatInput.press("Enter");
 

@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
-import { setupWorkspaceMocks, DEFAULT_MOCK_USER, TEAMMATE_USER } from "./helpers/mock-setup";
+import { readFile } from "node:fs/promises";
+import { setupWorkspaceMocks, DEFAULT_MOCK_USER, TEAMMATE_USER, VALID_MOCK_JWT } from "./helpers/mock-setup";
 
 const SAMPLE_FILES = [
   {
@@ -33,20 +34,27 @@ const SAMPLE_FILES = [
 ];
 
 test.describe("Suite 3: Project File Storage - Download & Delete RBAC (TC046 - TC060)", () => {
-  // TC046: Download link exists
-  test("TC046: Download link is present in file action buttons", async ({ page }) => {
+  // TC046: Authenticated download action exists
+  test("TC046: Download button is present in file action buttons", async ({ page }) => {
     await setupWorkspaceMocks(page, { initialFiles: SAMPLE_FILES });
     await page.goto("/projects/100/files");
-    const downloadLinks = page.locator('a[download], a[href*="/download"]');
-    await expect(downloadLinks.first()).toBeVisible();
+    await expect(page.getByRole("button", { name: "Download", exact: true })).toHaveCount(2);
+    await expect(page.getByRole("button", { name: "Download", exact: true }).first()).toBeVisible();
   });
 
-  // TC047: Download link URL structure
-  test("TC047: Download URL contains correct projectId and fileId", async ({ page }) => {
+  // TC047: The download uses the project/file endpoint with authentication
+  test("TC047: Download request contains correct projectId, fileId and Bearer token", async ({ page }) => {
     await setupWorkspaceMocks(page, { initialFiles: SAMPLE_FILES });
     await page.goto("/projects/100/files");
-    const downloadLink = page.locator('a[href*="/v1/projects/100/files/1/download"]');
-    await expect(downloadLink).toBeAttached();
+    const requestPromise = page.waitForRequest((request) =>
+      new URL(request.url()).pathname === "/api/v1/projects/100/files/1/download"
+    );
+    const downloadPromise = page.waitForEvent("download");
+    await page.getByRole("button", { name: "Download", exact: true }).first().click();
+    const request = await requestPromise;
+    expect(request.method()).toBe("GET");
+    expect(request.headers().authorization).toBe(`Bearer ${VALID_MOCK_JWT}`);
+    expect((await downloadPromise).suggestedFilename()).toBe("spec_architecture.pdf");
   });
 
   // TC048: Delete button visible for file uploader
@@ -89,20 +97,16 @@ test.describe("Suite 3: Project File Storage - Download & Delete RBAC (TC046 - T
   });
 
   // TC052: Confirm dialog triggers on delete click
-  test("TC052: Clicking delete button prompts window.confirm dialog", async ({ page }) => {
+  test("TC052: Clicking delete button opens the custom confirmation dialog", async ({ page }) => {
     await setupWorkspaceMocks(page, { initialFiles: SAMPLE_FILES, isManager: true });
     await page.goto("/projects/100/files");
-
-    let dialogAppeared = false;
-    page.once("dialog", (dialog) => {
-      dialogAppeared = true;
-      void dialog.dismiss();
-    });
 
     const row = page.locator("div").filter({ hasText: "spec_architecture.pdf" });
     const deleteBtn = row.locator("button").filter({ has: page.locator("svg.lucide-trash-2") }).first();
     await deleteBtn.click();
-    expect(dialogAppeared).toBe(true);
+    await expect(page.getByTestId("confirm-dialog")).toBeVisible();
+    await expect(page.getByTestId("confirm-dialog")).toContainText("Delete File");
+    await expect(page.getByTestId("confirm-action-btn")).toBeVisible();
   });
 
   // TC053: Canceling confirm dialog retains the file
@@ -110,14 +114,11 @@ test.describe("Suite 3: Project File Storage - Download & Delete RBAC (TC046 - T
     await setupWorkspaceMocks(page, { initialFiles: SAMPLE_FILES, isManager: true });
     await page.goto("/projects/100/files");
 
-    page.once("dialog", (dialog) => {
-      void dialog.dismiss();
-    });
-
     const row = page.locator("div").filter({ hasText: "spec_architecture.pdf" });
     const deleteBtn = row.locator("button").filter({ has: page.locator("svg.lucide-trash-2") }).first();
     await deleteBtn.click();
-
+    await page.getByTestId("confirm-cancel-btn").click();
+    await expect(page.getByTestId("confirm-dialog")).not.toBeVisible();
     await expect(page.getByText("spec_architecture.pdf")).toBeVisible();
   });
 
@@ -126,14 +127,15 @@ test.describe("Suite 3: Project File Storage - Download & Delete RBAC (TC046 - T
     await setupWorkspaceMocks(page, { initialFiles: SAMPLE_FILES, isManager: true });
     await page.goto("/projects/100/files");
 
-    page.once("dialog", (dialog) => {
-      void dialog.accept();
-    });
-
     const row = page.locator("div").filter({ hasText: "spec_architecture.pdf" });
     const deleteBtn = row.locator("button").filter({ has: page.locator("svg.lucide-trash-2") }).first();
     await deleteBtn.click();
-
+    const deleteResponse = page.waitForResponse((response) =>
+      new URL(response.url()).pathname === "/api/v1/projects/100/files/1" &&
+      response.request().method() === "DELETE"
+    );
+    await page.getByTestId("confirm-action-btn").click();
+    expect((await deleteResponse).status()).toBe(200);
     await expect(page.getByText("spec_architecture.pdf")).not.toBeVisible();
   });
 
@@ -143,21 +145,21 @@ test.describe("Suite 3: Project File Storage - Download & Delete RBAC (TC046 - T
     await page.goto("/projects/100/files");
     await expect(page.getByText("All Documents (2)")).toBeVisible();
 
-    page.once("dialog", (dialog) => void dialog.accept());
     const row = page.locator("div").filter({ hasText: "spec_architecture.pdf" });
     const deleteBtn = row.locator("button").filter({ has: page.locator("svg.lucide-trash-2") }).first();
     await deleteBtn.click();
-
+    await page.getByTestId("confirm-action-btn").click();
     await expect(page.getByText("All Documents (1)")).toBeVisible();
   });
 
   // TC056: Download button hover styling
-  test("TC056: Download link has hover styling and accessible role", async ({ page }) => {
+  test("TC056: Download button has hover styling and an accessible name", async ({ page }) => {
     await setupWorkspaceMocks(page, { initialFiles: SAMPLE_FILES });
     await page.goto("/projects/100/files");
-    const downloadLink = page.locator('a[href*="/download"]').first();
-    await expect(downloadLink).toBeVisible();
-    await downloadLink.hover();
+    const downloadButton = page.getByRole("button", { name: "Download", exact: true }).first();
+    await expect(downloadButton).toBeVisible();
+    await expect(downloadButton).toHaveClass(/hover:text-foreground/);
+    await downloadButton.hover();
   });
 
   // TC057: Delete failure shows error banner
@@ -180,21 +182,24 @@ test.describe("Suite 3: Project File Storage - Download & Delete RBAC (TC046 - T
     });
 
     await page.goto("/projects/100/files");
-    page.once("dialog", (dialog) => void dialog.accept());
     const row = page.locator("div").filter({ hasText: "spec_architecture.pdf" });
     const deleteBtn = row.locator("button").filter({ has: page.locator("svg.lucide-trash-2") }).first();
     await deleteBtn.click();
-
+    await page.getByTestId("confirm-action-btn").click();
     await expect(page.getByText(/Internal storage error|Failed to delete file/i)).toBeVisible();
   });
 
-  // TC058: Download link target blank or direct download
-  test("TC058: Download link has target blank or download attribute for safe browser navigation", async ({ page }) => {
+  // TC058: Blob download saves the file without navigating away
+  test("TC058: Download saves the expected file without leaving the workspace", async ({ page }) => {
     await setupWorkspaceMocks(page, { initialFiles: SAMPLE_FILES });
     await page.goto("/projects/100/files");
-    const downloadLink = page.locator('a[href*="/download"]').first();
-    const target = await downloadLink.getAttribute("target");
-    expect(target === "_blank" || target === null).toBe(true);
+    const downloadPromise = page.waitForEvent("download");
+    await page.getByRole("button", { name: "Download", exact: true }).first().click();
+    const download = await downloadPromise;
+    expect(download.suggestedFilename()).toBe("spec_architecture.pdf");
+    expect(await download.failure()).toBeNull();
+    expect(await readFile((await download.path())!, "utf8")).toBe("Mock file bytes: spec_architecture.pdf");
+    await expect(page).toHaveURL(/\/projects\/100\/files$/);
   });
 
   // TC059: Deleting all files transitions to empty state
@@ -206,10 +211,9 @@ test.describe("Suite 3: Project File Storage - Download & Delete RBAC (TC046 - T
     await page.goto("/projects/100/files");
     await expect(page.getByText("spec_architecture.pdf")).toBeVisible();
 
-    page.once("dialog", (dialog) => void dialog.accept());
     const deleteBtn = page.locator("button svg.lucide-trash-2").first();
     await deleteBtn.click();
-
+    await page.getByTestId("confirm-action-btn").click();
     await expect(page.getByText("No files in this project yet")).toBeVisible();
   });
 

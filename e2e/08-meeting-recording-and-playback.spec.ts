@@ -25,7 +25,7 @@ test.describe("Phase 5: Meeting Recording Playback & Custom Dialogs E2E (TC201 -
       isHost: true,
     };
 
-    await setupWorkspaceMocks(page, { initialMeetings: [mockEndedMeeting] });
+    await setupWorkspaceMocks(page, { language: "vi", initialMeetings: [mockEndedMeeting] });
     await page.goto("/projects/100/meetings");
     await page.waitForLoadState("domcontentloaded");
 
@@ -63,7 +63,7 @@ test.describe("Phase 5: Meeting Recording Playback & Custom Dialogs E2E (TC201 -
       isHost: true,
     };
 
-    await setupWorkspaceMocks(page, { initialMeetings: [mockEndedMeeting] });
+    await setupWorkspaceMocks(page, { language: "vi", initialMeetings: [mockEndedMeeting] });
     await page.goto("/projects/100/meetings");
     await page.waitForLoadState("domcontentloaded");
 
@@ -99,7 +99,7 @@ test.describe("Phase 5: Meeting Recording Playback & Custom Dialogs E2E (TC201 -
       isHost: true,
     };
 
-    await setupWorkspaceMocks(page, { initialMeetings: [mockEndedMeeting] });
+    await setupWorkspaceMocks(page, { language: "vi", initialMeetings: [mockEndedMeeting] });
     await page.goto("/projects/100/meetings");
     await page.waitForLoadState("domcontentloaded");
 
@@ -139,7 +139,7 @@ test.describe("Phase 5: Meeting Recording Playback & Custom Dialogs E2E (TC201 -
       isHost: true,
     };
 
-    await setupWorkspaceMocks(page, { initialMeetings: [mockEndedMeeting] });
+    await setupWorkspaceMocks(page, { language: "vi", initialMeetings: [mockEndedMeeting] });
     await page.goto("/projects/100/meetings");
     await page.waitForLoadState("domcontentloaded");
 
@@ -181,7 +181,7 @@ test.describe("Phase 5: Meeting Recording Playback & Custom Dialogs E2E (TC201 -
       nativeDialogFired = true;
     });
 
-    await setupWorkspaceMocks(page, { initialMeetings: [mockActiveMeeting] });
+    await setupWorkspaceMocks(page, { language: "vi", initialMeetings: [mockActiveMeeting] });
     await page.goto("/projects/100/meetings");
     await page.waitForLoadState("domcontentloaded");
 
@@ -236,7 +236,7 @@ test.describe("Phase 5: Meeting Recording Playback & Custom Dialogs E2E (TC201 -
       isHost: true,
     };
 
-    await setupWorkspaceMocks(page, { initialMeetings: [mockActiveMeeting] });
+    await setupWorkspaceMocks(page, { language: "vi", initialMeetings: [mockActiveMeeting] });
     await page.goto("/projects/100/meetings");
     await page.waitForLoadState("domcontentloaded");
 
@@ -269,7 +269,7 @@ test.describe("Phase 5: Meeting Recording Playback & Custom Dialogs E2E (TC201 -
       isHost: true,
     };
 
-    await setupWorkspaceMocks(page, { initialMeetings: [mockEndedMeeting] });
+    await setupWorkspaceMocks(page, { language: "vi", initialMeetings: [mockEndedMeeting] });
     await page.goto("/projects/100/meetings");
     await page.waitForLoadState("domcontentloaded");
 

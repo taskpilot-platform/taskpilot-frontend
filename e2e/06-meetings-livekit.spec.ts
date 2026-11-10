@@ -9,7 +9,7 @@ test.describe("Phase 4: LiveKit Video Meeting & Collaboration (TC101 - TC130)", 
 
   // --- AC-04: Workspace Navigation & Tab ---
   test("TC101: Display Meetings tab in Project Workspace navigation", async ({ page }) => {
-    await setupWorkspaceMocks(page);
+    await setupWorkspaceMocks(page, { language: "vi" });
     await page.goto("/projects/100/overview");
     await page.waitForLoadState("domcontentloaded");
 
@@ -19,7 +19,7 @@ test.describe("Phase 4: LiveKit Video Meeting & Collaboration (TC101 - TC130)", 
   });
 
   test("TC102: Switch to Meetings tab and display empty state when no meetings exist", async ({ page }) => {
-    await setupWorkspaceMocks(page, { initialMeetings: [] });
+    await setupWorkspaceMocks(page, { language: "vi", initialMeetings: [] });
     await page.goto("/projects/100/overview");
     await page.waitForLoadState("domcontentloaded");
 
@@ -31,7 +31,7 @@ test.describe("Phase 4: LiveKit Video Meeting & Collaboration (TC101 - TC130)", 
 
   // --- AC-01: Create Meeting Dialog & Validation ---
   test("TC103: Open create meeting dialog modal", async ({ page }) => {
-    await setupWorkspaceMocks(page, { initialMeetings: [] });
+    await setupWorkspaceMocks(page, { language: "vi", initialMeetings: [] });
     await page.goto("/projects/100/meetings");
     await page.waitForLoadState("domcontentloaded");
 
@@ -41,7 +41,7 @@ test.describe("Phase 4: LiveKit Video Meeting & Collaboration (TC101 - TC130)", 
   });
 
   test("TC104: Form validation requires title to submit", async ({ page }) => {
-    await setupWorkspaceMocks(page, { initialMeetings: [] });
+    await setupWorkspaceMocks(page, { language: "vi", initialMeetings: [] });
     await page.goto("/projects/100/meetings");
     await page.waitForLoadState("domcontentloaded");
 
@@ -54,7 +54,7 @@ test.describe("Phase 4: LiveKit Video Meeting & Collaboration (TC101 - TC130)", 
   });
 
   test("TC105: Toggle recording checkbox in create meeting dialog", async ({ page }) => {
-    await setupWorkspaceMocks(page, { initialMeetings: [] });
+    await setupWorkspaceMocks(page, { language: "vi", initialMeetings: [] });
     await page.goto("/projects/100/meetings");
     await page.waitForLoadState("domcontentloaded");
 
@@ -68,7 +68,7 @@ test.describe("Phase 4: LiveKit Video Meeting & Collaboration (TC101 - TC130)", 
 
   // --- AC-05: Create & Auto-Join Live Meeting Room ---
   test("TC106: Successfully create meeting and auto-join live room", async ({ page }) => {
-    await setupWorkspaceMocks(page, { initialMeetings: [] });
+    await setupWorkspaceMocks(page, { language: "vi", initialMeetings: [] });
     await page.goto("/projects/100/meetings");
     await page.waitForLoadState("domcontentloaded");
 
@@ -98,7 +98,7 @@ test.describe("Phase 4: LiveKit Video Meeting & Collaboration (TC101 - TC130)", 
       isHost: true,
     };
 
-    await setupWorkspaceMocks(page, { initialMeetings: [mockMeeting] });
+    await setupWorkspaceMocks(page, { language: "vi", initialMeetings: [mockMeeting] });
     await page.goto("/projects/100/meetings");
     await page.waitForLoadState("domcontentloaded");
 
@@ -127,7 +127,7 @@ test.describe("Phase 4: LiveKit Video Meeting & Collaboration (TC101 - TC130)", 
       isHost: true,
     };
 
-    await setupWorkspaceMocks(page, { initialMeetings: [mockMeeting] });
+    await setupWorkspaceMocks(page, { language: "vi", initialMeetings: [mockMeeting] });
     await page.goto("/projects/100/meetings");
     await page.waitForLoadState("domcontentloaded");
 
@@ -152,7 +152,7 @@ test.describe("Phase 4: LiveKit Video Meeting & Collaboration (TC101 - TC130)", 
       isHost: true,
     };
 
-    await setupWorkspaceMocks(page, { initialMeetings: [mockMeeting] });
+    await setupWorkspaceMocks(page, { language: "vi", initialMeetings: [mockMeeting] });
     await page.goto("/projects/100/meetings");
     await page.waitForLoadState("domcontentloaded");
 
@@ -178,7 +178,7 @@ test.describe("Phase 4: LiveKit Video Meeting & Collaboration (TC101 - TC130)", 
       isHost: true,
     };
 
-    await setupWorkspaceMocks(page, { initialMeetings: [mockMeeting] });
+    await setupWorkspaceMocks(page, { language: "vi", initialMeetings: [mockMeeting] });
     await page.goto("/projects/100/meetings");
     await page.waitForLoadState("domcontentloaded");
 
@@ -211,7 +211,7 @@ test.describe("Phase 4: LiveKit Video Meeting & Collaboration (TC101 - TC130)", 
       isHost: true,
     };
 
-    await setupWorkspaceMocks(page, { initialMeetings: [mockMeeting] });
+    await setupWorkspaceMocks(page, { language: "vi", initialMeetings: [mockMeeting] });
     await page.goto("/projects/100/meetings");
     await page.waitForLoadState("domcontentloaded");
 
@@ -245,7 +245,7 @@ test.describe("Phase 4: LiveKit Video Meeting & Collaboration (TC101 - TC130)", 
       isHost: true,
     };
 
-    await setupWorkspaceMocks(page, { initialMeetings: [mockMeeting] });
+    await setupWorkspaceMocks(page, { language: "vi", initialMeetings: [mockMeeting] });
     await page.goto("/projects/100/meetings");
     await page.waitForLoadState("domcontentloaded");
 
@@ -272,7 +272,7 @@ test.describe("Phase 4: LiveKit Video Meeting & Collaboration (TC101 - TC130)", 
       isHost: true,
     };
 
-    await setupWorkspaceMocks(page, { initialMeetings: [mockMeeting] });
+    await setupWorkspaceMocks(page, { language: "vi", initialMeetings: [mockMeeting] });
     await page.goto("/projects/100/meetings");
     await page.waitForLoadState("domcontentloaded");
 
@@ -304,7 +304,7 @@ test.describe("Phase 4: LiveKit Video Meeting & Collaboration (TC101 - TC130)", 
       isHost: true,
     };
 
-    await setupWorkspaceMocks(page, { initialMeetings: [mockMeeting] });
+    await setupWorkspaceMocks(page, { language: "vi", initialMeetings: [mockMeeting] });
     await page.goto("/projects/100/meetings");
     await page.waitForLoadState("domcontentloaded");
 
@@ -332,7 +332,7 @@ test.describe("Phase 4: LiveKit Video Meeting & Collaboration (TC101 - TC130)", 
       isHost: true,
     };
 
-    await setupWorkspaceMocks(page, { initialMeetings: [mockMeeting] });
+    await setupWorkspaceMocks(page, { language: "vi", initialMeetings: [mockMeeting] });
     await page.goto("/projects/100/meetings");
     await page.waitForLoadState("domcontentloaded");
 
@@ -362,7 +362,7 @@ test.describe("Phase 4: LiveKit Video Meeting & Collaboration (TC101 - TC130)", 
       isHost: true,
     };
 
-    await setupWorkspaceMocks(page, { initialMeetings: [mockMeeting] });
+    await setupWorkspaceMocks(page, { language: "vi", initialMeetings: [mockMeeting] });
     await page.goto("/projects/100/meetings");
     await page.waitForLoadState("domcontentloaded");
 
@@ -393,7 +393,7 @@ test.describe("Phase 4: LiveKit Video Meeting & Collaboration (TC101 - TC130)", 
       isHost: true,
     };
 
-    await setupWorkspaceMocks(page, { initialMeetings: [mockMeeting] });
+    await setupWorkspaceMocks(page, { language: "vi", initialMeetings: [mockMeeting] });
     await page.goto("/projects/100/meetings");
     await page.waitForLoadState("domcontentloaded");
 
@@ -419,7 +419,7 @@ test.describe("Phase 4: LiveKit Video Meeting & Collaboration (TC101 - TC130)", 
       isHost: true,
     };
 
-    await setupWorkspaceMocks(page, { initialMeetings: [mockMeeting] });
+    await setupWorkspaceMocks(page, { language: "vi", initialMeetings: [mockMeeting] });
     await page.goto("/projects/100/meetings");
     await page.waitForLoadState("domcontentloaded");
 
@@ -447,7 +447,7 @@ test.describe("Phase 4: LiveKit Video Meeting & Collaboration (TC101 - TC130)", 
       isHost: true,
     };
 
-    await setupWorkspaceMocks(page, { initialMeetings: [mockMeeting] });
+    await setupWorkspaceMocks(page, { language: "vi", initialMeetings: [mockMeeting] });
     await page.goto("/projects/100/meetings");
     await page.waitForLoadState("domcontentloaded");
 
@@ -472,7 +472,7 @@ test.describe("Phase 4: LiveKit Video Meeting & Collaboration (TC101 - TC130)", 
       isHost: true,
     };
 
-    await setupWorkspaceMocks(page, { initialMeetings: [mockMeeting] });
+    await setupWorkspaceMocks(page, { language: "vi", initialMeetings: [mockMeeting] });
     await page.goto("/projects/100/meetings");
     await page.waitForLoadState("domcontentloaded");
 
@@ -498,7 +498,7 @@ test.describe("Phase 4: LiveKit Video Meeting & Collaboration (TC101 - TC130)", 
       isHost: true,
     };
 
-    await setupWorkspaceMocks(page, { initialMeetings: [mockMeeting] });
+    await setupWorkspaceMocks(page, { language: "vi", initialMeetings: [mockMeeting] });
     await page.goto("/projects/100/meetings");
     await page.waitForLoadState("domcontentloaded");
 
@@ -523,7 +523,7 @@ test.describe("Phase 4: LiveKit Video Meeting & Collaboration (TC101 - TC130)", 
       isHost: true,
     };
 
-    await setupWorkspaceMocks(page, { initialMeetings: [mockMeeting] });
+    await setupWorkspaceMocks(page, { language: "vi", initialMeetings: [mockMeeting] });
     await page.goto("/projects/100/meetings");
     await page.waitForLoadState("domcontentloaded");
 
@@ -558,7 +558,7 @@ test.describe("Phase 4: LiveKit Video Meeting & Collaboration (TC101 - TC130)", 
       isHost: true,
     };
 
-    await setupWorkspaceMocks(page, { initialMeetings: [mockMeeting] });
+    await setupWorkspaceMocks(page, { language: "vi", initialMeetings: [mockMeeting] });
     await page.goto("/projects/100/meetings");
     await page.waitForLoadState("domcontentloaded");
 
@@ -598,7 +598,7 @@ test.describe("Phase 4: LiveKit Video Meeting & Collaboration (TC101 - TC130)", 
       isHost: true,
     };
 
-    await setupWorkspaceMocks(page, { initialMeetings: [activeMeeting, endedMeeting] });
+    await setupWorkspaceMocks(page, { language: "vi", initialMeetings: [activeMeeting, endedMeeting] });
     await page.goto("/projects/100/meetings");
     await page.waitForLoadState("domcontentloaded");
 
@@ -607,18 +607,18 @@ test.describe("Phase 4: LiveKit Video Meeting & Collaboration (TC101 - TC130)", 
     await expect(page.locator('[data-testid="meeting-card-2"]')).toBeVisible();
 
     // Filter Active only
-    await page.locator("text=Đang diễn ra (1)").click();
+    await page.getByRole("button", { name: "Đang họp (1)", exact: true }).click();
     await expect(page.locator('[data-testid="meeting-card-1"]')).toBeVisible();
     await expect(page.locator('[data-testid="meeting-card-2"]')).not.toBeVisible();
 
     // Filter Ended only
-    await page.locator("text=Lịch sử đã họp (1)").click();
+    await page.getByRole("button", { name: "Lịch sử (1)", exact: true }).click();
     await expect(page.locator('[data-testid="meeting-card-1"]')).not.toBeVisible();
     await expect(page.locator('[data-testid="meeting-card-2"]')).toBeVisible();
   });
 
   test("TC125: Refresh meetings list with refresh button", async ({ page }) => {
-    await setupWorkspaceMocks(page, { initialMeetings: [] });
+    await setupWorkspaceMocks(page, { language: "vi", initialMeetings: [] });
     await page.goto("/projects/100/meetings");
     await page.waitForLoadState("domcontentloaded");
 
@@ -629,7 +629,7 @@ test.describe("Phase 4: LiveKit Video Meeting & Collaboration (TC101 - TC130)", 
   });
 
   test("TC126: Prevent creating meeting when project is archived", async ({ page }) => {
-    await setupWorkspaceMocks(page, { isArchived: true, initialMeetings: [] });
+    await setupWorkspaceMocks(page, { language: "vi", isArchived: true, initialMeetings: [] });
     await page.goto("/projects/100/meetings");
     await page.waitForLoadState("domcontentloaded");
 
@@ -655,7 +655,7 @@ test.describe("Phase 4: LiveKit Video Meeting & Collaboration (TC101 - TC130)", 
       isHost: true,
     };
 
-    await setupWorkspaceMocks(page, { initialMeetings: [endedMeeting] });
+    await setupWorkspaceMocks(page, { language: "vi", initialMeetings: [endedMeeting] });
     await page.goto("/projects/100/meetings");
     await page.waitForLoadState("domcontentloaded");
 
@@ -679,7 +679,7 @@ test.describe("Phase 4: LiveKit Video Meeting & Collaboration (TC101 - TC130)", 
       isHost: true,
     };
 
-    await setupWorkspaceMocks(page, { initialMeetings: [mockMeeting] });
+    await setupWorkspaceMocks(page, { language: "vi", initialMeetings: [mockMeeting] });
     await page.goto("/projects/100/meetings?join=8");
     await page.waitForLoadState("domcontentloaded");
 
@@ -704,7 +704,7 @@ test.describe("Phase 4: LiveKit Video Meeting & Collaboration (TC101 - TC130)", 
       isHost: true,
     };
 
-    await setupWorkspaceMocks(page, { initialMeetings: [mockMeeting] });
+    await setupWorkspaceMocks(page, { language: "vi", initialMeetings: [mockMeeting] });
     await page.goto("/projects/100/meetings");
     await page.waitForLoadState("domcontentloaded");
 
@@ -718,7 +718,7 @@ test.describe("Phase 4: LiveKit Video Meeting & Collaboration (TC101 - TC130)", 
   });
 
   test("TC130: Full end-to-end meeting lifecycle flow", async ({ page }) => {
-    await setupWorkspaceMocks(page, { initialMeetings: [] });
+    await setupWorkspaceMocks(page, { language: "vi", initialMeetings: [] });
     await page.goto("/projects/100/meetings");
     await page.waitForLoadState("domcontentloaded");
 
