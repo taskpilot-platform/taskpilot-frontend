@@ -83,7 +83,7 @@ export async function setupWorkspaceMocks(
   });
 
   // Mock Profile API
-  await page.route("**/api/v1/users/me", async (route) => {
+  await page.route("**/v1/users/me", async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -106,7 +106,7 @@ export async function setupWorkspaceMocks(
   });
 
   // Mock Project Details
-  await page.route("**/api/v1/projects/100", async (route) => {
+  await page.route(/\/(?:api\/)?v1\/projects\/100(\?.*)?$/, async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -128,7 +128,7 @@ export async function setupWorkspaceMocks(
   });
 
   // Mock My Projects
-  await page.route("**/api/v1/projects/my**", async (route) => {
+  await page.route("**/v1/projects/my**", async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -161,7 +161,7 @@ export async function setupWorkspaceMocks(
   });
 
   // Mock Project Members
-  await page.route("**/api/v1/projects/100/members", async (route) => {
+  await page.route("**/v1/projects/100/members**", async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -187,7 +187,7 @@ export async function setupWorkspaceMocks(
   });
 
   // Mock Project Summary
-  await page.route("**/api/v1/projects/100/summary", async (route) => {
+  await page.route("**/v1/projects/100/summary**", async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -206,7 +206,7 @@ export async function setupWorkspaceMocks(
   });
 
   // Mock Board / Sprints / Tasks endpoints
-  await page.route("**/api/v1/projects/100/board", async (route) => {
+  await page.route("**/v1/projects/100/board**", async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -224,7 +224,7 @@ export async function setupWorkspaceMocks(
     });
   });
 
-  await page.route("**/api/v1/projects/100/tasks**", async (route) => {
+  await page.route("**/v1/projects/100/tasks**", async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -236,7 +236,7 @@ export async function setupWorkspaceMocks(
     });
   });
 
-  await page.route("**/api/v1/projects/100/sprints**", async (route) => {
+  await page.route("**/v1/projects/100/sprints**", async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -249,7 +249,7 @@ export async function setupWorkspaceMocks(
   });
 
   // Mock Files API
-  await page.route("**/api/v1/projects/100/files**", async (route) => {
+  await page.route("**/v1/projects/100/files**", async (route) => {
     const request = route.request();
     const url = new URL(request.url());
 
@@ -342,7 +342,7 @@ export async function setupWorkspaceMocks(
   });
 
   // Mock Chat Messages API
-  await page.route("**/api/v1/projects/100/chat/messages**", async (route) => {
+  await page.route("**/v1/projects/100/chat/messages**", async (route) => {
     const request = route.request();
 
     if (request.method() === "GET") {
@@ -394,7 +394,7 @@ export async function setupWorkspaceMocks(
   });
 
   // Mock Active Meeting API
-  await page.route(/\/api\/v1\/projects\/100\/meetings\/active(\?.*)?$/, async (route) => {
+  await page.route(/\/(?:api\/)?v1\/projects\/100\/meetings\/active(\?.*)?$/, async (route) => {
     const active = meetings.find((m: any) => m.status === "ACTIVE") || null;
     await route.fulfill({
       status: 200,
@@ -408,7 +408,7 @@ export async function setupWorkspaceMocks(
   });
 
   // Mock Join Meeting API
-  await page.route(/\/api\/v1\/projects\/100\/meetings\/\d+\/join(\?.*)?$/, async (route) => {
+  await page.route(/\/(?:api\/)?v1\/projects\/100\/meetings\/\d+\/join(\?.*)?$/, async (route) => {
     const url = route.request().url();
     const match = url.match(/\/meetings\/(\d+)\/join/);
     const meetingId = match ? parseInt(match[1]) : 1;
@@ -447,7 +447,7 @@ export async function setupWorkspaceMocks(
   });
 
   // Mock Leave Meeting API
-  await page.route(/\/api\/v1\/projects\/100\/meetings\/\d+\/leave(\?.*)?$/, async (route) => {
+  await page.route(/\/(?:api\/)?v1\/projects\/100\/meetings\/\d+\/leave(\?.*)?$/, async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -460,7 +460,7 @@ export async function setupWorkspaceMocks(
   });
 
   // Mock End Meeting API
-  await page.route(/\/api\/v1\/projects\/100\/meetings\/\d+\/end(\?.*)?$/, async (route) => {
+  await page.route(/\/(?:api\/)?v1\/projects\/100\/meetings\/\d+\/end(\?.*)?$/, async (route) => {
     const url = route.request().url();
     const match = url.match(/\/meetings\/(\d+)\/end/);
     const meetingId = match ? parseInt(match[1]) : 1;
@@ -483,7 +483,7 @@ export async function setupWorkspaceMocks(
   });
 
   // Mock Meeting Participants API
-  await page.route(/\/api\/v1\/projects\/100\/meetings\/\d+\/participants(\?.*)?$/, async (route) => {
+  await page.route(/\/(?:api\/)?v1\/projects\/100\/meetings\/\d+\/participants(\?.*)?$/, async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -506,7 +506,7 @@ export async function setupWorkspaceMocks(
   });
 
   // Mock Meetings List & Create API
-  await page.route(/\/api\/v1\/projects\/100\/meetings(\?.*)?$/, async (route) => {
+  await page.route(/\/(?:api\/)?v1\/projects\/100\/meetings(\?.*)?$/, async (route) => {
     const request = route.request();
 
     if (request.method() === "GET") {
