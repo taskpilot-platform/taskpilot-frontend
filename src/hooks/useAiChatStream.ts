@@ -1,7 +1,8 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { toast } from "react-toastify";
 import { fetchEventSource } from "@microsoft/fetch-event-source";
-import { getApiErrorMessage } from "@/lib/http";
+import { API_BASE_URL, getApiErrorMessage, refreshSessionSingleFlight } from "@/lib/http";
+import { registerRealtimeCleanup } from "@/lib/realtime";
 import { aiService, type ChatSession, type ChatMessage } from "@/services/ai.service";
 import type { ChatStreamPhase } from "@/types/chat-stream";
 import type {
@@ -20,7 +21,6 @@ export const MAX_PROMPT_CHARS = 4000;
 const STREAM_STATUS_NULL_RETRY_LIMIT = 3;
 const STREAM_STATUS_ERROR_RETRY_LIMIT = 3;
 const AI_STREAM_ERROR_TOAST_ID = "ai-stream-error-toast";
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080/api";
 
 const WRITE_TOOL_NAMES = new Set([
   "createTask",
@@ -102,8 +102,16 @@ export function useAiChatStream({
 
   useEffect(() => {
     isMountedRef.current = true;
+    const unregisterRealtime = registerRealtimeCleanup(() => {
+      stopPolling();
+      if (activeStreamControllerRef.current) {
+        activeStreamControllerRef.current.abort();
+        activeStreamControllerRef.current = null;
+      }
+    });
     return () => {
       isMountedRef.current = false;
+      unregisterRealtime();
       stopPolling();
       if (typewriterTimerRef.current) {
         window.cancelAnimationFrame(typewriterTimerRef.current);
@@ -404,6 +412,10 @@ export function useAiChatStream({
         openWhenHidden: true,
         body: JSON.stringify({ message: messageText, clientMessageId }),
         async onopen(response) {
+          if (response.status === 401) {
+            await refreshSessionSingleFlight({ redirectOnFailure: true });
+            throw new Error("Unauthorized");
+          }
           if (!response.ok) {
             throw new Error(`HTTP ${response.status}`);
           }

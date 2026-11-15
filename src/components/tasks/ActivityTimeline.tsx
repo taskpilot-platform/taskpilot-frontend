@@ -25,7 +25,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Textarea } from "@/components/ui/textarea";
-import { getApiErrorMessage } from "@/lib/http";
+import { API_BASE_URL, getApiErrorMessage, refreshSessionSingleFlight } from "@/lib/http";
+import { registerRealtimeCleanup } from "@/lib/realtime";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { authStorage } from "@/lib/storage";
 import { cn } from "@/lib/utils";
@@ -36,11 +37,19 @@ import type {
   UserProfileLiteDto,
 } from "@/types/task";
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL?.trim() || "";
 const MENTION_DEBOUNCE_MS = 250;
 const HIGHLIGHT_DURATION_MS = 2400;
 const MAX_INDENT_DEPTH = 4;
 const commentStreamControllers = new Map<number, AbortController>();
+
+registerRealtimeCleanup(() => {
+  for (const controller of commentStreamControllers.values()) {
+    if (!controller.signal.aborted) {
+      controller.abort();
+    }
+  }
+  commentStreamControllers.clear();
+});
 
 interface ActivityTimelineProps {
   taskId: number;
@@ -725,8 +734,7 @@ export function ActivityTimeline({
       },
       async onopen(response) {
         if (response.status === 401) {
-          authStorage.clear();
-          window.location.href = "/login";
+          await refreshSessionSingleFlight({ redirectOnFailure: true });
           throw new Error("Unauthorized");
         }
 

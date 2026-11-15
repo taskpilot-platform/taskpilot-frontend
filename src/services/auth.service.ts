@@ -1,4 +1,5 @@
-import { api } from "@/lib/http";
+import { API_BASE_URL, api, http } from "@/lib/http";
+import type { ApiResponse } from "@/types/api";
 import type {
   AuthResponse,
   ForgotPasswordRequest,
@@ -10,8 +11,7 @@ import type {
 } from "@/types/auth";
 
 export function getOAuthAuthorizeUrl(provider: string): string {
-  const apiBase = import.meta.env.VITE_API_BASE_URL?.trim() || "";
-  const baseUrl = apiBase.replace(/\/api\/?$/, "");
+  const baseUrl = API_BASE_URL.replace(/\/api\/?$/, "");
   return `${baseUrl}/oauth2/authorization/${provider}`;
 }
 
@@ -19,7 +19,16 @@ export const authService = {
   register: (payload: RegisterRequest) => api.post<void>("/v1/auth/register", payload),
   login: (payload: LoginRequest) => api.post<AuthResponse>("/v1/auth/login", payload),
   refresh: (payload: RefreshTokenRequest) => api.post<AuthResponse>("/v1/auth/refresh", payload),
-  logout: (payload: RefreshTokenRequest) => api.post<void>("/v1/auth/logout", payload),
+  logout: (payload: RefreshTokenRequest, accessToken?: string) =>
+    http
+      .post<ApiResponse<void>>(
+        "/v1/auth/logout",
+        payload,
+        accessToken
+          ? { headers: { Authorization: `Bearer ${accessToken}` } }
+          : undefined,
+      )
+      .then((r) => r.data),
   forgotPassword: (payload: ForgotPasswordRequest) =>
     api.post<void>("/v1/auth/forgot-password", payload),
   resetPassword: (payload: ResetPasswordRequest) =>

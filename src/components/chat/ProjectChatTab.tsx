@@ -101,6 +101,11 @@ export const ProjectChatTab: React.FC<ProjectChatTabProps> = ({
 
   // Connect WebSocket STOMP
   useEffect(() => {
+    if (!token) {
+      setIsConnected(false);
+      return;
+    }
+
     const stompClient = projectChatService.createStompClient(
       projectId,
       token,

@@ -21,7 +21,7 @@ function AppBootstrap() {
   return <RouterProvider router={router} />;
 }
 
-useAuthStore.getState().hydrate();
+void useAuthStore.getState().hydrate();
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

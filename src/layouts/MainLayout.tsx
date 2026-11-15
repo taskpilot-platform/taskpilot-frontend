@@ -5,23 +5,20 @@ import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import logo from "@/assets/logo.svg";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { getApiErrorMessage } from "@/lib/http";
+import { API_BASE_URL, getApiErrorMessage, refreshSessionSingleFlight } from "@/lib/http";
 import { useAuthStore } from "@/stores/auth.store";
 import { UserAvatar } from "@/components/ui/user-avatar";
-import type { UserProfile } from "@/types/user";
 import type { NotificationItem } from "@/types/notification";
 import { LayoutDashboard, ShieldCheck, UserRound, LogOut, FolderKanban, Users, Code, Settings, Menu, ChevronLeft, Bot, Bell, MessageSquare, MessagesSquare, Video, CalendarDays } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { toast } from "react-toastify";
-import { profileService } from "@/services/profile.service";
 import { notificationService } from "@/services/notification.service";
 import { authStorage, projectStorage, themeStorage } from "@/lib/storage";
-import { oneSignalLogin } from "@/lib/onesignal";
+import { registerRealtimeCleanup } from "@/lib/realtime";
 import { NavContextSwitcher, type NavigationContext } from "@/components/navigation/NavContextSwitcher";
 import { useTheme } from "next-themes";
 
 const NOTIFICATION_BLINK_MS = 3000;
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL?.trim() || "";
 type NotificationUnreadListener = (count: number) => void;
 
 let notificationStreamController: AbortController | null = null;
@@ -36,6 +33,8 @@ const stopNotificationStream = () => {
   notificationStreamController = null;
   notificationStreamToken = null;
 };
+
+registerRealtimeCleanup(stopNotificationStream);
 
 const parseNotificationUnreadCount = (raw: string): number | null => {
   try {
@@ -79,8 +78,7 @@ const startNotificationStream = (token: string) => {
     async onopen(response) {
       if (response.status === 401) {
         stopNotificationStream();
-        authStorage.clear();
-        window.location.href = "/login";
+        await refreshSessionSingleFlight({ redirectOnFailure: true });
         throw new Error("Unauthorized");
       }
 
@@ -143,7 +141,11 @@ const attachNotificationUnreadListener = (listener: NotificationUnreadListener) 
 export default function MainLayout() {
   const logout = useAuthStore((state) => state.logout);
   const isLoading = useAuthStore((state) => state.isLoading);
+  const isHydrating = useAuthStore((state) => state.isHydrating);
   const accessToken = useAuthStore((state) => state.accessToken);
+  const userRole = useAuthStore((state) => state.role);
+  const profile = useAuthStore((state) => state.user);
+  const refreshProfile = useAuthStore((state) => state.refreshProfile);
   const navigate = useNavigate();
   const location = useLocation();
   const { t, i18n } = useTranslation();
@@ -159,11 +161,12 @@ export default function MainLayout() {
 
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
-  const [userRole, setUserRole] = useState<string | null>(localStorage.getItem("userRole"));
-  const [profile, setProfile] = useState<UserProfile | null>(null);
   const [unreadCount, setUnreadCount] = useState(0);
   const [isNotificationBlinking, setIsNotificationBlinking] = useState(false);
   const [navContext, setNavContext] = useState<NavigationContext>(() => {
+    if (userRole !== "ADMIN") {
+      return "WORKSPACE";
+    }
     const saved = localStorage.getItem("navContext") as NavigationContext | null;
     if (saved === "ADMIN_SYSTEM" || saved === "WORKSPACE") {
       return saved;
@@ -171,7 +174,13 @@ export default function MainLayout() {
     return location.pathname.startsWith("/admin") ? "ADMIN_SYSTEM" : "WORKSPACE";
   });
 
+  const effectiveNavContext: NavigationContext =
+    userRole === "ADMIN" ? navContext : "WORKSPACE";
+
   useEffect(() => {
+    if (userRole !== "ADMIN") {
+      return;
+    }
     if (location.pathname.startsWith("/admin")) {
       setNavContext("ADMIN_SYSTEM");
       localStorage.setItem("navContext", "ADMIN_SYSTEM");
@@ -185,9 +194,12 @@ export default function MainLayout() {
         localStorage.setItem("lastWorkspacePath", location.pathname);
       }
     }
-  }, [location.pathname]);
+  }, [location.pathname, userRole]);
 
   const handleContextChange = (nextCtx: NavigationContext) => {
+    if (nextCtx === "ADMIN_SYSTEM" && userRole !== "ADMIN") {
+      return;
+    }
     setNavContext(nextCtx);
     localStorage.setItem("navContext", nextCtx);
 
@@ -201,24 +213,15 @@ export default function MainLayout() {
   };
 
   useEffect(() => {
-    const fetchProfile = () => {
-      profileService.getMe()
-        .then(res => {
-          setProfile(res.data);
-          setUserRole(res.data.role);
-          localStorage.setItem("userRole", res.data.role);
-          void oneSignalLogin(res.data.id);
-        })
-        .catch(() => {
-          setUserRole("USER");
-          localStorage.removeItem("userRole");
-        });
+    if (!profile && !isHydrating) {
+      void refreshProfile();
+    }
+    const handleProfileUpdated = () => {
+      void refreshProfile();
     };
-    
-    fetchProfile();
-    window.addEventListener('profileUpdated', fetchProfile);
-    return () => window.removeEventListener('profileUpdated', fetchProfile);
-  }, []);
+    window.addEventListener("profileUpdated", handleProfileUpdated);
+    return () => window.removeEventListener("profileUpdated", handleProfileUpdated);
+  }, [profile, isHydrating, refreshProfile]);
 
   const currentPathRef = useRef(location.pathname);
   useEffect(() => {
@@ -318,7 +321,7 @@ export default function MainLayout() {
 
               {/* Context Switcher for Multi-Role users */}
               <NavContextSwitcher
-                currentContext={navContext}
+                currentContext={effectiveNavContext}
                 onContextChange={(ctx) => {
                   handleContextChange(ctx);
                   setIsMobileNavOpen(false);
@@ -339,7 +342,7 @@ export default function MainLayout() {
                   <span>{i18n.language === "vi" ? "Tiếng Việt" : "English"}</span>
                 </Button>
 
-                {navContext === "ADMIN_SYSTEM" ? (
+                {effectiveNavContext === "ADMIN_SYSTEM" ? (
                   <>
                     <div className="px-2 py-1">
                       <p className="text-[11px] font-semibold tracking-wider uppercase text-muted-foreground">
@@ -489,7 +492,7 @@ export default function MainLayout() {
 
         {/* Context Switcher for Multi-Role users */}
         <NavContextSwitcher
-          currentContext={navContext}
+          currentContext={effectiveNavContext}
           onContextChange={handleContextChange}
           isCollapsed={isCollapsed}
           userRole={userRole}
@@ -506,7 +509,7 @@ export default function MainLayout() {
             </Button>
           )}
 
-          {navContext === "ADMIN_SYSTEM" ? (
+          {effectiveNavContext === "ADMIN_SYSTEM" ? (
             <>
               {!isCollapsed && (
                 <div className="px-2 py-1 mb-1">
