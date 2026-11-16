@@ -2,6 +2,7 @@ export type ToolAccess = "read" | "write";
 
 export type PendingActionConfirmation = {
   actionId: string;
+  payloadHash?: string;
   toolName?: string;
   summary?: string;
   arguments?: Record<string, unknown>;

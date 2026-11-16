@@ -56,6 +56,14 @@ export const aiService = {
       )
       .then((r) => r.data),
 
+  confirmAction: (sessionId: number, actionId: string, payloadHash: string): Promise<unknown> =>
+    api.post<unknown>(`/v1/ai/sessions/${sessionId}/actions/${encodeURIComponent(actionId)}/confirm`, {
+      payloadHash, idempotencyKey: `ui-action-${actionId}`,
+    }).then((r) => r.data),
+
+  cancelAction: (sessionId: number, actionId: string): Promise<void> =>
+    api.post<void>(`/v1/ai/sessions/${sessionId}/actions/${encodeURIComponent(actionId)}/cancel`).then(() => undefined),
+
   warmupSession: (sessionId: number): Promise<void> =>
     api.post<void>(`/v1/ai/sessions/${sessionId}/warmup`).then(() => undefined),
 };
