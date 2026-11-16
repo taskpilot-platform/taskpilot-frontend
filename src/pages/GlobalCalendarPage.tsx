@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useState, useEffect, useRef } from "react";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import {
   CalendarDays,
@@ -19,13 +19,24 @@ import { projectService } from "@/services/project.service";
 import { profileService } from "@/services/profile.service";
 import { taskService } from "@/services/task.service";
 import { projectStorage } from "@/lib/storage";
+import { useAuthStore } from "@/stores/auth.store";
 import type { MyProject, ProjectMember } from "@/types/project";
 import type { TaskDto } from "@/types/task";
 
 export default function GlobalCalendarPage() {
   const { t } = useTranslation();
   const [searchParams, setSearchParams] = useSearchParams();
+  const { projectId: routeProjectId } = useParams<{ projectId?: string }>();
   const navigate = useNavigate();
+
+  const accessToken = useAuthStore((state) => state.accessToken);
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const authUserId = useAuthStore((state) => state.user?.id ?? null);
+  const hadAuthSessionRef = useRef(
+    Boolean(accessToken || isAuthenticated || authUserId),
+  );
+  const initialLoadSeqRef = useRef(0);
+  const detailsLoadSeqRef = useRef(0);
 
   const [projects, setProjects] = useState<MyProject[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
@@ -34,22 +45,57 @@ export default function GlobalCalendarPage() {
   const [tasks, setTasks] = useState<TaskDto[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
+  const sessionKey = authUserId
+    ? `u:${authUserId}`
+    : accessToken
+      ? "tok"
+      : "anon";
+
+  // Clear transient state on logout
+  useEffect(() => {
+    if (accessToken || isAuthenticated || authUserId) {
+      hadAuthSessionRef.current = true;
+      return;
+    }
+    if (hadAuthSessionRef.current) {
+      hadAuthSessionRef.current = false;
+      initialLoadSeqRef.current += 1;
+      detailsLoadSeqRef.current += 1;
+      setProjects([]);
+      setSelectedProjectId(null);
+      setCurrentUserId(null);
+      setProjectMembers([]);
+      setTasks([]);
+      setIsLoading(false);
+    }
+  }, [accessToken, isAuthenticated, authUserId]);
+
   // 1. Fetch User & Projects
   useEffect(() => {
     let isMounted = true;
+    const seq = ++initialLoadSeqRef.current;
 
     async function loadInitialData() {
       setIsLoading(true);
+      if (seq > 1) {
+        setProjects([]);
+        setSelectedProjectId(null);
+        setCurrentUserId(null);
+        setProjectMembers([]);
+        setTasks([]);
+      }
       try {
         const [profileRes, projectsRes] = await Promise.all([
           profileService.getMe().catch(() => null),
           projectService.getMyProjects(0, 50).catch(() => ({ data: { content: [] } })),
         ]);
 
-        if (!isMounted) return;
+        if (!isMounted || seq !== initialLoadSeqRef.current) return;
 
         if (profileRes?.data?.id) {
           setCurrentUserId(profileRes.data.id);
+        } else {
+          setCurrentUserId(null);
         }
 
         const projectList: MyProject[] =
@@ -58,30 +104,8 @@ export default function GlobalCalendarPage() {
           [];
 
         setProjects(projectList);
-
-        // Determine initially selected project
-        const paramId = searchParams.get("project");
-        let initialId: number | null = null;
-
-        if (paramId) {
-          const parsed = parseInt(paramId, 10);
-          if (projectList.some((p) => p.id === parsed)) {
-            initialId = parsed;
-          }
-        }
-
-        if (!initialId) {
-          const stored = projectStorage.getLastProjectId();
-          if (stored && projectList.some((p) => p.id === stored)) {
-            initialId = stored;
-          } else if (projectList.length > 0) {
-            initialId = projectList[0].id;
-          }
-        }
-
-        setSelectedProjectId(initialId);
       } finally {
-        if (isMounted) {
+        if (isMounted && seq === initialLoadSeqRef.current) {
           setIsLoading(false);
         }
       }
@@ -92,27 +116,63 @@ export default function GlobalCalendarPage() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [sessionKey]);
 
-  // 2. Fetch Project Members & Tasks when selectedProjectId changes
+  // 2. Sync selectedProjectId from route/query changes on mounted page
   useEffect(() => {
+    if (isLoading) return;
+
+    const paramId = routeProjectId || searchParams.get("project");
+    const parsed = paramId ? Number.parseInt(paramId, 10) : NaN;
+
+    if (Number.isFinite(parsed) && projects.some((p) => p.id === parsed)) {
+      setSelectedProjectId(parsed);
+      projectStorage.setLastProjectId(parsed);
+      return;
+    }
+
+    const stored = projectStorage.getLastProjectId();
+    if (stored && projects.some((p) => p.id === stored)) {
+      setSelectedProjectId(stored);
+      return;
+    }
+
+    if (projects.length > 0) {
+      setSelectedProjectId(projects[0].id);
+      return;
+    }
+
+    setSelectedProjectId(null);
+  }, [isLoading, routeProjectId, searchParams, projects]);
+
+  // 3. Fetch Project Members & Tasks when selectedProjectId changes
+  useEffect(() => {
+    detailsLoadSeqRef.current += 1;
+    setProjectMembers([]);
+    setTasks([]);
+
     if (!selectedProjectId) return;
 
     let isMounted = true;
+    const seq = detailsLoadSeqRef.current;
+    const targetProjectId = selectedProjectId;
+
     async function loadProjectDetails() {
       try {
         const [membersRes, tasksRes] = await Promise.all([
-          projectService.getProjectMembers(selectedProjectId!).catch(() => ({ data: [] })),
-          taskService.getTasksByProject(selectedProjectId!).catch(() => ({ data: [] })),
+          projectService.getProjectMembers(targetProjectId).catch(() => ({ data: [] })),
+          taskService.getTasksByProject(targetProjectId).catch(() => ({ data: [] })),
         ]);
 
-        if (!isMounted) return;
+        if (!isMounted || seq !== detailsLoadSeqRef.current) return;
 
         setProjectMembers((membersRes as any)?.data || []);
         const rawTasks = (tasksRes as any)?.data?.content || (tasksRes as any)?.data || [];
         setTasks(rawTasks);
       } catch (err) {
-        console.warn("Failed to load project details for calendar", err);
+        if (isMounted && seq === detailsLoadSeqRef.current) {
+          console.warn("Failed to load project details for calendar", err);
+        }
       }
     }
 
@@ -126,11 +186,15 @@ export default function GlobalCalendarPage() {
   const handleSelectProject = (id: number) => {
     setSelectedProjectId(id);
     projectStorage.setLastProjectId(id);
-    setSearchParams((prev) => {
-      const next = new URLSearchParams(prev);
-      next.set("project", id.toString());
-      return next;
-    });
+    if (routeProjectId) {
+      navigate(`/calendar/${id}`);
+    } else {
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        next.set("project", id.toString());
+        return next;
+      });
+    }
   };
 
   if (isLoading) {
