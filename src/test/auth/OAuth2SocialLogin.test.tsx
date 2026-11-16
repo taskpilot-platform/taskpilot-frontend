@@ -102,8 +102,11 @@ describe("OAuth2 & Social Login Unit Tests", () => {
 
     it("successfully exchanges valid one-time code and navigates to /dashboard", async () => {
       const loginWithOAuthCodeMock = vi.fn().mockResolvedValue({
-        accessToken: "mock-jwt-token",
+        token: "mock-jwt-token",
         refreshToken: "mock-refresh-token",
+        type: "Bearer",
+        expiresIn: 3600,
+        outcome: "AUTHENTICATED",
       });
 
       useAuthStore.setState({
