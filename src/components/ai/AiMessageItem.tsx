@@ -149,7 +149,7 @@ export function AiMessageExtras({
     const values = dynamicFormValues[formKey] ?? {};
 
     const handleSendModification = async () => {
-      confirmations.forEach((c) => cancelPendingAction(c.actionId));
+      confirmations.forEach((c) => { void Promise.resolve(cancelPendingAction(c.actionId)).catch(() => undefined); });
       setDynamicFormValues((forms) => {
         const next = { ...forms };
         delete next[formKey];
@@ -164,7 +164,7 @@ export function AiMessageExtras({
     };
 
     const handleCancelAll = () => {
-      confirmations.forEach((c) => cancelPendingAction(c.actionId));
+      confirmations.forEach((c) => { void Promise.resolve(cancelPendingAction(c.actionId)).catch(() => undefined); });
       setDynamicFormValues((forms) => {
         const next = { ...forms };
         delete next[formKey];
@@ -185,9 +185,8 @@ export function AiMessageExtras({
         .join("\n");
 
       const promptParts: string[] = [];
-      confirmations.forEach((c) => {
-        promptParts.push(`CONFIRM_ACTION ${c.actionId} xác nhận đồng ý thực hiện`);
-      });
+      // Changed form data requires a new preview; it cannot approve an older payload.
+      await Promise.allSettled(confirmations.map((c) => cancelPendingAction(c.actionId)));
 
       promptParts.push(
         "Structured form response",
