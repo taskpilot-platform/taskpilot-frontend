@@ -17,7 +17,9 @@ import {
   Archive,
   RefreshCw,
   Plus,
-  LogOut
+  LogOut,
+  Copy,
+  MailPlus
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -34,7 +36,12 @@ import { getApiErrorMessage } from "@/lib/http";
 import { projectService } from "@/services/project.service";
 import { labelService } from "@/services/label.service";
 import { profileService } from "@/services/profile.service";
-import type { Project, ProjectMember } from "@/types/project";
+import type {
+  CreateProjectInvitationResponse,
+  Project,
+  ProjectInvitation,
+  ProjectMember,
+} from "@/types/project";
 import type { LabelDto } from "@/types/task";
 
 const projectFormSchema = z.object({
@@ -56,6 +63,10 @@ export default function ProjectSettingsPage() {
 
   const [project, setProject] = useState<Project | null>(null);
   const [projectMembers, setProjectMembers] = useState<ProjectMember[]>([]);
+  const [invitations, setInvitations] = useState<ProjectInvitation[]>([]);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [isCreatingInvite, setIsCreatingInvite] = useState(false);
+  const [createdInvite, setCreatedInvite] = useState<CreateProjectInvitationResponse | null>(null);
   const [labels, setLabels] = useState<LabelDto[]>([]);
   const [myUserId, setMyUserId] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -99,6 +110,13 @@ export default function ProjectSettingsPage() {
       if (!me || me.role !== "MANAGER") {
         toast.error("You don't have permission to access project settings");
         navigate(`/projects/${currentProjectId}/overview`);
+      } else {
+        try {
+          const invRes = await projectService.listInvitations(currentProjectId);
+          setInvitations(invRes.data || []);
+        } catch {
+          setInvitations([]);
+        }
       }
     } catch (error) {
       toast.error(getApiErrorMessage(error));
@@ -112,6 +130,7 @@ export default function ProjectSettingsPage() {
     if (currentProjectId) {
       void loadData();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentProjectId]);
 
   const onSubmitGeneral = async (values: z.infer<typeof projectFormSchema>) => {
@@ -139,6 +158,41 @@ export default function ProjectSettingsPage() {
       await projectService.updateMemberRole(currentProjectId, userId, role);
       toast.success("Member role updated");
       void loadData();
+    } catch (err) {
+      toast.error(getApiErrorMessage(err));
+    }
+  };
+
+  const handleCreateInvitation = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!inviteEmail.trim()) return;
+    setIsCreatingInvite(true);
+    try {
+      const res = await projectService.createInvitation(currentProjectId, {
+        email: inviteEmail.trim(),
+      });
+      setCreatedInvite(res.data);
+      setInviteEmail("");
+      toast.success(
+        t("projects.p2.invite_created", {
+          defaultValue: "Invitation created! Copy the link below to share it once.",
+        }),
+      );
+      const invRes = await projectService.listInvitations(currentProjectId);
+      setInvitations(invRes.data || []);
+    } catch (err) {
+      toast.error(getApiErrorMessage(err));
+    } finally {
+      setIsCreatingInvite(false);
+    }
+  };
+
+  const handleRevokeInvitation = async (invitationId: number) => {
+    try {
+      await projectService.revokeInvitation(currentProjectId, invitationId);
+      toast.success(t("projects.p2.invite_revoked", { defaultValue: "Invitation revoked." }));
+      const invRes = await projectService.listInvitations(currentProjectId);
+      setInvitations(invRes.data || []);
     } catch (err) {
       toast.error(getApiErrorMessage(err));
     }
@@ -369,26 +423,90 @@ export default function ProjectSettingsPage() {
             <CardDescription>Manage who has access to this project and their roles.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {/* Invite Code */}
+            {/* Private Invitations */}
             {!isArchived && (
-              <div className="flex items-center gap-3 p-3 bg-blue-500/5 border border-blue-500/20 rounded-lg">
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-blue-700 dark:text-blue-400">Invite Code</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">Share this code so others can join the project</p>
+              <div className="space-y-3 p-4 bg-blue-500/5 border border-blue-500/20 rounded-lg">
+                <div>
+                  <p className="text-sm font-medium text-blue-700 dark:text-blue-400 flex items-center gap-1.5">
+                    <MailPlus className="h-4 w-4" />
+                    {t("projects.p2.invitations_title", { defaultValue: "Private Email-Bound Invitations" })}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {t("projects.p2.invitations_desc", {
+                      defaultValue:
+                        "Create a single-use 7-day invite bound to the recipient's verified email, then copy and share the link manually.",
+                    })}
+                  </p>
                 </div>
-                <div className="flex items-center gap-2">
-                  <code className="bg-muted px-3 py-1.5 rounded text-sm font-mono font-semibold">PRJ-{currentProjectId}</code>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      navigator.clipboard.writeText(`PRJ-${currentProjectId}`);
-                      toast.success("Invite code copied!");
-                    }}
-                  >
-                    Copy
+
+                <form onSubmit={handleCreateInvitation} className="flex flex-col gap-2 sm:flex-row">
+                  <Input
+                    type="email"
+                    required
+                    value={inviteEmail}
+                    onChange={(e) => setInviteEmail(e.target.value)}
+                    placeholder="teammate@example.com"
+                    className="flex-1"
+                  />
+                  <Button type="submit" size="sm" disabled={isCreatingInvite || !inviteEmail.trim()}>
+                    {isCreatingInvite && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
+                    {t("projects.p2.create_invite_btn", { defaultValue: "Create Invite Link" })}
                   </Button>
-                </div>
+                </form>
+
+                {createdInvite && (
+                  <div className="rounded-md border border-emerald-500/30 bg-emerald-500/10 p-3 space-y-2">
+                    <p className="text-xs font-medium text-emerald-800 dark:text-emerald-300">
+                      {t("projects.p2.copy_once_notice", {
+                        defaultValue: "One-time shareable invitation link for {{email}} (copy now — hidden after reload):",
+                        email: createdInvite.inviteeEmail,
+                      })}
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <code className="flex-1 truncate rounded bg-background px-2 py-1 text-xs font-mono">
+                        {createdInvite.inviteUrl}
+                      </code>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          void navigator.clipboard.writeText(createdInvite.inviteUrl);
+                          toast.success(t("projects.p2.invite_copied", { defaultValue: "Invitation link copied!" }));
+                        }}
+                      >
+                        <Copy className="mr-1 h-3.5 w-3.5" />
+                        Copy
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {invitations.length > 0 && (
+                  <div className="divide-y rounded-md border bg-background/80">
+                    {invitations.map((inv) => (
+                      <div key={inv.id} className="flex items-center justify-between gap-2 px-3 py-2 text-xs">
+                        <div>
+                          <span className="font-medium">{inv.inviteeEmail}</span>
+                          <span className="ml-2 rounded bg-muted px-1.5 py-0.5 font-mono text-[11px]">
+                            {inv.status}
+                          </span>
+                        </div>
+                        {inv.status === "PENDING" && (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 text-destructive hover:text-destructive"
+                            onClick={() => void handleRevokeInvitation(inv.id)}
+                          >
+                            {t("projects.p2.revoke_invite_btn", { defaultValue: "Revoke" })}
+                          </Button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
