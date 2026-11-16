@@ -7,6 +7,7 @@ import type {
 } from "axios";
 import type { ApiResponse } from "@/types/api";
 import type { AuthResponse } from "@/types/auth";
+import type { UserProfile } from "@/types/user";
 
 function createResponse<T>(
   config: InternalAxiosRequestConfig,
@@ -70,6 +71,7 @@ describe("P1.3 HTTP single-flight refresh & TECH-CONFIG-01", () => {
 
   afterEach(() => {
     axios.defaults.adapter = originalAdapter;
+    vi.unstubAllGlobals();
     vi.unstubAllEnvs();
     vi.restoreAllMocks();
     localStorage.clear();
@@ -486,5 +488,336 @@ describe("P1.3 HTTP single-flight refresh & TECH-CONFIG-01", () => {
     );
     expect(useAuthStore.getState().isAuthenticated).toBe(false);
     expect(useAuthStore.getState().accessToken).toBeNull();
+  });
+
+  it("prevents reentrant or recursive profile sync when 403 occurs across actual http+store bridge", async () => {
+    let profileCalls = 0;
+    let refreshCalls = 0;
+
+    const adapter: AxiosAdapter = async (config) => {
+      const path = getRequestPath(config);
+      if (path.endsWith("/v1/auth/refresh")) {
+        refreshCalls += 1;
+      }
+      if (path.endsWith("/v1/users/me")) {
+        profileCalls += 1;
+        throw createHttpError(config, 403, "Forbidden profile");
+      }
+      throw createHttpError(config, 403, "Forbidden admin");
+    };
+
+    axios.defaults.adapter = adapter;
+    const { authStorage } = await import("@/lib/storage");
+    const { api } = await import("@/lib/http");
+    const { useAuthStore } = await import("@/stores/auth.store");
+
+    authStorage.setAccessToken("valid-user-token");
+    authStorage.setRefreshToken("11111111-1111-4111-8111-111111111111");
+    useAuthStore.setState({
+      accessToken: "valid-user-token",
+      refreshToken: "11111111-1111-4111-8111-111111111111",
+      user: {
+        id: 10,
+        email: "alice@taskpilot.local",
+        fullName: "Alice",
+        avatarUrl: null,
+        role: "ADMIN",
+        status: "AVAILABLE",
+        currentWorkload: 0,
+        createdAt: "2026-01-01T00:00:00Z",
+        updatedAt: "2026-01-01T00:00:00Z",
+      },
+      role: "ADMIN",
+      isAuthenticated: true,
+    });
+
+    await Promise.allSettled([
+      api.get("/v1/admin/users"),
+      api.get("/v1/admin/settings"),
+    ]);
+    await new Promise((resolve) => setTimeout(resolve, 15));
+
+    // Concurrent 403s coalesce to one /v1/users/me call, and its 403 does not recurse.
+    expect(profileCalls).toBe(1);
+    expect(refreshCalls).toBe(0);
+    expect(useAuthStore.getState().user).toBeNull();
+    expect(useAuthStore.getState().role).toBeNull();
+    expect(authStorage.getAccessToken()).toBe("valid-user-token");
+
+    // Direct 403 on /v1/users/me must also never re-trigger onForbidden sync.
+    await expect(api.get("/v1/users/me")).rejects.toThrow();
+    await new Promise((resolve) => setTimeout(resolve, 15));
+    expect(profileCalls).toBe(2);
+  });
+
+  it("prevents stale refreshProfile 403 or 401 catch from clearing newly signed-in account", async () => {
+    for (const staleStatus of [403, 401] as const) {
+      vi.resetModules();
+      localStorage.clear();
+
+      let releaseStaleProfile!: () => void;
+      const staleProfileGate = new Promise<void>((resolve) => {
+        releaseStaleProfile = resolve;
+      });
+      let notifyStaleStarted!: () => void;
+      const staleStarted = new Promise<void>((resolve) => {
+        notifyStaleStarted = resolve;
+      });
+      let refreshCalls = 0;
+
+      const accountBProfile: UserProfile = {
+        id: 20,
+        email: "bob@taskpilot.local",
+        fullName: "Bob Admin",
+        avatarUrl: null,
+        role: "ADMIN",
+        status: "AVAILABLE",
+        currentWorkload: 0,
+        createdAt: "2026-01-01T00:00:00Z",
+        updatedAt: "2026-01-01T00:00:00Z",
+      };
+
+      const adapter: AxiosAdapter = async (config) => {
+        const path = getRequestPath(config);
+        const authHeader = getHeader(config, "Authorization");
+
+        if (path.endsWith("/v1/auth/login")) {
+          const body: ApiResponse<AuthResponse> = {
+            status: 200,
+            message: "OK",
+            data: {
+              token: "account-b-access",
+              refreshToken: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+              type: "Bearer",
+              expiresIn: 900,
+            },
+          };
+          return createResponse(config, 200, body);
+        }
+
+        if (path.endsWith("/v1/auth/refresh")) {
+          refreshCalls += 1;
+          throw createHttpError(config, 401, "Should not refresh stale request");
+        }
+
+        if (path.endsWith("/v1/users/me")) {
+          if (authHeader === "Bearer account-a-access") {
+            notifyStaleStarted();
+            await staleProfileGate;
+            throw createHttpError(config, staleStatus, `Stale ${staleStatus}`);
+          }
+          if (authHeader === "Bearer account-b-access") {
+            return createResponse(config, 200, {
+              status: 200,
+              message: "OK",
+              data: accountBProfile,
+            });
+          }
+        }
+
+        throw createHttpError(config, 404, `Unexpected request: ${path}`);
+      };
+
+      axios.defaults.adapter = adapter;
+      const { authStorage } = await import("@/lib/storage");
+      const { setRedirectLoginHandler } = await import("@/lib/http");
+      const { useAuthStore } = await import("@/stores/auth.store");
+
+      const redirectSpy = vi.fn();
+      setRedirectLoginHandler(redirectSpy);
+
+      authStorage.setAccessToken("account-a-access");
+      authStorage.setRefreshToken("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
+      useAuthStore.setState({
+        accessToken: "account-a-access",
+        refreshToken: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        user: {
+          ...accountBProfile,
+          id: 10,
+          email: "alice@taskpilot.local",
+          fullName: "Alice User",
+          role: "USER",
+        },
+        role: "USER",
+        isAuthenticated: true,
+      });
+
+      const staleRefresh = useAuthStore.getState().refreshProfile();
+      await staleStarted;
+
+      await useAuthStore.getState().login({
+        email: "bob@taskpilot.local",
+        password: "secret",
+      });
+      expect(useAuthStore.getState().user?.id).toBe(20);
+      expect(useAuthStore.getState().role).toBe("ADMIN");
+
+      releaseStaleProfile();
+      await expect(staleRefresh).resolves.toBeNull();
+
+      expect(useAuthStore.getState().user?.id).toBe(20);
+      expect(useAuthStore.getState().role).toBe("ADMIN");
+      expect(useAuthStore.getState().isAuthenticated).toBe(true);
+      expect(authStorage.getAccessToken()).toBe("account-b-access");
+      expect(refreshCalls).toBe(0);
+      expect(redirectSpy).not.toHaveBeenCalled();
+    }
+  });
+
+  it("ignores stale 401 and 403 responses from requests dispatched before account switch while keeping current-generation refresh working", async () => {
+    let releaseStale401!: () => void;
+    const stale401Gate = new Promise<void>((resolve) => {
+      releaseStale401 = resolve;
+    });
+    let releaseStale403!: () => void;
+    const stale403Gate = new Promise<void>((resolve) => {
+      releaseStale403 = resolve;
+    });
+    let markStaleDispatched!: () => void;
+    let staleDispatchedCount = 0;
+    const bothStaleDispatched = new Promise<void>((resolve) => {
+      markStaleDispatched = () => {
+        staleDispatchedCount += 1;
+        if (staleDispatchedCount === 2) {
+          resolve();
+        }
+      };
+    });
+
+    let refreshCalls = 0;
+    let projectsCalls = 0;
+    let profileCalls = 0;
+
+    const accountBProfile: UserProfile = {
+      id: 20,
+      email: "bob@taskpilot.local",
+      fullName: "Bob Admin",
+      avatarUrl: null,
+      role: "ADMIN",
+      status: "AVAILABLE",
+      currentWorkload: 0,
+      createdAt: "2026-01-01T00:00:00Z",
+      updatedAt: "2026-01-01T00:00:00Z",
+    };
+
+    const adapter: AxiosAdapter = async (config) => {
+      const path = getRequestPath(config);
+      const authHeader = getHeader(config, "Authorization");
+
+      if (path.endsWith("/v1/auth/login")) {
+        return createResponse(config, 200, {
+          status: 200,
+          message: "OK",
+          data: {
+            token: "account-b-access-1",
+            refreshToken: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            type: "Bearer",
+            expiresIn: 900,
+          },
+        });
+      }
+
+      if (path.endsWith("/v1/auth/refresh")) {
+        refreshCalls += 1;
+        expect(authHeader).toBeUndefined();
+        return createResponse(config, 200, {
+          status: 200,
+          message: "OK",
+          data: {
+            token: "account-b-access-2",
+            refreshToken: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            type: "Bearer",
+            expiresIn: 900,
+          },
+        });
+      }
+
+      if (path.endsWith("/v1/users/me")) {
+        profileCalls += 1;
+        return createResponse(config, 200, {
+          status: 200,
+          message: "OK",
+          data: accountBProfile,
+        });
+      }
+
+      if (path.endsWith("/v1/projects")) {
+        projectsCalls += 1;
+        if (authHeader === "Bearer account-a-access") {
+          markStaleDispatched();
+          await stale401Gate;
+          throw createHttpError(config, 401, "Old account 401");
+        }
+        if (authHeader === "Bearer account-b-access-1") {
+          throw createHttpError(config, 401, "Account B expired 401");
+        }
+        if (authHeader === "Bearer account-b-access-2") {
+          return createResponse(config, 200, {
+            status: 200,
+            message: "OK",
+            data: { owner: "bob" },
+          });
+        }
+      }
+
+      if (path.endsWith("/v1/admin/audit")) {
+        if (authHeader === "Bearer account-a-access") {
+          markStaleDispatched();
+          await stale403Gate;
+          throw createHttpError(config, 403, "Old account 403");
+        }
+      }
+
+      throw createHttpError(config, 404, `Unexpected request: ${path}`);
+    };
+
+    axios.defaults.adapter = adapter;
+    const { authStorage } = await import("@/lib/storage");
+    const { api, setRedirectLoginHandler } = await import("@/lib/http");
+    const { useAuthStore } = await import("@/stores/auth.store");
+
+    const redirectSpy = vi.fn();
+    setRedirectLoginHandler(redirectSpy);
+
+    authStorage.setAccessToken("account-a-access");
+    authStorage.setRefreshToken("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
+    useAuthStore.setState({
+      accessToken: "account-a-access",
+      refreshToken: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      user: { ...accountBProfile, id: 10, role: "USER" },
+      role: "USER",
+      isAuthenticated: true,
+    });
+
+    const staleReq401 = api.get("/v1/projects");
+    const staleReq403 = api.get("/v1/admin/audit");
+    await bothStaleDispatched;
+
+    await useAuthStore.getState().login({
+      email: "bob@taskpilot.local",
+      password: "secret",
+    });
+    expect(profileCalls).toBe(1);
+
+    releaseStale401();
+    releaseStale403();
+    await expect(staleReq401).rejects.toThrow();
+    await expect(staleReq403).rejects.toThrow();
+    await new Promise((resolve) => setTimeout(resolve, 15));
+
+    // Stale 401/403 from account A must not refresh, replay under account B, trigger onForbidden, or clear account B.
+    expect(refreshCalls).toBe(0);
+    expect(projectsCalls).toBe(1);
+    expect(profileCalls).toBe(1);
+    expect(redirectSpy).not.toHaveBeenCalled();
+    expect(authStorage.getAccessToken()).toBe("account-b-access-1");
+    expect(useAuthStore.getState().user?.id).toBe(20);
+    expect(useAuthStore.getState().role).toBe("ADMIN");
+
+    // Current-generation request for account B still refreshes and replays normally.
+    const currentRes = await api.get<{ owner: string }>("/v1/projects");
+    expect(currentRes.data.owner).toBe("bob");
+    expect(refreshCalls).toBe(1);
+    expect(authStorage.getAccessToken()).toBe("account-b-access-2");
   });
 });

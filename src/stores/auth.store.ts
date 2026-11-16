@@ -32,7 +32,13 @@ interface AuthState {
   logout: () => Promise<void>;
 }
 
+interface InFlightProfileRefreshState {
+  generation: number;
+  promise: Promise<UserProfile | null>;
+}
+
 let inFlightHydration: Promise<void> | null = null;
+let inFlightProfileRefresh: InFlightProfileRefreshState | null = null;
 
 function prepareNewSessionCleanup(): void {
   const hadPreviousSession = Boolean(
@@ -185,31 +191,55 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   refreshProfile: async () => {
     const startGeneration = getSessionGeneration();
-    try {
-      const response = await profileService.getMe();
-      if (startGeneration !== getSessionGeneration()) {
+    if (
+      inFlightProfileRefresh &&
+      inFlightProfileRefresh.generation === startGeneration
+    ) {
+      return inFlightProfileRefresh.promise;
+    }
+
+    const flightState: InFlightProfileRefreshState = {
+      generation: startGeneration,
+      promise: null as unknown as Promise<UserProfile | null>,
+    };
+
+    flightState.promise = (async () => {
+      try {
+        const response = await profileService.getMe();
+        if (startGeneration !== getSessionGeneration()) {
+          return null;
+        }
+        const profile = response.data;
+        set({
+          user: profile,
+          role: profile.role,
+        });
+        void oneSignalLogin(profile.id);
+        return profile;
+      } catch (err) {
+        if (startGeneration !== getSessionGeneration()) {
+          return null;
+        }
+        if (
+          axios.isAxiosError(err) &&
+          (err.response?.status === 401 || err.response?.status === 403)
+        ) {
+          if (err.response.status === 401) {
+            clearSessionState({ redirectToLogin: true });
+          } else {
+            set({ user: null, role: null });
+          }
+        }
         return null;
-      }
-      const profile = response.data;
-      set({
-        user: profile,
-        role: profile.role,
-      });
-      void oneSignalLogin(profile.id);
-      return profile;
-    } catch (err) {
-      if (
-        axios.isAxiosError(err) &&
-        (err.response?.status === 401 || err.response?.status === 403)
-      ) {
-        if (err.response.status === 401 && startGeneration === getSessionGeneration()) {
-          clearSessionState({ redirectToLogin: true });
-        } else {
-          set({ user: null, role: null });
+      } finally {
+        if (inFlightProfileRefresh === flightState) {
+          inFlightProfileRefresh = null;
         }
       }
-      return null;
-    }
+    })();
+
+    inFlightProfileRefresh = flightState;
+    return flightState.promise;
   },
 
   register: async (payload) => {
@@ -224,7 +254,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   login: async (payload) => {
     prepareNewSessionCleanup();
     const loginGeneration = bumpSessionGeneration();
-    set({ isLoading: true, user: null, role: null });
+    inFlightProfileRefresh = null;
+    set({ isLoading: true, user: null, role: null, isHydrating: false });
     try {
       const response = await authService.login(payload);
       await completeSignIn(loginGeneration, response.data, set);
@@ -236,7 +267,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   loginWithOAuthCode: async (code: string) => {
     prepareNewSessionCleanup();
     const loginGeneration = bumpSessionGeneration();
-    set({ isLoading: true, user: null, role: null });
+    inFlightProfileRefresh = null;
+    set({ isLoading: true, user: null, role: null, isHydrating: false });
     try {
       const response = await authService.exchangeOAuthCode(code);
       await completeSignIn(loginGeneration, response.data, set);
@@ -253,6 +285,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
     // Invalidate current session synchronously before awaiting network revoke so an
     // in-flight refresh cannot resurrect the logged-out session.
+    inFlightProfileRefresh = null;
     clearSessionState({ redirectToLogin: false, broadcast: true });
     set({
       accessToken: null,
@@ -288,6 +321,7 @@ registerAuthBridge({
     });
   },
   onSessionCleared: () => {
+    inFlightProfileRefresh = null;
     useAuthStore.setState({
       accessToken: null,
       refreshToken: null,
@@ -298,6 +332,13 @@ registerAuthBridge({
     });
   },
   onForbidden: () => {
+    const currentGeneration = getSessionGeneration();
+    if (
+      inFlightProfileRefresh &&
+      inFlightProfileRefresh.generation === currentGeneration
+    ) {
+      return;
+    }
     if (useAuthStore.getState().isAuthenticated) {
       void useAuthStore.getState().refreshProfile();
     }

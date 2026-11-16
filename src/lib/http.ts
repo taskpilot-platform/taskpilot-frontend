@@ -34,6 +34,13 @@ export interface AuthBridgeHooks {
 
 interface RetryableRequestConfig extends InternalAxiosRequestConfig {
   _retry?: boolean;
+  _requestGeneration?: number;
+}
+
+interface InFlightRefreshState {
+  promise: Promise<RefreshedTokens | null>;
+  generation: number;
+  redirectOnFailure: boolean;
 }
 
 type AuthBroadcastMessage =
@@ -44,8 +51,7 @@ let authBridge: AuthBridgeHooks = {};
 let redirectLoginHandler: (() => void) | null = null;
 let sessionGeneration = 0;
 let redirectedForGeneration: number | null = null;
-let inFlightRefresh: Promise<RefreshedTokens | null> | null = null;
-let pendingRedirectOnFailure = false;
+let inFlightRefreshState: InFlightRefreshState | null = null;
 
 const broadcastChannel =
   typeof BroadcastChannel !== "undefined"
@@ -74,7 +80,7 @@ export function getSessionGeneration(): number {
 
 export function bumpSessionGeneration(): number {
   sessionGeneration += 1;
-  inFlightRefresh = null;
+  inFlightRefreshState = null;
   return sessionGeneration;
 }
 
@@ -85,6 +91,12 @@ export function isExcludedAuthRefreshUrl(url?: string): boolean {
     /\/v1\/auth(\/|$)/i.test(cleanPath) ||
     /\/v1\/(?:account\/)?(?:setup|restore|verify)(?:\/|$)/i.test(cleanPath)
   );
+}
+
+export function isForbiddenSyncExcludedUrl(url?: string): boolean {
+  if (!url) return false;
+  const cleanPath = url.split(/[?#]/, 1)[0];
+  return /\/v1\/users\/me(?:\/|$)/i.test(cleanPath);
 }
 
 function redirectToLoginOnce(): void {
@@ -291,52 +303,51 @@ export function refreshSessionSingleFlight(options?: {
   redirectOnFailure?: boolean;
 }): Promise<RefreshedTokens | null> {
   const redirectOnFailure = options?.redirectOnFailure ?? true;
-  if (redirectOnFailure) {
-    pendingRedirectOnFailure = true;
-  }
 
-  if (inFlightRefresh) {
-    return inFlightRefresh;
+  if (inFlightRefreshState && inFlightRefreshState.generation === sessionGeneration) {
+    if (redirectOnFailure) {
+      inFlightRefreshState.redirectOnFailure = true;
+    }
+    return inFlightRefreshState.promise;
   }
 
   const initialRefreshToken = authStorage.getRefreshToken();
   if (!initialRefreshToken) {
-    const shouldRedirect = pendingRedirectOnFailure;
-    pendingRedirectOnFailure = false;
-    clearSessionState({ redirectToLogin: shouldRedirect });
+    clearSessionState({ redirectToLogin: redirectOnFailure });
     return Promise.resolve(null);
   }
 
   const capturedGeneration = sessionGeneration;
-  const refreshPromise = runRefreshWithCrossTabLock(
+  const flightState: InFlightRefreshState = {
+    promise: null as unknown as Promise<RefreshedTokens | null>,
+    generation: capturedGeneration,
+    redirectOnFailure,
+  };
+
+  flightState.promise = runRefreshWithCrossTabLock(
     capturedGeneration,
     initialRefreshToken,
   )
     .then((tokens) => {
-      const shouldRedirect = pendingRedirectOnFailure;
-      pendingRedirectOnFailure = false;
-      if (!tokens && capturedGeneration === sessionGeneration) {
-        clearSessionState({ redirectToLogin: shouldRedirect });
+      if (!tokens && flightState.generation === sessionGeneration) {
+        clearSessionState({ redirectToLogin: flightState.redirectOnFailure });
       }
       return tokens;
     })
     .catch(() => {
-      const shouldRedirect = pendingRedirectOnFailure;
-      pendingRedirectOnFailure = false;
-      if (capturedGeneration === sessionGeneration) {
-        clearSessionState({ redirectToLogin: shouldRedirect });
+      if (flightState.generation === sessionGeneration) {
+        clearSessionState({ redirectToLogin: flightState.redirectOnFailure });
       }
       return null;
     })
     .finally(() => {
-      if (inFlightRefresh === refreshPromise) {
-        inFlightRefresh = null;
+      if (inFlightRefreshState === flightState) {
+        inFlightRefreshState = null;
       }
-      pendingRedirectOnFailure = false;
     });
 
-  inFlightRefresh = refreshPromise;
-  return refreshPromise;
+  inFlightRefreshState = flightState;
+  return flightState.promise;
 }
 
 function awaitWithAbort<T>(
@@ -382,6 +393,10 @@ function setAuthorizationHeader(
 }
 
 http.interceptors.request.use((config) => {
+  const retryConfig = config as RetryableRequestConfig;
+  if (!retryConfig._retry && typeof retryConfig._requestGeneration !== "number") {
+    retryConfig._requestGeneration = sessionGeneration;
+  }
   const token = authStorage.getAccessToken();
   if (token) {
     setAuthorizationHeader(config, token);
@@ -414,17 +429,32 @@ http.interceptors.response.use(
       return Promise.reject(error);
     }
 
+    const originalConfig = error.config as RetryableRequestConfig | undefined;
+    const requestGeneration =
+      typeof originalConfig?._requestGeneration === "number"
+        ? originalConfig._requestGeneration
+        : sessionGeneration;
+    const isStaleGeneration = requestGeneration !== sessionGeneration;
+
     const status = error.response?.status;
     if (status === 403) {
-      authBridge.onForbidden?.();
+      if (
+        !isStaleGeneration &&
+        !isForbiddenSyncExcludedUrl(originalConfig?.url)
+      ) {
+        authBridge.onForbidden?.();
+      }
       return Promise.reject(error);
     }
     if (status !== 401) {
       return Promise.reject(error);
     }
 
-    const originalConfig = error.config as RetryableRequestConfig | undefined;
-    if (!originalConfig || isExcludedAuthRefreshUrl(originalConfig.url)) {
+    if (
+      !originalConfig ||
+      isStaleGeneration ||
+      isExcludedAuthRefreshUrl(originalConfig.url)
+    ) {
       return Promise.reject(error);
     }
 
@@ -433,7 +463,6 @@ http.interceptors.response.use(
       return Promise.reject(error);
     }
 
-    const requestGeneration = sessionGeneration;
     let rotatedTokens: RefreshedTokens | null;
     try {
       rotatedTokens = await awaitWithAbort(
