@@ -11,6 +11,10 @@ import RegisterPage from "@/pages/RegisterPage";
 import ForgotPasswordPage from "@/pages/ForgotPasswordPage";
 import ResetPasswordPage from "@/pages/ResetPasswordPage";
 import AuthCallbackPage from "@/pages/AuthCallbackPage";
+import VerifyEmailPage from "@/pages/VerifyEmailPage";
+import PasswordSetupPage from "@/pages/PasswordSetupPage";
+import RestoreAccountPage from "@/pages/RestoreAccountPage";
+import AcceptInvitationPage from "@/pages/AcceptInvitationPage";
 import DashboardPage from "@/pages/DashboardPage";
 import ProfilePage from "@/pages/ProfilePage";
 import MySkillsPage from "@/pages/MySkillsPage";
@@ -74,7 +78,23 @@ export const router = createBrowserRouter([
         path: "/auth/callback",
         element: <AuthCallbackPage />,
       },
+      {
+        path: "/verify-email",
+        element: <VerifyEmailPage />,
+      },
+      {
+        path: "/setup-password",
+        element: <PasswordSetupPage />,
+      },
+      {
+        path: "/restore-account",
+        element: <RestoreAccountPage />,
+      },
     ],
+  },
+  {
+    path: "/invitations/accept",
+    element: <AcceptInvitationPage />,
   },
 
   // 2. Nhóm Main (Bắt buộc phải đăng nhập)

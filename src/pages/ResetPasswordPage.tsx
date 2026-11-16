@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { PasswordField } from "@/components/auth/PasswordField";
 import { getApiErrorMessage } from "@/lib/http";
+import { validatePassword } from "@/lib/password-policy";
 import { authService } from "@/services/auth.service";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "react-toastify";
@@ -20,10 +21,11 @@ export default function ResetPasswordPage() {
   const [touchedConfirm, setTouchedConfirm] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const isPasswordInvalid = touchedPassword && newPassword.length > 0 && newPassword.length < 8;
+  const passwordErr = newPassword.length > 0 ? validatePassword(newPassword) : null;
+  const isPasswordInvalid = touchedPassword && newPassword.length > 0 && passwordErr !== null;
   const isConfirmInvalid = touchedConfirm && confirmPassword.length > 0 && newPassword !== confirmPassword;
   const hasToken = token.length > 0;
-  const isFormValid = newPassword.length >= 8 && newPassword === confirmPassword && hasToken;
+  const isFormValid = newPassword.length > 0 && passwordErr === null && newPassword === confirmPassword && hasToken;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -80,7 +82,15 @@ export default function ResetPasswordPage() {
             value={newPassword}
             onChange={(e) => setNewPassword(e.target.value)}
             onBlur={() => setTouchedPassword(true)}
-            error={isPasswordInvalid ? t("auth.password_min_invalid") : undefined}
+            error={
+              isPasswordInvalid
+                ? passwordErr === "too_long_bytes"
+                  ? t("auth.p2.password_max_bytes", {
+                      defaultValue: "Password exceeds maximum 72 UTF-8 bytes.",
+                    })
+                  : t("auth.password_min_invalid")
+                : undefined
+            }
             required
           />
         </div>

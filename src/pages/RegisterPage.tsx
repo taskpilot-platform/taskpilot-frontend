@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PasswordField } from "@/components/auth/PasswordField";
 import { getApiErrorMessage } from "@/lib/http";
+import { validatePassword } from "@/lib/password-policy";
 import { useAuthStore } from "@/stores/auth.store";
 import { Link, useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
@@ -28,17 +29,27 @@ export default function RegisterPage() {
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   const isNameInvalid = touchedName && !fullName.trim();
   const isEmailInvalid = touchedEmail && (!email || !emailRegex.test(email));
-  const isPasswordInvalid = touchedPassword && (!password || password.length < 8);
+  const passwordErr = password.length > 0 ? validatePassword(password) : null;
+  const isPasswordInvalid = touchedPassword && (!password || passwordErr !== null);
   const isConfirmInvalid = touchedConfirm && confirmPassword.length > 0 && password !== confirmPassword;
-  const isFormValid = fullName.trim() && emailRegex.test(email) && password.length >= 8 && password === confirmPassword;
+  const isFormValid =
+    Boolean(fullName.trim()) &&
+    emailRegex.test(email) &&
+    password.length > 0 &&
+    passwordErr === null &&
+    password === confirmPassword;
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isFormValid) return;
     try {
       await register({ fullName, email, password });
-      toast.success(t("auth.register_success", { defaultValue: "Registered successfully, please login" }));
-      navigate("/login");
+      toast.success(
+        t("auth.p2.register_pending_verify", {
+          defaultValue: "Registration received. Check your email to verify and choose your final password.",
+        }),
+      );
+      navigate(`/verify-email?email=${encodeURIComponent(email.trim())}`);
     } catch (error) {
       toast.error(getApiErrorMessage(error));
     }
@@ -99,7 +110,15 @@ export default function RegisterPage() {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             onBlur={() => setTouchedPassword(true)}
-            error={isPasswordInvalid ? t("auth.password_min_invalid") : undefined}
+            error={
+              isPasswordInvalid
+                ? passwordErr === "too_long_bytes"
+                  ? t("auth.p2.password_max_bytes", {
+                      defaultValue: "Password exceeds maximum 72 UTF-8 bytes.",
+                    })
+                  : t("auth.password_min_invalid")
+                : undefined
+            }
             required
           />
         </div>
