@@ -98,6 +98,11 @@
       "search_btn": "Tìm kiếm",
       "total": "Tổng cộng {{total}} cấu hình",
       "json_invalid": "Dữ liệu JSON không hợp lệ"
+    },
+    "p2": {
+      "suspend_btn": "Tam ngung tai khoan",
+      "reactivate_btn": "Kich hoat lai tai khoan",
+      "transfer_btn": "Chuyen quyen quan ly"
     }
   },
   "auth": {
@@ -184,6 +189,22 @@
       "error_invalid_state": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng thử lại.",
       "error_account_disabled": "Tài khoản của bạn hiện đang bị vô hiệu hóa.",
       "error_missing_code": "Không tìm thấy mã xác thực hợp lệ."
+    },
+    "p2": {
+      "verify_title": "Xac minh email & chon mat khau",
+      "verify_subtitle": "Xac minh quyen so huu hop thu bang cach chon mat khau cuoi cung (toi thieu 8 ky tu, toi da 72 byte UTF-8).",
+      "verify_submit": "Xac minh & Kich hoat tai khoan",
+      "verify_success": "Da xac minh email va dat mat khau. Ban co the dang nhap ngay.",
+      "restore_title": "Khoi phuc tai khoan da vo hieu hoa",
+      "restore_confirm_btn": "Xac nhan khoi phuc & Dang nhap",
+      "restore_cancel_btn": "Huy & Giu vo hieu hoa",
+      "setup_title": "Thiet lap mat khau tai khoan",
+      "setup_submit": "Luu mat khau",
+      "password_max_bytes": "Mat khau vuot qua gioi han toi da 72 byte UTF-8.",
+      "oauth_collision": "Email nay da ton tai. Hay dang nhap truoc roi lien ket thu cong trong Ho so.",
+      "provider_verification_unavailable": "Khong the xac minh email voi nha cung cap OAuth. Vui long thu lai sau.",
+      "link_completed": "Da lien ket nha cung cap dang nhap.",
+      "reauth_completed": "Da xac minh lai danh tinh."
     }
   },
   "profile": {
@@ -220,7 +241,14 @@
     "danger_desc": "Vô hiệu hóa tài khoản hiện tại và đăng xuất khỏi hệ thống.",
     "delete_account_btn": "Vô hiệu hóa tài khoản",
     "deleting_account_btn": "Đang xử lý...",
-    "delete_confirm": "Bạn chắc chắn muốn vô hiệu hóa tài khoản? Hành động này sẽ đăng xuất ngay lập tức."
+    "delete_confirm": "Bạn chắc chắn muốn vô hiệu hóa tài khoản? Hành động này sẽ đăng xuất ngay lập tức.",
+    "p2": {
+      "account_state": "Trang thai tai khoan",
+      "availability_label": "Trang thai lam viec",
+      "send_pw_setup_btn": "Gui email thiet lap mat khau",
+      "self_deactivate_title": "Tu vo hieu hoa tai khoan",
+      "self_deactivate_btn": "Tu vo hieu hoa tai khoan"
+    }
   },
   "projects": {
     "title": "Danh sách dự án của tôi",
@@ -278,7 +306,15 @@
     "progress": "Tiến độ",
     "members_title": "Thành viên đang hoạt động",
     "members_empty": "Không có dữ liệu thành viên.",
-    "member_id": "User #{{id}}"
+    "member_id": "User #{{id}}",
+    "p2": {
+      "invitations_title": "Loi moi du an rieng tu qua email",
+      "create_invite_btn": "Tao lien ket moi",
+      "revoke_invite_btn": "Thu hoi",
+      "accept_invite_title": "Chap nhan loi moi rieng tu",
+      "invite_accept_title": "Chap nhan loi moi du an",
+      "invite_accept_btn": "Chap nhan loi moi"
+    }
   },
   "tasks": {
     "title": "Quản lý Task & Sprint",

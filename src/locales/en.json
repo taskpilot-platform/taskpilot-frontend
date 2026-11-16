@@ -98,6 +98,11 @@
       "search_btn": "Search",
       "total": "Total {{total}} configurations",
       "json_invalid": "Invalid JSON format"
+    },
+    "p2": {
+      "suspend_btn": "Suspend Account",
+      "reactivate_btn": "Reactivate Account",
+      "transfer_btn": "Transfer Manager"
     }
   },
   "auth": {
@@ -184,6 +189,22 @@
       "error_invalid_state": "Login session has expired or is invalid. Please try again.",
       "error_account_disabled": "Your account is currently disabled.",
       "error_missing_code": "No valid authentication code found."
+    },
+    "p2": {
+      "verify_title": "Verify Email & Choose Password",
+      "verify_subtitle": "Verify your mailbox ownership by choosing your final account password (8 characters min, 72 UTF-8 bytes max).",
+      "verify_submit": "Verify & Activate Account",
+      "verify_success": "Email verified and password set. You can now sign in.",
+      "restore_title": "Restore Deactivated Account",
+      "restore_confirm_btn": "Confirm Restore & Sign In",
+      "restore_cancel_btn": "Cancel & Keep Deactivated",
+      "setup_title": "Set Account Password",
+      "setup_submit": "Save Password",
+      "password_max_bytes": "Password exceeds maximum 72 UTF-8 bytes.",
+      "oauth_collision": "An account with this email already exists. Sign in first and explicitly link this provider from Profile Settings.",
+      "provider_verification_unavailable": "Unable to verify email ownership with the OAuth provider. Please try again later.",
+      "link_completed": "Provider linked to your account.",
+      "reauth_completed": "Identity re-authentication verified."
     }
   },
   "profile": {
@@ -220,7 +241,14 @@
     "danger_desc": "Deactivate the current account and log out of the system.",
     "delete_account_btn": "Deactivate account",
     "deleting_account_btn": "Processing...",
-    "delete_confirm": "Are you sure you want to deactivate your account? This will log you out immediately."
+    "delete_confirm": "Are you sure you want to deactivate your account? This will log you out immediately.",
+    "p2": {
+      "account_state": "Account Lifecycle",
+      "availability_label": "Work Availability",
+      "send_pw_setup_btn": "Send Password Setup Email",
+      "self_deactivate_title": "Self-Deactivate Account",
+      "self_deactivate_btn": "Self-Deactivate Account"
+    }
   },
   "projects": {
     "title": "My Projects",
@@ -278,7 +306,15 @@
     "progress": "Progress",
     "members_title": "Active Members",
     "members_empty": "No member data available.",
-    "member_id": "User #{{id}}"
+    "member_id": "User #{{id}}",
+    "p2": {
+      "invitations_title": "Private Email-Bound Invitations",
+      "create_invite_btn": "Create Invite Link",
+      "revoke_invite_btn": "Revoke",
+      "accept_invite_title": "Accept Private Invitation",
+      "invite_accept_title": "Accept Project Invitation",
+      "invite_accept_btn": "Accept Invitation"
+    }
   },
   "tasks": {
     "title": "Task & Sprint Management",

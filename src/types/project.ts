@@ -75,6 +75,37 @@ export interface JoinProjectRequest {
   projectCode: string;
 }
 
+export interface ProjectInvitation {
+  id: number;
+  projectId: number;
+  inviteeEmail: string;
+  invitedByUserId: number;
+  status: "PENDING" | "ACCEPTED" | "EXPIRED" | "REVOKED";
+  issuedAt: string;
+  expiresAt: string;
+  consumedAt: string | null;
+  revokedAt: string | null;
+  revocationReason: string | null;
+}
+
+export interface CreateProjectInvitationRequest {
+  email: string;
+}
+
+export interface CreateProjectInvitationResponse {
+  id: number;
+  projectId: number;
+  inviteeEmail: string;
+  issuedAt: string;
+  expiresAt: string;
+  inviteToken: string;
+  inviteUrl: string;
+}
+
+export interface AcceptProjectInvitationRequest {
+  token: string;
+}
+
 export interface PageResult<T> {
   content: T[];
   totalElements: number;

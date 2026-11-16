@@ -8,6 +8,32 @@ export interface AdminUserResponse {
   currentWorkload: number | null;
   createdAt: string;
   updatedAt: string;
+  accountState?: string;
+  availability?: string;
+  emailVerified?: boolean;
+  legacyReviewRequired?: boolean;
+}
+
+export interface ProjectAttentionEligibleMember {
+  userId: number;
+  email: string;
+  fullName: string;
+  currentRole: string;
+}
+
+export interface ProjectAttentionItem {
+  projectId: number;
+  projectName: string;
+  projectStatus: string;
+  reason: string;
+  since: string;
+  attentionEventId: string;
+  eligibleActiveMembers: ProjectAttentionEligibleMember[];
+}
+
+export interface TransferProjectManagerRequest {
+  targetUserId: number;
+  reason?: string;
 }
 
 export interface AdminCreateUserRequest {
@@ -36,12 +62,12 @@ export interface AdminSkillRequest {
 
 export interface SystemSettingResponse {
   keyName: string;
-  valueJson: any;
+  valueJson: unknown;
   description: string | null;
 }
 
 export interface SystemSettingUpdateRequest {
   keyName: string;
-  valueJson: any;
+  valueJson: unknown;
   description?: string;
 }
