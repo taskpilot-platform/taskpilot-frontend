@@ -850,6 +850,8 @@
     "send": "Gửi",
     "empty_messages": "Chưa có tin nhắn nào. Hãy bắt đầu cuộc trò chuyện!",
     "error_load": "Không thể tải lịch sử trò chuyện",
+    "access_revoked": "Bạn không còn quyền truy cập phòng trò chuyện dự án này.",
+    "session_expired": "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.",
     "members_count": "{{count}} thành viên",
     "tab_title": "Kênh Trò Chuyện",
     "tab_desc": "Cộng tác thời gian thực cùng các thành viên trong dự án.",
@@ -885,7 +887,12 @@
     "group_created_success": "Đã tạo nhóm trò chuyện thành công!",
     "group_created_error": "Có lỗi khi tạo nhóm trò chuyện.",
     "empty_group_messages": "Nhóm chưa có tin nhắn nào. Hãy gửi lời chào đầu tiên!",
-    "no_conversations_found": "Không tìm thấy cuộc trò chuyện phù hợp"
+    "no_conversations_found": "Không tìm thấy cuộc trò chuyện phù hợp",
+    "search_channels_placeholder": "Tìm kiếm kênh dự án...",
+    "demo_badge": "Demo cục bộ",
+    "demo_status_notice": "Chỉ lưu cục bộ trên trình duyệt (Demo) — không gửi qua STOMP tới đồng nghiệp",
+    "demo_modal_notice": "Chế độ Demo cục bộ trên trình duyệt. Nhóm và tin nhắn chỉ lưu cho tài khoản hiện tại trên trình duyệt này, không gửi qua STOMP tới đồng nghiệp.",
+    "user_required_error": "Cần phiên đăng nhập hợp lệ để thực hiện thao tác này."
   },
   "landing": {
     "nav": {

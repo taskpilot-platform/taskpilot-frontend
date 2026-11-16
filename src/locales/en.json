@@ -850,6 +850,8 @@
     "send": "Send",
     "empty_messages": "No messages yet. Start the conversation!",
     "error_load": "Failed to load chat history",
+    "access_revoked": "Your access to this project chat was revoked.",
+    "session_expired": "Your session expired. Please sign in again.",
     "members_count": "{{count}} members",
     "tab_title": "Discussion Channel",
     "tab_desc": "Collaborate in real time with project members.",
@@ -885,7 +887,12 @@
     "group_created_success": "Group chat created successfully!",
     "group_created_error": "Failed to create group chat.",
     "empty_group_messages": "No messages in this group yet. Send a greeting!",
-    "no_conversations_found": "No matching conversations found"
+    "no_conversations_found": "No matching conversations found",
+    "search_channels_placeholder": "Search project channels...",
+    "demo_badge": "Local Demo",
+    "demo_status_notice": "Local browser demo only — not sent over STOMP or delivered to teammates",
+    "demo_modal_notice": "Local browser demo only. Groups and messages are stored only in this browser for your current account and are not delivered to teammates.",
+    "user_required_error": "Authenticated user session required."
   },
   "landing": {
     "nav": {
