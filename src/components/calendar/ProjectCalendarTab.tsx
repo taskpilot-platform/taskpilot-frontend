@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Clock,
@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { meetingService } from "@/services/meeting.service";
+import { localDayKey, parseLocalDayKey } from "@/lib/calendarDay";
 import { ScheduleMeetingDialog } from "./ScheduleMeetingDialog";
 import { LiveMeetingRoom } from "@/components/meetings/LiveMeetingRoom";
 import type { ProjectMeetingDto } from "@/types/meeting";
@@ -43,54 +44,126 @@ export function ProjectCalendarTab({
   hideTitle = false,
 }: ProjectCalendarTabProps) {
   const { t, i18n } = useTranslation();
-  const [meetings, setMeetings] = useState<ProjectMeetingDto[]>([]);
+  const [meetingsState, setMeetingsState] = useState<{
+    projectId: number;
+    items: ProjectMeetingDto[];
+  }>({ projectId, items: [] });
   const [viewMode, setViewMode] = useState<CalendarViewMode>("AGENDA");
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [isScheduleOpen, setIsScheduleOpen] = useState(false);
-  const [joinedMeetingId, setJoinedMeetingId] = useState<number | null>(null);
+  const [joinedMeetingState, setJoinedMeetingState] = useState<{
+    projectId: number;
+    meetingId: number;
+  } | null>(null);
+  const meetingsRequestSeqRef = useRef(0);
+  const activeProjectIdRef = useRef(projectId);
+
+  const meetings = useMemo(
+    () => (meetingsState.projectId === projectId ? meetingsState.items : []),
+    [meetingsState, projectId],
+  );
+  const joinedMeetingId =
+    joinedMeetingState?.projectId === projectId ? joinedMeetingState.meetingId : null;
+
+  useEffect(() => {
+    activeProjectIdRef.current = projectId;
+  }, [projectId]);
 
   // Filters
   const [showMeetings, setShowMeetings] = useState(true);
   const [showTasks, setShowTasks] = useState(true);
 
-  // Load meetings
-  const loadMeetings = async () => {
-    try {
-      const data = await meetingService.getMeetings(projectId);
-      setMeetings(data);
-    } catch (err) {
-      console.warn("Failed to load meetings for calendar", err);
-    }
-  };
+  // Load meetings with cancellation & stale-response protection
+  const fetchProjectMeetings = useCallback(
+    async (targetProjectId: number, isCancelled?: () => boolean) => {
+      const seq = ++meetingsRequestSeqRef.current;
+      try {
+        const data = await meetingService.getMeetings(targetProjectId);
+        if (
+          isCancelled?.() ||
+          activeProjectIdRef.current !== targetProjectId ||
+          meetingsRequestSeqRef.current !== seq
+        ) {
+          return;
+        }
+        setMeetingsState({
+          projectId: targetProjectId,
+          items: Array.isArray(data) ? data : [],
+        });
+      } catch (err) {
+        if (
+          isCancelled?.() ||
+          activeProjectIdRef.current !== targetProjectId ||
+          meetingsRequestSeqRef.current !== seq
+        ) {
+          return;
+        }
+        console.warn("Failed to load meetings for calendar", err);
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
-    void loadMeetings();
-  }, [projectId]);
+    let cancelled = false;
+    async function run() {
+      await fetchProjectMeetings(projectId, () => cancelled);
+    }
+    void run();
+    return () => {
+      cancelled = true;
+      meetingsRequestSeqRef.current += 1;
+    };
+  }, [projectId, fetchProjectMeetings]);
 
-  // Date utilities
-  const todayStr = useMemo(() => new Date().toISOString().split("T")[0], []);
+  // Local calendar day keys
+  const todayStr = localDayKey(new Date());
   const selectedDateStr = useMemo(
-    () => selectedDate.toISOString().split("T")[0],
-    [selectedDate]
+    () => localDayKey(selectedDate),
+    [selectedDate],
   );
+
+  // Group meetings & tasks consistently by local calendar day key
+  const meetingsByDay = useMemo(() => {
+    const grouped = new Map<string, ProjectMeetingDto[]>();
+    for (const meeting of meetings) {
+      const key = localDayKey(meeting.scheduledStartTime || meeting.startedAt);
+      if (!key) continue;
+      const bucket = grouped.get(key);
+      if (bucket) {
+        bucket.push(meeting);
+      } else {
+        grouped.set(key, [meeting]);
+      }
+    }
+    return grouped;
+  }, [meetings]);
+
+  const tasksByDay = useMemo(() => {
+    const grouped = new Map<string, TaskDto[]>();
+    for (const task of tasks) {
+      const key = localDayKey(task.dueDate);
+      if (!key) continue;
+      const bucket = grouped.get(key);
+      if (bucket) {
+        bucket.push(task);
+      } else {
+        grouped.set(key, [task]);
+      }
+    }
+    return grouped;
+  }, [tasks]);
 
   // Filter items for selected date (Agenda / Day)
   const dayMeetings = useMemo(() => {
-    if (!showMeetings) return [];
-    return meetings.filter((m) => {
-      const targetTime = m.scheduledStartTime || m.startedAt;
-      if (!targetTime) return false;
-      return targetTime.startsWith(selectedDateStr);
-    });
-  }, [meetings, selectedDateStr, showMeetings]);
+    if (!showMeetings || !selectedDateStr) return [];
+    return meetingsByDay.get(selectedDateStr) ?? [];
+  }, [meetingsByDay, selectedDateStr, showMeetings]);
 
   const dayTasks = useMemo(() => {
-    if (!showTasks) return [];
-    return tasks.filter((t) => {
-      if (!t.dueDate) return false;
-      return t.dueDate.startsWith(selectedDateStr);
-    });
-  }, [tasks, selectedDateStr, showTasks]);
+    if (!showTasks || !selectedDateStr) return [];
+    return tasksByDay.get(selectedDateStr) ?? [];
+  }, [tasksByDay, selectedDateStr, showTasks]);
 
   // Month grid computation
   const monthData = useMemo(() => {
@@ -127,14 +200,19 @@ export function ProjectCalendarTab({
   };
 
   const handleSelectDay = (dateStr: string) => {
-    setSelectedDate(new Date(dateStr));
+    const parsed = parseLocalDayKey(dateStr);
+    if (!parsed) return;
+    setSelectedDate(parsed);
     setViewMode("AGENDA");
   };
 
   const handleMeetingCreated = (newMeeting: ProjectMeetingDto, autoJoin?: boolean) => {
-    setMeetings((prev) => [newMeeting, ...prev]);
+    setMeetingsState((prev) => ({
+      projectId,
+      items: [newMeeting, ...(prev.projectId === projectId ? prev.items : [])],
+    }));
     if (autoJoin) {
-      setJoinedMeetingId(newMeeting.id);
+      setJoinedMeetingState({ projectId, meetingId: newMeeting.id });
     }
   };
 
@@ -145,12 +223,12 @@ export function ProjectCalendarTab({
         meetingId={joinedMeetingId}
         currentUserId={currentUserId ?? 0}
         onLeave={() => {
-          setJoinedMeetingId(null);
-          void loadMeetings();
+          setJoinedMeetingState(null);
+          void fetchProjectMeetings(projectId);
         }}
         onEndMeeting={() => {
-          setJoinedMeetingId(null);
-          void loadMeetings();
+          setJoinedMeetingState(null);
+          void fetchProjectMeetings(projectId);
         }}
       />
     );
@@ -376,11 +454,12 @@ export function ProjectCalendarTab({
                 {dayMeetings.map((m) => {
                   const isActive = m.status === "ACTIVE";
                   const isScheduled = m.status === "SCHEDULED";
-                  const timeDisplay = m.scheduledStartTime
-                    ? new Date(m.scheduledStartTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-                    : m.startedAt
-                    ? new Date(m.startedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-                    : t("calendar.flexible", { defaultValue: "Linh hoạt" });
+                  const rawTime = m.scheduledStartTime || m.startedAt;
+                  const parsedTime = rawTime ? new Date(rawTime) : null;
+                  const timeDisplay =
+                    parsedTime && !Number.isNaN(parsedTime.getTime())
+                      ? parsedTime.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+                      : t("calendar.flexible", { defaultValue: "Linh hoạt" });
 
                   return (
                     <Card
@@ -440,7 +519,7 @@ export function ProjectCalendarTab({
                         <div>
                           <Button
                             size="sm"
-                            onClick={() => setJoinedMeetingId(m.id)}
+                            onClick={() => setJoinedMeetingState({ projectId, meetingId: m.id })}
                             className={
                               isActive
                                 ? "bg-emerald-600 hover:bg-emerald-500 text-white gap-1.5 text-xs font-medium"
@@ -526,18 +605,19 @@ export function ProjectCalendarTab({
                     const isToday = d.dateStr === todayStr;
 
                     // Has items?
-                    const hasMeet = meetings.some((m) =>
-                      (m.scheduledStartTime || m.startedAt || "").startsWith(d.dateStr)
-                    );
-                    const hasTask = tasks.some((t) =>
-                      (t.dueDate || "").startsWith(d.dateStr)
-                    );
+                    const hasMeet = (meetingsByDay.get(d.dateStr)?.length ?? 0) > 0;
+                    const hasTask = (tasksByDay.get(d.dateStr)?.length ?? 0) > 0;
 
                     return (
                       <button
                         key={d.dateStr}
                         type="button"
-                        onClick={() => setSelectedDate(new Date(d.dateStr))}
+                        onClick={() => {
+                          const parsed = parseLocalDayKey(d.dateStr);
+                          if (parsed) {
+                            setSelectedDate(parsed);
+                          }
+                        }}
                         className={`h-7 rounded-md flex flex-col items-center justify-center relative transition-all ${
                           isSelected
                             ? "bg-primary text-primary-foreground font-bold shadow-xs"
@@ -621,12 +701,8 @@ export function ProjectCalendarTab({
               const isSelected = d.dateStr === selectedDateStr;
 
               // Items for this day
-              const dayMeets = meetings.filter((m) =>
-                (m.scheduledStartTime || m.startedAt || "").startsWith(d.dateStr)
-              );
-              const dayTs = tasks.filter((t) =>
-                (t.dueDate || "").startsWith(d.dateStr)
-              );
+              const dayMeets = meetingsByDay.get(d.dateStr) ?? [];
+              const dayTs = tasksByDay.get(d.dateStr) ?? [];
 
               return (
                 <div

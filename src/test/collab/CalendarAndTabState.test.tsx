@@ -71,6 +71,11 @@ vi.mock("@/services/meeting.service", () => ({
   },
 }));
 
+function todayAtLocalTime(hour: number, minute = 0): string {
+  const now = new Date();
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate(), hour, minute).toISOString();
+}
+
 const mockMeetings: any[] = [
   {
     id: 1,
@@ -84,8 +89,8 @@ const mockMeetings: any[] = [
     maxParticipants: 50,
     isRecording: false,
     startedAt: "",
-    scheduledStartTime: new Date().toISOString().split("T")[0] + "T10:00:00Z",
-    scheduledEndTime: new Date().toISOString().split("T")[0] + "T11:00:00Z",
+    scheduledStartTime: todayAtLocalTime(10),
+    scheduledEndTime: todayAtLocalTime(11),
     createdAt: new Date().toISOString(),
     isHost: false,
   },
@@ -101,8 +106,8 @@ const mockMeetings: any[] = [
     maxParticipants: 50,
     isRecording: false,
     startedAt: new Date().toISOString(),
-    scheduledStartTime: new Date().toISOString().split("T")[0] + "T09:00:00Z",
-    scheduledEndTime: new Date().toISOString().split("T")[0] + "T09:30:00Z",
+    scheduledStartTime: todayAtLocalTime(9),
+    scheduledEndTime: todayAtLocalTime(9, 30),
     createdAt: new Date().toISOString(),
     isHost: false,
   },
@@ -114,7 +119,7 @@ const mockTasks: any[] = [
     title: "Integrate Teams Calendar API",
     status: "IN_PROGRESS",
     priority: "HIGH",
-    dueDate: new Date().toISOString().split("T")[0] + "T18:00:00Z",
+    dueDate: todayAtLocalTime(18),
     assigneeId: 1,
     position: 1,
   },
@@ -176,7 +181,7 @@ describe("Calendar & Teams/Outlook Scheduling", () => {
       });
 
       // Meeting check
-      expect(screen.getByText("Sprint Planning & Outlook Sync")).toBeInTheDocument();
+      expect(await screen.findByText("Sprint Planning & Outlook Sync")).toBeInTheDocument();
       // Task check
       expect(screen.getByText("Integrate Teams Calendar API")).toBeInTheDocument();
 

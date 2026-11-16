@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Calendar as CalendarIcon,
   Clock,
@@ -24,6 +24,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
+import { localDayKey } from "@/lib/calendarDay";
 import { meetingService } from "@/services/meeting.service";
 import type { CreateMeetingRequest, ProjectMeetingDto } from "@/types/meeting";
 import type { ProjectMember } from "@/types/project";
@@ -52,11 +53,17 @@ export function ScheduleMeetingDialog({
   const [recordingEnabled, setRecordingEnabled] = useState(false);
 
   // Scheduling fields
-  const todayStr = defaultDate || new Date().toISOString().split("T")[0];
+  const todayStr = defaultDate || localDayKey(new Date());
   const [date, setDate] = useState(todayStr);
   const [startTime, setStartTime] = useState("09:00");
   const [endTime, setEndTime] = useState("10:00");
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (isOpen) {
+      setDate(defaultDate || localDayKey(new Date()));
+    }
+  }, [isOpen, defaultDate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -76,10 +83,20 @@ export function ScheduleMeetingDialog({
           setIsSubmitting(false);
           return;
         }
-        const startIso = new Date(`${date}T${startTime}:00`).toISOString();
-        const endIso = endTime ? new Date(`${date}T${endTime}:00`).toISOString() : undefined;
-        scheduledStart = startIso;
-        scheduledEnd = endIso;
+        const parsedStart = new Date(`${date}T${startTime}:00`);
+        if (Number.isNaN(parsedStart.getTime())) {
+          toast.error(t("calendar.datetime_required", { defaultValue: "Vui lòng chọn ngày và giờ bắt đầu" }));
+          setIsSubmitting(false);
+          return;
+        }
+        const parsedEnd = endTime ? new Date(`${date}T${endTime}:00`) : null;
+        if (parsedEnd && Number.isNaN(parsedEnd.getTime())) {
+          toast.error(t("calendar.datetime_required", { defaultValue: "Vui lòng chọn ngày và giờ bắt đầu" }));
+          setIsSubmitting(false);
+          return;
+        }
+        scheduledStart = parsedStart.toISOString();
+        scheduledEnd = parsedEnd ? parsedEnd.toISOString() : undefined;
       }
 
       const payload: CreateMeetingRequest = {
