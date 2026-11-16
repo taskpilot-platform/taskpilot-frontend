@@ -25,8 +25,18 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Textarea } from "@/components/ui/textarea";
-import { API_BASE_URL, getApiErrorMessage, refreshSessionSingleFlight } from "@/lib/http";
+import {
+  API_BASE_URL,
+  clearSessionState,
+  getApiErrorMessage,
+  refreshSessionSingleFlight,
+} from "@/lib/http";
 import { registerRealtimeCleanup } from "@/lib/realtime";
+import {
+  classifySseHttpStatus,
+  parseRealtimeAccessLostEvent,
+  TerminalRealtimeError,
+} from "@/lib/realtime-access";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { authStorage } from "@/lib/storage";
 import { cn } from "@/lib/utils";
@@ -638,6 +648,8 @@ export function ActivityTimeline({
   const { t } = useTranslation();
   const confirm = useConfirm();
   const commentRefs = useRef(new Map<number, HTMLDivElement>());
+  const activeTaskIdRef = useRef(taskId);
+  activeTaskIdRef.current = taskId;
   const [comments, setComments] = useState<TaskCommentDto[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -659,15 +671,29 @@ export function ActivityTimeline({
   }, []);
 
   const loadComments = useCallback(async () => {
+    const targetTaskId = taskId;
     setIsLoading(true);
     setLoadError(null);
     try {
-      const response = await taskService.getTaskComments(taskId);
+      const response = await taskService.getTaskComments(targetTaskId);
+      if (activeTaskIdRef.current !== targetTaskId) {
+        return;
+      }
       setComments(sortComments(response.data));
     } catch (error) {
+      if (activeTaskIdRef.current !== targetTaskId) {
+        return;
+      }
+      const status = (error as { response?: { status?: number } })?.response?.status;
+      if (status === 403 || status === 404) {
+        setComments([]);
+        setActiveEditor(null);
+      }
       setLoadError(getApiErrorMessage(error));
     } finally {
-      setIsLoading(false);
+      if (activeTaskIdRef.current === targetTaskId) {
+        setIsLoading(false);
+      }
     }
   }, [taskId]);
 
@@ -716,76 +742,236 @@ export function ActivityTimeline({
       return;
     }
 
-    const accessToken = authStorage.getAccessToken();
-    if (!accessToken) {
-      return;
-    }
+    let disposed = false;
+    const targetTaskId = taskId;
+    const lifecycleController = new AbortController();
+    commentStreamControllers.get(targetTaskId)?.abort();
+    commentStreamControllers.set(targetTaskId, lifecycleController);
 
-    const controller = new AbortController();
-    commentStreamControllers.get(taskId)?.abort();
-    commentStreamControllers.set(taskId, controller);
+    const isStale = () =>
+      disposed ||
+      lifecycleController.signal.aborted ||
+      activeTaskIdRef.current !== targetTaskId;
 
-    void fetchEventSource(`${API_BASE_URL}/v1/tasks/${taskId}/comments/stream`, {
-      signal: controller.signal,
-      openWhenHidden: true,
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        Accept: "text/event-stream",
-      },
-      async onopen(response) {
-        if (response.status === 401) {
-          await refreshSessionSingleFlight({ redirectOnFailure: true });
-          throw new Error("Unauthorized");
+    const sleepCancellable = (ms: number, signal: AbortSignal) =>
+      new Promise<boolean>((resolve) => {
+        if (signal.aborted) {
+          resolve(false);
+          return;
+        }
+        const timer = window.setTimeout(() => {
+          signal.removeEventListener("abort", onAbort);
+          resolve(!signal.aborted);
+        }, ms);
+        const onAbort = () => {
+          window.clearTimeout(timer);
+          resolve(false);
+        };
+        signal.addEventListener("abort", onAbort, { once: true });
+      });
+
+    const runStreamLoop = async () => {
+      let networkAttempts = 0;
+      let shouldRefetchOnOpen = false;
+
+      while (!isStale()) {
+        const currentToken = authStorage.getAccessToken();
+        if (!currentToken) {
+          return;
         }
 
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`);
-        }
+        const attemptController = new AbortController();
+        const abortAttempt = () => attemptController.abort();
+        lifecycleController.signal.addEventListener("abort", abortAttempt, { once: true });
 
-        const contentType = response.headers.get("content-type") || "";
-        if (!contentType.includes("text/event-stream")) {
-          throw new Error("Invalid SSE response");
-        }
-      },
-      onmessage(event) {
+        let refreshedForRetry = false;
+        let terminalLoss: TerminalRealtimeError | null = null;
+        let pendingRefresh: Promise<void> | null = null;
+
         try {
-          if (event.event === "comment.created" || event.event === "comment.updated") {
-            const nextComment = JSON.parse(event.data) as TaskCommentDto;
-            if (nextComment.taskId === taskId) {
-              setComments((current) => upsertComment(current, nextComment));
-            }
-          }
+          await fetchEventSource(`${API_BASE_URL}/v1/tasks/${targetTaskId}/comments/stream`, {
+            signal: attemptController.signal,
+            openWhenHidden: true,
+            headers: {
+              Authorization: `Bearer ${currentToken}`,
+              Accept: "text/event-stream",
+            },
+            async onopen(response) {
+              if (isStale()) {
+                attemptController.abort();
+                return;
+              }
+              if (response.status === 401) {
+                const refreshed = await refreshSessionSingleFlight({ redirectOnFailure: true });
+                if (isStale()) {
+                  return;
+                }
+                if (refreshed?.accessToken) {
+                  refreshedForRetry = true;
+                  shouldRefetchOnOpen = true;
+                  throw new Error("AUTH_REFRESHED");
+                }
+                terminalLoss = new TerminalRealtimeError("SESSION_REVOKED", "Unauthorized");
+                throw terminalLoss;
+              }
 
-          if (event.event === "comment.deleted") {
-            const deletedComment = JSON.parse(event.data) as TaskCommentDeletedEvent;
-            if (deletedComment.taskId === taskId) {
-              setComments((current) => markCommentDeleted(current, deletedComment));
-              setActiveEditor((current) =>
-                current?.commentId === deletedComment.commentId ? null : current,
-              );
-            }
-          }
+              if (!response.ok) {
+                const reason = classifySseHttpStatus(response.status);
+                if (reason === "PROJECT_ACCESS_REVOKED") {
+                  terminalLoss = new TerminalRealtimeError(
+                    "PROJECT_ACCESS_REVOKED",
+                    `HTTP ${response.status}`,
+                  );
+                  throw terminalLoss;
+                }
+                throw new Error(`HTTP ${response.status}`);
+              }
+
+              const contentType = response.headers.get("content-type") || "";
+              if (!contentType.includes("text/event-stream")) {
+                throw new Error("Invalid SSE response");
+              }
+
+              networkAttempts = 0;
+              if (shouldRefetchOnOpen) {
+                shouldRefetchOnOpen = false;
+                void loadComments();
+              }
+            },
+            onmessage(event) {
+              if (isStale() || attemptController.signal.aborted) {
+                return;
+              }
+              if (event.event === "realtime.access_lost") {
+                const reason = parseRealtimeAccessLostEvent(event.data) ?? "SESSION_REVOKED";
+                if (reason === "PROJECT_ACCESS_REVOKED") {
+                  setComments([]);
+                  setActiveEditor(null);
+                  setLoadError("You no longer have access to this task's project.");
+                  terminalLoss = new TerminalRealtimeError("PROJECT_ACCESS_REVOKED", reason);
+                  attemptController.abort();
+                  return;
+                }
+                if (reason === "SESSION_REVOKED") {
+                  setComments([]);
+                  setActiveEditor(null);
+                  terminalLoss = new TerminalRealtimeError("SESSION_REVOKED", reason);
+                  clearSessionState({ redirectToLogin: true });
+                  attemptController.abort();
+                  return;
+                }
+                if (reason === "AUTH_EXPIRED") {
+                  // Aborting resolves fetchEventSource immediately. Keep the loop suspended until
+                  // refresh finishes so it cannot reconnect using the expired Authorization header.
+                  pendingRefresh = refreshSessionSingleFlight({ redirectOnFailure: true }).then((tokens) => {
+                    if (isStale()) return;
+                    if (tokens?.accessToken) {
+                      refreshedForRetry = true;
+                      shouldRefetchOnOpen = true;
+                    } else {
+                      terminalLoss = new TerminalRealtimeError("SESSION_REVOKED", "Refresh failed");
+                      setComments([]);
+                      setActiveEditor(null);
+                    }
+                  }).catch(() => {
+                    if (!isStale()) {
+                      terminalLoss = new TerminalRealtimeError("SESSION_REVOKED", "Refresh failed");
+                      setComments([]);
+                      setActiveEditor(null);
+                    }
+                  });
+                  attemptController.abort();
+                  return;
+                }
+              }
+
+              try {
+                if (event.event === "comment.created" || event.event === "comment.updated") {
+                  const nextComment = JSON.parse(event.data) as TaskCommentDto;
+                  if (nextComment.taskId === targetTaskId) {
+                    setComments((current) => upsertComment(current, nextComment));
+                  }
+                }
+
+                if (event.event === "comment.deleted") {
+                  const deletedComment = JSON.parse(event.data) as TaskCommentDeletedEvent;
+                  if (deletedComment.taskId === targetTaskId) {
+                    setComments((current) => markCommentDeleted(current, deletedComment));
+                    setActiveEditor((current) =>
+                      current?.commentId === deletedComment.commentId ? null : current,
+                    );
+                  }
+                }
+              } catch (error) {
+                console.error("Failed to process comment event", error);
+              }
+            },
+            onerror(error) {
+              // Always throw so fetchEventSource never retries internally with a stale Authorization header.
+              throw error;
+            },
+          });
         } catch (error) {
-          console.error("Failed to process comment event", error);
+          if (isStale()) {
+            return;
+          }
+          if (terminalLoss || error instanceof TerminalRealtimeError) {
+            const reason = (terminalLoss ?? (error as TerminalRealtimeError)).reason;
+            if (reason === "PROJECT_ACCESS_REVOKED") {
+              setComments([]);
+              setActiveEditor(null);
+              setLoadError("You no longer have access to this task's project.");
+            } else {
+              setComments([]);
+              setActiveEditor(null);
+            }
+            return;
+          }
+          if (refreshedForRetry) {
+            continue;
+          }
+          const isAbortError = error instanceof DOMException && error.name === "AbortError";
+          if (!isAbortError) {
+            console.error("Comment stream disconnected", error);
+          }
+        } finally {
+          lifecycleController.signal.removeEventListener("abort", abortAttempt);
         }
-      },
-      onerror(error) {
-        throw error;
-      },
-    }).catch((error) => {
-      const isAbortError = error instanceof DOMException && error.name === "AbortError";
-      if (!controller.signal.aborted && !isAbortError) {
-        console.error("Comment stream disconnected", error);
-      }
-    });
 
-    return () => {
-      if (commentStreamControllers.get(taskId) === controller) {
-        commentStreamControllers.delete(taskId);
-        controller.abort();
+        if (pendingRefresh) {
+          await pendingRefresh;
+        }
+        if (isStale() || terminalLoss) {
+          return;
+        }
+        if (refreshedForRetry) {
+          continue;
+        }
+        networkAttempts += 1;
+        if (networkAttempts > 6) {
+          return;
+        }
+        shouldRefetchOnOpen = true;
+        const backoffMs = Math.min(15_000, 1000 * 2 ** (networkAttempts - 1));
+        const shouldContinue = await sleepCancellable(backoffMs, lifecycleController.signal);
+        if (!shouldContinue) {
+          return;
+        }
       }
     };
-  }, [isActive, taskId]);
+
+    void runStreamLoop();
+
+    return () => {
+      disposed = true;
+      if (commentStreamControllers.get(targetTaskId) === lifecycleController) {
+        commentStreamControllers.delete(targetTaskId);
+      }
+      if (!lifecycleController.signal.aborted) {
+        lifecycleController.abort();
+      }
+    };
+  }, [isActive, taskId, loadComments]);
 
   const handleCreateComment = async (
     content: string,

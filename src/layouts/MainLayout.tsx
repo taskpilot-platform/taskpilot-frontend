@@ -5,7 +5,17 @@ import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import logo from "@/assets/logo.svg";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { API_BASE_URL, getApiErrorMessage, refreshSessionSingleFlight } from "@/lib/http";
+import {
+  API_BASE_URL,
+  clearSessionState,
+  getApiErrorMessage,
+  refreshSessionSingleFlight,
+} from "@/lib/http";
+import {
+  classifySseHttpStatus,
+  parseRealtimeAccessLostEvent,
+  TerminalRealtimeError,
+} from "@/lib/realtime-access";
 import { useAuthStore } from "@/stores/auth.store";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import type { NotificationItem } from "@/types/notification";
@@ -24,9 +34,20 @@ type NotificationUnreadListener = (count: number) => void;
 let notificationStreamController: AbortController | null = null;
 let notificationStreamToken: string | null = null;
 let notificationStreamConsumers = 0;
+let notificationStreamGeneration = 0;
+let notificationReconnectTimer: number | null = null;
 const notificationUnreadListeners = new Set<NotificationUnreadListener>();
 
+const clearNotificationReconnectTimer = () => {
+  if (notificationReconnectTimer !== null) {
+    window.clearTimeout(notificationReconnectTimer);
+    notificationReconnectTimer = null;
+  }
+};
+
 const stopNotificationStream = () => {
+  notificationStreamGeneration += 1;
+  clearNotificationReconnectTimer();
   if (notificationStreamController && !notificationStreamController.signal.aborted) {
     notificationStreamController.abort();
   }
@@ -52,7 +73,7 @@ const notifyUnreadListeners = (count: number) => {
   });
 };
 
-const startNotificationStream = (token: string) => {
+const startNotificationStream = (token: string, attempt: number = 0) => {
   const hasActiveStream =
     notificationStreamController !== null &&
     !notificationStreamController.signal.aborted &&
@@ -64,9 +85,17 @@ const startNotificationStream = (token: string) => {
 
   stopNotificationStream();
 
+  const capturedGeneration = notificationStreamGeneration;
   const controller = new AbortController();
   notificationStreamController = controller;
   notificationStreamToken = token;
+
+  const isStale = () =>
+    capturedGeneration !== notificationStreamGeneration ||
+    controller.signal.aborted ||
+    notificationStreamConsumers === 0;
+
+  let terminalLoss: TerminalRealtimeError | null = null;
 
   void fetchEventSource(`${API_BASE_URL}/v1/notifications/my/stream`, {
     signal: controller.signal,
@@ -76,13 +105,30 @@ const startNotificationStream = (token: string) => {
       Accept: "text/event-stream",
     },
     async onopen(response) {
+      if (isStale()) {
+        controller.abort();
+        return;
+      }
       if (response.status === 401) {
         stopNotificationStream();
-        await refreshSessionSingleFlight({ redirectOnFailure: true });
-        throw new Error("Unauthorized");
+        terminalLoss = new TerminalRealtimeError("AUTH_EXPIRED", "Unauthorized");
+        const refreshed = await refreshSessionSingleFlight({ redirectOnFailure: true });
+        if (
+          refreshed?.accessToken &&
+          notificationStreamConsumers > 0 &&
+          capturedGeneration + 1 === notificationStreamGeneration
+        ) {
+          startNotificationStream(refreshed.accessToken, 0);
+        }
+        throw terminalLoss;
       }
 
       if (!response.ok) {
+        const reason = classifySseHttpStatus(response.status);
+        if (reason !== "NETWORK") {
+          terminalLoss = new TerminalRealtimeError(reason, `HTTP ${response.status}`);
+          throw terminalLoss;
+        }
         throw new Error(`HTTP ${response.status}`);
       }
 
@@ -92,6 +138,29 @@ const startNotificationStream = (token: string) => {
       }
     },
     onmessage(event) {
+      if (isStale()) {
+        return;
+      }
+      if (event.event === "realtime.access_lost") {
+        const reason = parseRealtimeAccessLostEvent(event.data) ?? "SESSION_REVOKED";
+        terminalLoss = new TerminalRealtimeError(reason, reason);
+        stopNotificationStream();
+        if (reason === "SESSION_REVOKED") {
+          clearSessionState({ redirectToLogin: true });
+        } else if (reason === "AUTH_EXPIRED") {
+          void refreshSessionSingleFlight({ redirectOnFailure: true }).then((refreshed) => {
+            if (
+              refreshed?.accessToken &&
+              notificationStreamConsumers > 0 &&
+              capturedGeneration + 1 === notificationStreamGeneration
+            ) {
+              startNotificationStream(refreshed.accessToken, 0);
+            }
+          });
+        }
+        return;
+      }
+
       if (event.event === "notification.unread-count") {
         const nextCount = parseNotificationUnreadCount(event.data);
         if (nextCount !== null) {
@@ -115,12 +184,30 @@ const startNotificationStream = (token: string) => {
       }
     },
     onerror(error) {
+      // Throw to prevent fetchEventSource from retrying with a stale Authorization header.
       throw error;
     },
   }).catch((error) => {
     const isAbortError = error instanceof DOMException && error.name === "AbortError";
-    if (!controller.signal.aborted && !isAbortError) {
+    if (isStale() || terminalLoss || error instanceof TerminalRealtimeError) {
+      return;
+    }
+    if (!isAbortError) {
       console.error("Notification stream disconnected", error);
+    }
+    if (attempt < 6) {
+      const delayMs = Math.min(15_000, 1000 * 2 ** attempt);
+      clearNotificationReconnectTimer();
+      notificationReconnectTimer = window.setTimeout(() => {
+        notificationReconnectTimer = null;
+        if (capturedGeneration !== notificationStreamGeneration || notificationStreamConsumers === 0) {
+          return;
+        }
+        const latestToken = authStorage.getAccessToken();
+        if (latestToken) {
+          startNotificationStream(latestToken, attempt + 1);
+        }
+      }, delayMs);
     }
   });
 };
