@@ -8,7 +8,6 @@ import type { ChatStreamPhase } from "@/types/chat-stream";
 import type {
   ToolEvent,
   PendingActionConfirmation,
-  ConfirmedTaskMutation,
 } from "@/components/ai/aiChatTypes";
 import {
   dedupeToolEvents,
@@ -21,26 +20,6 @@ export const MAX_PROMPT_CHARS = 4000;
 const STREAM_STATUS_NULL_RETRY_LIMIT = 3;
 const STREAM_STATUS_ERROR_RETRY_LIMIT = 3;
 const AI_STREAM_ERROR_TOAST_ID = "ai-stream-error-toast";
-
-const WRITE_TOOL_NAMES = new Set([
-  "createTask",
-  "updateTask",
-  "deleteTask",
-  "assignTask",
-  "recommendAndAssignTask",
-  "createProject",
-  "updateProject",
-  "deleteProject",
-  "createSprint",
-  "updateSprint",
-  "deleteSprint",
-  "addComment",
-  "updateComment",
-  "deleteComment",
-  "sendChannelAnnouncement",
-  "scheduleMeeting",
-  "createTasksFromMeetingActionItems",
-]);
 
 interface UseAiChatStreamOptions {
   activeSession: ChatSession | null;
@@ -96,7 +75,6 @@ export function useAiChatStream({
   const lastTypewriterPaintRef = useRef(0);
   const streamCompletedRef = useRef(false);
   const isFinalizingRef = useRef(false);
-  const pendingConfirmedMutationRef = useRef<ConfirmedTaskMutation | null>(null);
 
   activeSessionIdRef.current = activeSession?.id ?? null;
 
@@ -178,18 +156,6 @@ export function useAiChatStream({
     isFinalizingRef.current = false;
   };
 
-  const handleConfirmedMutationFinalized = () => {
-    const confirmedMutation = pendingConfirmedMutationRef.current;
-    if (!confirmedMutation) return;
-    pendingConfirmedMutationRef.current = null;
-    if (confirmedMutation.toolName && WRITE_TOOL_NAMES.has(confirmedMutation.toolName)) {
-      toast.success("Thao tác đã được thực hiện thành công.");
-    }
-    if (confirmedMutation.taskId) {
-      notifyTaskMutation(confirmedMutation);
-    }
-  };
-
   const finalizeSessionStream = async (targetSession: ChatSession) => {
     if (!isMountedRef.current) return;
     if (isFinalizingRef.current) return;
@@ -205,7 +171,6 @@ export function useAiChatStream({
     isStreamingRef.current = false;
     streamingSessionIdRef.current = null;
     await loadMessages(targetSession.id, true);
-    handleConfirmedMutationFinalized();
     resetStreamingUi();
     loadSessions();
   };
@@ -290,8 +255,7 @@ export function useAiChatStream({
             await loadMessagesRef.current(sessionId, true);
             await loadSessionsRef.current();
           }
-          handleConfirmedMutationFinalized();
-          return;
+                return;
         }
 
         if (status.phase === "FAILED") {
@@ -565,13 +529,22 @@ export function useAiChatStream({
     }
   }, [activeSession, loadMessages, loadSessions]);
 
-  const confirmPendingAction = (confirmation: PendingActionConfirmation) => {
-    pendingConfirmedMutationRef.current = mutationFromConfirmation(confirmation);
-    void sendMessage(`CONFIRM_ACTION ${confirmation.actionId} xác nhận đồng ý thực hiện`);
+  const confirmPendingAction = async (confirmation: PendingActionConfirmation) => {
+    const sessionId = activeSessionIdRef.current;
+    if (!sessionId || !confirmation.payloadHash) {
+      throw new Error("Bản xem trước không còn hợp lệ. Hãy yêu cầu AI tạo lại.");
+    }
+    await aiService.confirmAction(sessionId, confirmation.actionId, confirmation.payloadHash);
+    // Only the authenticated HTTP result establishes that the mutation committed.
+    const mutation = mutationFromConfirmation(confirmation);
+    if (mutation.taskId || mutation.projectId) notifyTaskMutation(mutation);
+    toast.success("Thao tác đã được thực hiện thành công.");
   };
 
-  const cancelPendingAction = (actionId: string) => {
-    void sendMessage(`CANCEL_ACTION ${actionId} hủy từ chối thao tác`);
+  const cancelPendingAction = async (actionId: string) => {
+    const sessionId = activeSessionIdRef.current;
+    if (!sessionId) throw new Error("Phiên trò chuyện không còn tồn tại.");
+    await aiService.cancelAction(sessionId, actionId);
   };
 
   const getLastPrompt = useCallback(() => lastPromptRef.current, []);

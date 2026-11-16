@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { Check, X } from "lucide-react";
+import { AiActionButtons } from "./AiActionButtons";
 import type { ToolEvent, PendingActionConfirmation, RecommendationView } from "./aiChatTypes";
 import { formatFriendlyToolPayload, parseConfirmationResult, isRecommendationView } from "./aiChatHelpers";
 import { TypewriterMarkdown } from "./TypewriterMarkdown";
@@ -74,24 +74,7 @@ export function ToolEventCard({
           <div className="px-3 pb-2.5 text-[12.5px] font-semibold text-neutral-700 dark:text-neutral-300">
             {confirmation.summary || "Bạn có muốn thực hiện thao tác ghi dữ liệu này không?"}
           </div>
-          <div className="grid grid-cols-2 border-t border-amber-500/20">
-            <button
-              type="button"
-              onClick={() => onConfirmAction?.(confirmation)}
-              className="flex items-center justify-center gap-1.5 py-2 text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 border-r border-amber-500/20 transition-colors"
-            >
-              <Check className="h-3 w-3" />
-              Xác nhận
-            </button>
-            <button
-              type="button"
-              onClick={() => onCancelAction?.(confirmation.actionId)}
-              className="flex items-center justify-center gap-1.5 py-2 text-xs font-bold text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 transition-colors"
-            >
-              <X className="h-3 w-3" />
-              Hủy
-            </button>
-          </div>
+          <AiActionButtons key={confirmation.actionId} confirmation={confirmation} onConfirm={onConfirmAction} onCancel={onCancelAction} />
         </div>
       )}
     </div>
