@@ -13,7 +13,7 @@ import {
 import { disconnectAllRealtime } from "@/lib/realtime";
 import { oneSignalLogin, oneSignalLogout } from "@/lib/onesignal";
 import { isTokenValid } from "@/lib/utils";
-import type { LoginRequest, RegisterRequest } from "@/types/auth";
+import type { AuthResponse, LoginRequest, RegisterRequest } from "@/types/auth";
 import type { UserProfile } from "@/types/user";
 
 interface AuthState {
@@ -27,8 +27,9 @@ interface AuthState {
   hydrate: () => Promise<void>;
   refreshProfile: () => Promise<UserProfile | null>;
   register: (payload: RegisterRequest) => Promise<void>;
-  login: (payload: LoginRequest) => Promise<void>;
-  loginWithOAuthCode: (code: string) => Promise<void>;
+  login: (payload: LoginRequest) => Promise<AuthResponse>;
+  confirmRestore: (ticket: string) => Promise<AuthResponse>;
+  loginWithOAuthCode: (code: string) => Promise<AuthResponse>;
   logout: () => Promise<void>;
 }
 
@@ -252,26 +253,68 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   login: async (payload) => {
-    prepareNewSessionCleanup();
-    const loginGeneration = bumpSessionGeneration();
-    inFlightProfileRefresh = null;
-    set({ isLoading: true, user: null, role: null, isHydrating: false });
+    set({ isLoading: true });
     try {
       const response = await authService.login(payload);
-      await completeSignIn(loginGeneration, response.data, set);
+      const data = response.data;
+      if ((!data.outcome || data.outcome === "AUTHENTICATED") && data.token && data.refreshToken) {
+        prepareNewSessionCleanup();
+        const loginGeneration = bumpSessionGeneration();
+        inFlightProfileRefresh = null;
+        set({ user: null, role: null, isHydrating: false });
+        await completeSignIn(
+          loginGeneration,
+          { token: data.token, refreshToken: data.refreshToken },
+          set,
+        );
+      }
+      return data;
+    } finally {
+      set({ isLoading: false });
+    }
+  },
+
+  confirmRestore: async (ticket: string) => {
+    set({ isLoading: true });
+    try {
+      const response = await authService.confirmRestore({ ticket });
+      const data = response.data;
+      if ((!data.outcome || data.outcome === "AUTHENTICATED") && data.token && data.refreshToken) {
+        prepareNewSessionCleanup();
+        const loginGeneration = bumpSessionGeneration();
+        inFlightProfileRefresh = null;
+        set({ user: null, role: null, isHydrating: false });
+        await completeSignIn(
+          loginGeneration,
+          { token: data.token, refreshToken: data.refreshToken },
+          set,
+        );
+      }
+      return data;
     } finally {
       set({ isLoading: false });
     }
   },
 
   loginWithOAuthCode: async (code: string) => {
-    prepareNewSessionCleanup();
-    const loginGeneration = bumpSessionGeneration();
-    inFlightProfileRefresh = null;
-    set({ isLoading: true, user: null, role: null, isHydrating: false });
+    set({ isLoading: true });
     try {
       const response = await authService.exchangeOAuthCode(code);
-      await completeSignIn(loginGeneration, response.data, set);
+      const data = response.data;
+      if ((!data.outcome || data.outcome === "AUTHENTICATED") && data.token && data.refreshToken) {
+        prepareNewSessionCleanup();
+        const loginGeneration = bumpSessionGeneration();
+        inFlightProfileRefresh = null;
+        set({ user: null, role: null, isHydrating: false });
+        await completeSignIn(
+          loginGeneration,
+          { token: data.token, refreshToken: data.refreshToken },
+          set,
+        );
+      } else if (data.outcome === "LINK_COMPLETED") {
+        await useAuthStore.getState().refreshProfile();
+      }
+      return data;
     } finally {
       set({ isLoading: false });
     }

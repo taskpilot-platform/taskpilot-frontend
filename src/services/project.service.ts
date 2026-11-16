@@ -1,10 +1,14 @@
 import { api } from "@/lib/http";
 import type {
+  AcceptProjectInvitationRequest,
+  CreateProjectInvitationRequest,
+  CreateProjectInvitationResponse,
   CreateProjectRequest,
   JoinProjectRequest,
   MyProject,
   PageResult,
   Project,
+  ProjectInvitation,
   ProjectMember,
   ProjectSummary,
   UpdateProjectRequest,
@@ -25,6 +29,14 @@ export const projectService = {
     api.put<Project>(`/v1/projects/${projectId}`, payload),
   joinProject: (payload: JoinProjectRequest) =>
     api.post<ProjectMember>("/v1/projects/join", payload),
+  listInvitations: (projectId: number) =>
+    api.get<ProjectInvitation[]>(`/v1/projects/${projectId}/invitations`),
+  createInvitation: (projectId: number, payload: CreateProjectInvitationRequest) =>
+    api.post<CreateProjectInvitationResponse>(`/v1/projects/${projectId}/invitations`, payload),
+  revokeInvitation: (projectId: number, invitationId: number) =>
+    api.del<null>(`/v1/projects/${projectId}/invitations/${invitationId}`),
+  acceptInvitation: (payload: AcceptProjectInvitationRequest) =>
+    api.post<ProjectMember>("/v1/projects/invitations/accept", payload),
   leaveProject: (projectId: number) =>
     api.del<null>(`/v1/projects/${projectId}/leave`),
   getProjectSummary: (projectId: number) =>

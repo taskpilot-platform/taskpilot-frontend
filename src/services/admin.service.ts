@@ -6,8 +6,10 @@ import type {
   AdminUpdateUserRequest,
   AdminSkillResponse,
   AdminSkillRequest,
+  ProjectAttentionItem,
   SystemSettingResponse,
   SystemSettingUpdateRequest,
+  TransferProjectManagerRequest,
 } from "@/types/admin";
 
 export const adminUserService = {
@@ -23,10 +25,29 @@ export const adminUserService = {
     api.post<AdminUserResponse>("/v1/admin/users", payload),
   updateUser: (id: number, payload: AdminUpdateUserRequest) =>
     api.put<AdminUserResponse>(`/v1/admin/users/${id}`, payload),
+  suspendUser: (id: number, reason?: string) =>
+    api.post<AdminUserResponse>(
+      reason?.trim()
+        ? `/v1/admin/users/${id}/suspend?reason=${encodeURIComponent(reason.trim())}`
+        : `/v1/admin/users/${id}/suspend`,
+    ),
+  reactivateUser: (id: number, reason?: string) =>
+    api.post<AdminUserResponse>(
+      reason?.trim()
+        ? `/v1/admin/users/${id}/reactivate?reason=${encodeURIComponent(reason.trim())}`
+        : `/v1/admin/users/${id}/reactivate`,
+    ),
   deactivateUser: (id: number) =>
     api.del<null>(`/v1/admin/users/${id}`),
   resetPassword: (id: number) =>
     api.put<null>(`/v1/admin/users/${id}/reset-password`),
+};
+
+export const adminProjectRecoveryService = {
+  listAttentionRequired: () =>
+    api.get<ProjectAttentionItem[]>("/v1/admin/projects/attention-required"),
+  transferManager: (projectId: number, payload: TransferProjectManagerRequest) =>
+    api.post<null>(`/v1/admin/projects/${projectId}/transfer-manager`, payload),
 };
 
 export const adminSkillService = {
