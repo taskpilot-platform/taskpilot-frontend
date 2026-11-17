@@ -29,4 +29,5 @@ report/
 test-results/
 playwright-report/
 e2e-results.json
+e2e-live-results.json
 scripts/ui-automation/temp/

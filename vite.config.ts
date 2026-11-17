@@ -20,7 +20,7 @@ export default defineConfig(({ mode }) => {
       setupFiles: "./src/test/setup.ts",
       pool: "threads",
       fileParallelism: false,
-      exclude: ["**/node_modules/**", "**/dist/**", "**/e2e/**"],
+      exclude: ["**/node_modules/**", "**/dist/**", "**/e2e/**", "**/e2e-live/**"],
     },
     server: {
       host: true,

@@ -196,9 +196,10 @@ export async function setupWorkspaceMocks(
         message: "Success",
         data: {
           totalTasks: 12,
-          completedTasks: 8,
+          todoTasks: 1,
           inProgressTasks: 3,
-          pendingTasks: 1,
+          reviewTasks: 0,
+          doneTasks: 8,
           completionRate: 67,
         },
       }),
@@ -244,6 +245,47 @@ export async function setupWorkspaceMocks(
         status: 200,
         message: "Success",
         data: [],
+      }),
+    });
+  });
+
+  await page.route(/\/(?:api\/)?v1\/tasks\/\d+\/workflow$/, async (route) => {
+    const match = route.request().url().match(/\/v1\/tasks\/(\d+)\/workflow$/);
+    const taskId = match ? Number(match[1]) : 1;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        status: 200,
+        message: "Success",
+        data: {
+          taskId,
+          projectId: 100,
+          taskVersion: 0,
+          assignmentVersion: 0,
+          criteriaRevision: 0,
+          dueCommitmentRevision: 0,
+          status: "TODO",
+          completionEvidenceStatus: null,
+          completedAt: null,
+          currentSubmissionId: null,
+          currentEvaluationId: null,
+          legacyReviewMissingSubmission: false,
+          otherActiveManagersExist: true,
+          canSubmit: false,
+          canWithdraw: false,
+          canReview: false,
+          canSelfAttest: false,
+          canReopen: false,
+          canSupersede: false,
+          canRecoverLegacyReview: false,
+          rubricVersion: "quality-v1",
+          rubric: [],
+          submissions: [],
+          reviews: [],
+          evaluations: [],
+          deadlineRevisions: [],
+        },
       }),
     });
   });
