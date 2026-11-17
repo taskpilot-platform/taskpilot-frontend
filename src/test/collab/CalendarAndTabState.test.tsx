@@ -33,7 +33,8 @@ vi.mock("@/services/project.service", () => ({
     getProjectSummary: vi.fn().mockResolvedValue({
       data: {
         totalTasks: 10,
-        completedTasks: 5,
+        doneTasks: 5,
+        reviewTasks: 0,
         inProgressTasks: 3,
         todoTasks: 2,
       },

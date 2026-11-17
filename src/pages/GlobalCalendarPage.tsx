@@ -303,6 +303,7 @@ export default function GlobalCalendarPage() {
           <ProjectCalendarTab
             key={`calendar-project-${selectedProjectId}`}
             projectId={selectedProjectId}
+            projectTimezoneId={projects.find((p) => p.id === selectedProjectId)?.timezoneId}
             projectMembers={projectMembers}
             tasks={tasks}
             currentUserId={currentUserId}

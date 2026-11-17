@@ -37,6 +37,7 @@ describe("P2 Frontend Private Project Invitations", () => {
         workflowMode: "KANBAN",
         startDate: null,
         endDate: null,
+        timezoneId: "Asia/Ho_Chi_Minh",
         createdAt: "2026-01-01T00:00:00Z",
       },
     });

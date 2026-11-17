@@ -649,9 +649,10 @@ export default function ProjectsPage() {
                     {[
                       { l: t("projects.member_count"), v: projectSummary?.totalMembers ?? 0 },
                       { l: t("projects.task_count"), v: projectSummary?.totalTasks ?? 0 },
-                      { l: t("projects.task_done"), v: projectSummary?.completedTasks ?? 0 },
+                      { l: t("projects.task_done"), v: projectSummary?.doneTasks ?? 0 },
+                      { l: t("projects.task_review", { defaultValue: "Review" }), v: projectSummary?.reviewTasks ?? 0 },
                       { l: t("projects.task_wip"), v: projectSummary?.inProgressTasks ?? 0 },
-                      { l: t("projects.task_todo"), v: projectSummary?.pendingTasks ?? 0 },
+                      { l: t("projects.task_todo"), v: projectSummary?.todoTasks ?? 0 },
                       { l: t("projects.progress"), v: `${Number(projectSummary?.completionRate ?? 0).toFixed(1)}%` },
                     ].map((s) => (
                       <div key={s.l} className="flex items-center justify-between">
