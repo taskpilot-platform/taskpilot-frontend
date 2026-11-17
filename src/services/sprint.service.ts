@@ -1,8 +1,11 @@
-import { api } from "@/lib/http";
+import { api, createRequestId } from "@/lib/http";
 import type {
   BacklogResponse,
   BoardResponse,
+  CompleteSprintRequest,
   CreateSprintRequest,
+  SprintClosureSnapshotDto,
+  SprintCompletePreviewResponse,
   SprintDto,
   UpdateSprintRequest,
 } from "@/types/sprint";
@@ -19,8 +22,18 @@ export const sprintService = {
     api.del<null>(`/v1/projects/${projectId}/sprints/${sprintId}`),
   startSprint: (projectId: number, sprintId: number) =>
     api.post<SprintDto>(`/v1/projects/${projectId}/sprints/${sprintId}/start`),
-  completeSprint: (projectId: number, sprintId: number) =>
-    api.post<SprintDto>(`/v1/projects/${projectId}/sprints/${sprintId}/complete`),
+  getCompletePreview: (projectId: number, sprintId: number) =>
+    api.get<SprintCompletePreviewResponse>(`/v1/projects/${projectId}/sprints/${sprintId}/complete-preview`),
+  completeSprint: (projectId: number, sprintId: number, payload: CompleteSprintRequest, requestId?: string) => {
+    const resolvedRequestId = requestId ?? payload.requestId ?? createRequestId();
+    return api.post<SprintDto>(
+      `/v1/projects/${projectId}/sprints/${sprintId}/complete`,
+      { ...payload, requestId: resolvedRequestId },
+      { headers: { "Idempotency-Key": resolvedRequestId } },
+    );
+  },
+  getClosureSnapshot: (projectId: number, sprintId: number) =>
+    api.get<SprintClosureSnapshotDto>(`/v1/projects/${projectId}/sprints/${sprintId}/closure-snapshot`),
   getBacklog: (projectId: number) =>
     api.get<BacklogResponse>(`/v1/projects/${projectId}/backlog`),
   getBoard: (projectId: number) =>

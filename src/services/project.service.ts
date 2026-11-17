@@ -1,4 +1,4 @@
-import { api } from "@/lib/http";
+import { api, createRequestId } from "@/lib/http";
 import type {
   AcceptProjectInvitationRequest,
   CreateProjectInvitationRequest,
@@ -8,6 +8,7 @@ import type {
   MyProject,
   PageResult,
   Project,
+  ProjectDeletionAuditDto,
   ProjectInvitation,
   ProjectMember,
   ProjectSummary,
@@ -51,6 +52,12 @@ export const projectService = {
     api.post<null>(`/v1/projects/${projectId}/archive`),
   restoreProject: (projectId: number) =>
     api.post<null>(`/v1/projects/${projectId}/restore`),
-  deleteProject: (projectId: number) =>
-    api.del<null>(`/v1/projects/${projectId}`),
+  deleteProject: (projectId: number, confirmationText: string, requestId?: string) => {
+    const resolvedRequestId = requestId ?? createRequestId();
+    return api.del<ProjectDeletionAuditDto>(
+      `/v1/projects/${projectId}`,
+      { confirmationText, requestId: resolvedRequestId },
+      { headers: { "Idempotency-Key": resolvedRequestId } },
+    );
+  },
 };

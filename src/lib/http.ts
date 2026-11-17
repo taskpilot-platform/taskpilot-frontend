@@ -1,5 +1,5 @@
 import axios, { AxiosHeaders } from "axios";
-import type { AxiosError, InternalAxiosRequestConfig } from "axios";
+import type { AxiosError, AxiosRequestConfig, InternalAxiosRequestConfig } from "axios";
 import type { ApiErrorResponse, ApiResponse } from "@/types/api";
 import type { AuthResponse } from "@/types/auth";
 import { AUTH_STORAGE_KEYS, authStorage } from "@/lib/storage";
@@ -490,17 +490,35 @@ http.interceptors.response.use(
   },
 );
 
+export function createRequestId(): string {
+  if (typeof globalThis.crypto?.randomUUID === "function") {
+    return globalThis.crypto.randomUUID();
+  }
+  const bytes = new Uint8Array(16);
+  if (typeof globalThis.crypto?.getRandomValues === "function") {
+    globalThis.crypto.getRandomValues(bytes);
+  } else {
+    for (let i = 0; i < 16; i += 1) {
+      bytes[i] = Math.floor(Math.random() * 256);
+    }
+  }
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, "0"));
+  return `${hex.slice(0, 4).join("")}-${hex.slice(4, 6).join("")}-${hex.slice(6, 8).join("")}-${hex.slice(8, 10).join("")}-${hex.slice(10, 16).join("")}`;
+}
+
 export const api = {
   get: <T>(url: string, params?: Record<string, unknown>) =>
     http.get<ApiResponse<T>>(url, { params }).then((r) => r.data),
-  post: <T>(url: string, data?: unknown) =>
-    http.post<ApiResponse<T>>(url, data).then((r) => r.data),
-  put: <T>(url: string, data?: unknown) =>
-    http.put<ApiResponse<T>>(url, data).then((r) => r.data),
-  patch: <T>(url: string, data?: unknown) =>
-    http.patch<ApiResponse<T>>(url, data).then((r) => r.data),
-  del: <T>(url: string, params?: Record<string, unknown>) =>
-    http.delete<ApiResponse<T>>(url, { params }).then((r) => r.data),
+  post: <T>(url: string, data?: unknown, config?: AxiosRequestConfig) =>
+    http.post<ApiResponse<T>>(url, data, config).then((r) => r.data),
+  put: <T>(url: string, data?: unknown, config?: AxiosRequestConfig) =>
+    http.put<ApiResponse<T>>(url, data, config).then((r) => r.data),
+  patch: <T>(url: string, data?: unknown, config?: AxiosRequestConfig) =>
+    http.patch<ApiResponse<T>>(url, data, config).then((r) => r.data),
+  del: <T>(url: string, params?: Record<string, unknown>, config?: AxiosRequestConfig) =>
+    http.delete<ApiResponse<T>>(url, { ...config, params }).then((r) => r.data),
 };
 
 export function getApiErrorMessage(error: unknown): string {
