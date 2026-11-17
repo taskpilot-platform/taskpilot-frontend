@@ -11,7 +11,7 @@ import type {
 } from "./aiChatTypes";
 import i18n from "../../lib/i18n";
 
-export const WRITE_TOOL_NAMES = new Set(["assignTaskToMember", "assignTaskToMemberByName", "recommendAndAssignTask", "updateTaskRequiredSkills", "updateTaskStatus", "patchTask", "patchProject", "patchSprint", "patchTaskComment", "createSystemSkill", "patchSystemSkill", "deleteSystemSkill", "addMySkill", "patchMySkill", "deleteMySkill", "markNotificationRead", "markAllNotificationsRead", "createTask", "createSprint", "startSprint", "completeSprint", "assignTaskToSprint", "sendChannelAnnouncement", "scheduleMeeting", "createTasksFromMeetingActionItems"]);
+export const WRITE_TOOL_NAMES = new Set(["assignTaskToMember", "assignTaskToMemberByName", "recommendAndAssignTask", "updateTaskRequiredSkills", "updateTaskStatus", "patchTask", "submitTaskWork", "withdrawTaskSubmission", "reviewTaskSubmission", "reopenTask", "supersedeTaskEvaluation", "patchProject", "patchSprint", "patchTaskComment", "createSystemSkill", "patchSystemSkill", "deleteSystemSkill", "addMySkill", "patchMySkill", "deleteMySkill", "markNotificationRead", "markAllNotificationsRead", "createTask", "createSprint", "startSprint", "completeSprint", "assignTaskToSprint", "sendChannelAnnouncement", "scheduleMeeting", "createTasksFromMeetingActionItems"]);
 
 export function createAssignmentRow(taskId = "", id?: string): AssignmentRequirementRow {
   return {
@@ -480,6 +480,11 @@ export const TOOL_NAME_MAPPING: Record<string, string> = {
   createTask: "Tạo task mới",
   updateTask: "Cập nhật task",
   deleteTask: "Xóa task",
+  submitTaskWork: "Nộp task để duyệt",
+  withdrawTaskSubmission: "Rút bài nộp",
+  reviewTaskSubmission: "Nghiệm thu / Trả lại task",
+  reopenTask: "Mở lại task",
+  supersedeTaskEvaluation: "Cập nhật đánh giá nghiệm thu",
   searchTasks: "Tìm kiếm task",
   getTaskComments: "Bình luận",
   addTaskComment: "Thêm bình luận",

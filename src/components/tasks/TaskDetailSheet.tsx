@@ -4,8 +4,10 @@ import { TaskTitleSection } from "./TaskTitleSection";
 import { TaskDescriptionSection } from "./TaskDescriptionSection";
 import { SubtaskTreeSection } from "./SubtaskTreeSection";
 import { TaskMetadataSidebar } from "./TaskMetadataSidebar";
+import { TaskWorkflowPanel } from "./TaskWorkflowPanel";
 import { ActivityTimeline } from "./ActivityTimeline";
-import type { TaskDetailDto, TaskPriority, TaskStatus } from "@/types/task";
+import type { TaskDetailDto } from "@/types/task";
+import type { TaskSidebarPatchPayload } from "./TaskMetadataSidebar";
 import type { ProjectMember } from "@/types/project";
 
 interface Props {
@@ -13,9 +15,11 @@ interface Props {
   onOpenChange: (open: boolean) => void;
   taskDetail: TaskDetailDto | null;
   projectMembers: ProjectMember[];
+  projectTimezoneId?: string;
   onDeleteTask: () => void;
-  onUpdateTask: (payload: { title?: string; description?: string; assigneeId?: number; status?: TaskStatus; priority?: TaskPriority; startDate?: string; dueDate?: string; labelIds?: number[]; requiredSkillIds?: number[] }) => Promise<void>;
+  onUpdateTask: (payload: TaskSidebarPatchPayload) => Promise<void>;
   onCreateSubtask: (title: string) => Promise<void>;
+  onWorkflowChanged?: () => Promise<void> | void;
   onOpenTaskDetail: (taskId: number) => void;
   isManager: boolean;
   currentUserId: number | null;
@@ -27,9 +31,11 @@ export function TaskDetailSheet({
   onOpenChange,
   taskDetail,
   projectMembers,
+  projectTimezoneId,
   onDeleteTask,
   onUpdateTask,
   onCreateSubtask,
+  onWorkflowChanged,
   onOpenTaskDetail,
   isManager,
   currentUserId,
@@ -75,6 +81,13 @@ export function TaskDetailSheet({
               onSave={async (val) => onUpdateTask({ description: val })} 
             />
 
+            <TaskWorkflowPanel
+              task={task}
+              projectTimezoneId={projectTimezoneId || task.projectTimezoneId}
+              isReadOnly={isReadOnly}
+              onWorkflowChanged={onWorkflowChanged ?? (() => {})}
+            />
+
             <SubtaskTreeSection 
               subtasks={subtasks} 
               onOpenTask={onOpenTaskDetail} 
@@ -95,6 +108,7 @@ export function TaskDetailSheet({
           <div className="space-y-6">
             <TaskMetadataSidebar 
               projectId={task.projectId}
+              projectTimezoneId={projectTimezoneId || task.projectTimezoneId}
               assigneeId={task.assigneeId}
               status={task.status}
               priority={task.priority}
