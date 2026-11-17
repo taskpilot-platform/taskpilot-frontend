@@ -308,7 +308,18 @@ describe("P4.3 Calendar Views Local Day Grouping", () => {
   });
 
   it("ScheduleMeetingDialog initializes default date locally and serializes scheduled times to UTC ISO", async () => {
-    await withSimulatedZone("Asia/Bangkok", "2026-11-15T01:00:00+07:00", async () => {
+    // Exercise native local datetime parsing. The display-only ZonedDate above cannot
+    // simulate Date's string constructor and used to silently depend on the host TZ.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(2026, 10, 15, 1, 0, 0));
+    try {
+      const offsetMinutes = new Date(2026, 10, 15, 9, 0, 0).getTimezoneOffset();
+      const matrixOffsets: Record<string, number> = { UTC: 0, "Asia/Bangkok": -420, "America/New_York": 300 };
+      const expectedZone = import.meta.env.VITE_CALENDAR_TEST_TZ as string | undefined;
+      if (expectedZone && expectedZone in matrixOffsets) {
+        expect(Intl.DateTimeFormat().resolvedOptions().timeZone).toBe(expectedZone);
+        expect(offsetMinutes).toBe(matrixOffsets[expectedZone]);
+      }
       const createSpy = vi
         .spyOn(meetingService, "createMeeting")
         .mockResolvedValue({
@@ -346,11 +357,13 @@ describe("P4.3 Calendar Views Local Day Grouping", () => {
           100,
           expect.objectContaining({
             title: "Scheduled Sync",
-            scheduledStartTime: "2026-11-15T02:00:00.000Z",
-            scheduledEndTime: "2026-11-15T03:00:00.000Z",
+            scheduledStartTime: new Date(Date.UTC(2026, 10, 15, 9) + offsetMinutes * 60_000).toISOString(),
+            scheduledEndTime: new Date(Date.UTC(2026, 10, 15, 10) + offsetMinutes * 60_000).toISOString(),
           }),
         );
       });
-    });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
