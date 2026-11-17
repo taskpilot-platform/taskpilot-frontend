@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { toast } from "react-toastify";
@@ -28,11 +28,21 @@ import { useLeaveProject } from "@/hooks/useLeaveProject";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 import { Form, FormControl, FormField, FormItem, FormLabel } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 
-import { getApiErrorMessage } from "@/lib/http";
+import { createRequestId, getApiErrorMessage } from "@/lib/http";
+import { isSupportedProjectTimezone } from "@/lib/projectTaskDate";
 import { projectService } from "@/services/project.service";
 import { labelService } from "@/services/label.service";
 import { profileService } from "@/services/profile.service";
@@ -50,9 +60,28 @@ const projectFormSchema = z.object({
   status: z.enum(["PLANNING", "ACTIVE", "COMPLETED"]),
   heuristicMode: z.enum(["BALANCED", "URGENT", "TRAINING"]).optional(),
   workflowMode: z.enum(["KANBAN", "SCRUM"]),
+  timezoneId: z
+    .string()
+    .min(1, "Timezone is required")
+    .refine(
+      (val) => isSupportedProjectTimezone(val),
+      "Timezone must be \"UTC\" or a canonical IANA region ID (e.g. Asia/Ho_Chi_Minh)",
+    ),
   startDate: z.string().optional(),
   endDate: z.string().optional(),
 });
+
+const COMMON_PROJECT_TIMEZONES = [
+  "Asia/Ho_Chi_Minh",
+  "UTC",
+  "Asia/Singapore",
+  "Asia/Tokyo",
+  "Europe/London",
+  "Europe/Berlin",
+  "America/New_York",
+  "America/Los_Angeles",
+  "Australia/Sydney",
+];
 
 export default function ProjectSettingsPage() {
   const { t } = useTranslation();
@@ -75,11 +104,15 @@ export default function ProjectSettingsPage() {
   const [newLabelName, setNewLabelName] = useState("");
   const [newLabelColor, setNewLabelColor] = useState("#6366F1");
   const [isCreatingLabel, setIsCreatingLabel] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  const [isDeletingProject, setIsDeletingProject] = useState(false);
+  const deleteRequestIdRef = useRef<string>(createRequestId());
   const { isLeaving, handleLeaveProject } = useLeaveProject(currentProjectId, projectMembers, myUserId);
 
   const form = useForm<z.infer<typeof projectFormSchema>>({
     resolver: zodResolver(projectFormSchema),
-    defaultValues: { name: "", description: "", status: "ACTIVE", workflowMode: "KANBAN" },
+    defaultValues: { name: "", description: "", status: "ACTIVE", workflowMode: "KANBAN", timezoneId: "Asia/Ho_Chi_Minh" },
   });
 
   const loadData = async () => {
@@ -102,6 +135,7 @@ export default function ProjectSettingsPage() {
         status: projRes.data.status as "PLANNING" | "ACTIVE" | "COMPLETED",
         heuristicMode: projRes.data.heuristicMode || "BALANCED",
         workflowMode: projRes.data.workflowMode || "KANBAN",
+        timezoneId: projRes.data.timezoneId || "Asia/Ho_Chi_Minh",
         startDate: projRes.data.startDate ? projRes.data.startDate.split("T")[0] : "",
         endDate: projRes.data.endDate ? projRes.data.endDate.split("T")[0] : "",
       });
@@ -141,6 +175,7 @@ export default function ProjectSettingsPage() {
         status: values.status,
         heuristicMode: values.heuristicMode,
         workflowMode: values.workflowMode,
+        timezoneId: values.timezoneId,
         startDate: values.startDate || undefined,
         endDate: values.endDate || undefined,
       });
@@ -277,17 +312,29 @@ export default function ProjectSettingsPage() {
     }
   };
 
+  const openDeleteProjectDialog = () => {
+    deleteRequestIdRef.current = createRequestId();
+    setDeleteConfirmText("");
+    setIsDeleteDialogOpen(true);
+  };
+
   const handleDeleteProject = async () => {
-    if (!window.prompt("DANGER: Type the project ID to confirm deletion:")?.includes(currentProjectId.toString())) {
-      toast.error("Deletion cancelled");
+    const trimmed = deleteConfirmText.trim();
+    const idText = currentProjectId.toString();
+    if (trimmed !== idText && trimmed.toUpperCase() !== `DELETE ${idText}`) {
+      toast.error(`Type "${idText}" or "DELETE ${idText}" to confirm permanent deletion.`);
       return;
     }
+    setIsDeletingProject(true);
     try {
-      await projectService.deleteProject(currentProjectId);
+      await projectService.deleteProject(currentProjectId, trimmed, deleteRequestIdRef.current);
       toast.success("Project deleted permanently");
+      setIsDeleteDialogOpen(false);
       navigate("/projects");
     } catch (err) {
       toast.error(getApiErrorMessage(err));
+    } finally {
+      setIsDeletingProject(false);
     }
   };
 
@@ -385,17 +432,36 @@ export default function ProjectSettingsPage() {
                     </FormItem>
                   )} />
                 </div>
-                <FormField control={form.control} name="workflowMode" render={({ field }) => (
-                  <FormItem><FormLabel>Workflow Mode</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value} disabled={isArchived}>
-                      <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                      <SelectContent>
-                        <SelectItem value="KANBAN">Kanban - Board shows all project tasks</SelectItem>
-                        <SelectItem value="SCRUM">Scrum - Board shows only active sprint tasks</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </FormItem>
-                )} />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <FormField control={form.control} name="workflowMode" render={({ field }) => (
+                    <FormItem><FormLabel>Workflow Mode</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value} disabled={isArchived}>
+                        <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                        <SelectContent>
+                          <SelectItem value="KANBAN">Kanban - Board shows all project tasks</SelectItem>
+                          <SelectItem value="SCRUM">Scrum - Board shows only active sprint tasks</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </FormItem>
+                  )} />
+                  <FormField control={form.control} name="timezoneId" render={({ field }) => {
+                    const zoneOptions = COMMON_PROJECT_TIMEZONES.includes(field.value)
+                      ? COMMON_PROJECT_TIMEZONES
+                      : [field.value, ...COMMON_PROJECT_TIMEZONES].filter(Boolean);
+                    return (
+                      <FormItem><FormLabel>Project Timezone</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value} disabled={isArchived}>
+                          <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                          <SelectContent>
+                            {zoneOptions.map((tz) => (
+                              <SelectItem key={tz} value={tz}>{tz}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </FormItem>
+                    );
+                  }} />
+                </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <FormField control={form.control} name="startDate" render={({ field }) => (
                     <FormItem><FormLabel>Start Date</FormLabel>
@@ -646,13 +712,48 @@ export default function ProjectSettingsPage() {
                 <h4 className="font-semibold text-sm text-red-600 dark:text-red-400">Delete Project</h4>
                 <p className="text-sm text-muted-foreground">Permanently delete this project and all its data. This action is irreversible.</p>
               </div>
-              <Button variant="destructive" onClick={handleDeleteProject}>
+              <Button variant="destructive" onClick={openDeleteProjectDialog}>
                 <Trash2 className="w-4 h-4 mr-2" /> Delete Project
               </Button>
             </div>
           </CardContent>
         </Card>
       </div>
+
+      <Dialog open={isDeleteDialogOpen} onOpenChange={(open) => !open && setIsDeleteDialogOpen(false)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="text-red-600 dark:text-red-400 flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5" />
+              Permanently Delete Project
+            </DialogTitle>
+            <DialogDescription>
+              This permanently purges all sprints, tasks, submissions, evaluations, AI snapshots/outcomes, and
+              schedules durable storage cleanup. Only a deletion audit record survives.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 py-2">
+            <Label htmlFor="delete-project-confirm-input">
+              Type <span className="font-mono font-semibold">{currentProjectId}</span> or{" "}
+              <span className="font-mono font-semibold">DELETE {currentProjectId}</span> to confirm:
+            </Label>
+            <Input
+              id="delete-project-confirm-input"
+              value={deleteConfirmText}
+              onChange={(e) => setDeleteConfirmText(e.target.value)}
+              placeholder={`DELETE ${currentProjectId}`}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsDeleteDialogOpen(false)} disabled={isDeletingProject}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleDeleteProject} disabled={isDeletingProject}>
+              {isDeletingProject ? "Deleting..." : "Confirm Permanent Delete"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import React, { forwardRef, useEffect, useMemo, useState, type ComponentPropsWithoutRef } from "react";
+import React, { forwardRef, useEffect, useMemo, useRef, useState, type ComponentPropsWithoutRef } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import {
   LayoutDashboard,
@@ -60,7 +60,13 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-import { getApiErrorMessage } from "@/lib/http";
+import { createRequestId, getApiErrorMessage } from "@/lib/http";
+import {
+  formatInstantToProjectDateInput,
+  hasObservedTaskVersion,
+  isTaskVersionConflictError,
+  isValidTaskDateRange as checkTaskDateRange,
+} from "@/lib/projectTaskDate";
 import { projectService } from "@/services/project.service";
 import { taskService } from "@/services/task.service";
 import { sprintService } from "@/services/sprint.service";
@@ -68,13 +74,16 @@ import { profileService } from "@/services/profile.service";
 import { projectStorage } from "@/lib/storage";
 import { getTaskTone, TASK_TONE_CLASS } from "@/lib/task-tone";
 import { TaskDetailSheet } from "@/components/tasks/TaskDetailSheet";
+import { TaskWorkflowDialogs, type ActiveWorkflowDialogKind } from "@/components/tasks/TaskWorkflowDialogs";
+import { CompleteSprintDialog } from "@/components/sprints/CompleteSprintDialog";
+import type { TaskSidebarPatchPayload } from "@/components/tasks/TaskMetadataSidebar";
 import { ProjectKnowledgeTab } from "@/components/knowledge/ProjectKnowledgeTab";
 import { ProjectFilesTab } from "@/components/files/ProjectFilesTab";
 import { ProjectChatTab } from "@/components/chat/ProjectChatTab";
 import { ProjectMeetingsTab } from "@/components/meetings/ProjectMeetingsTab";
 import { ProjectCalendarTab } from "@/components/calendar/ProjectCalendarTab";
 import type { MyProject, Project, ProjectMember, ProjectSummary } from "@/types/project";
-import type { TaskDetailDto, TaskDto, TaskPriority, TaskStatus } from "@/types/task";
+import type { TaskDetailDto, TaskDto, TaskPriority, TaskStatus, TaskWorkflowHistory } from "@/types/task";
 import type { BacklogResponse, BoardResponse, SprintDto } from "@/types/sprint";
 import type { TimelineResponse, TimelineTaskDto } from "@/types/timeline";
 
@@ -142,14 +151,10 @@ function formatTimelineRange(start?: string | null, end?: string | null) {
   return "No dates";
 }
 
-function getDatePart(value?: string | null) {
-  return value ? value.split("T")[0] : "";
-}
-
-function isValidTaskDateRange(start?: string | null, due?: string | null) {
-  const startDate = getDatePart(start);
-  const dueDate = getDatePart(due);
-  return !startDate || !dueDate || startDate < dueDate;
+function isValidTaskDateRange(start?: string | null, due?: string | null, timezoneId?: string) {
+  const startDate = formatInstantToProjectDateInput(start, timezoneId);
+  const dueDate = formatInstantToProjectDateInput(due, timezoneId);
+  return checkTaskDateRange(startDate || null, dueDate || null);
 }
 
 const formSchema = z.object({
@@ -248,11 +253,18 @@ export default function ProjectWorkspacePage() {
   // Modals
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [createTaskSprintId, setCreateTaskSprintId] = useState<number | null>(null);
+  const createIntentRequestIdRef = useRef<string | null>(null);
   const [isSprintDialogOpen, setIsSprintDialogOpen] = useState(false);
   const [isEditSprintDialogOpen, setIsEditSprintDialogOpen] = useState(false);
   const [selectedSprintToEdit, setSelectedSprintToEdit] = useState<SprintDto | null>(null);
+  const [sprintToComplete, setSprintToComplete] = useState<SprintDto | null>(null);
   const [isTaskDetailOpen, setIsTaskDetailOpen] = useState(false);
   const [selectedTaskDetail, setSelectedTaskDetail] = useState<TaskDetailDto | null>(null);
+  const [boardWorkflowDialog, setBoardWorkflowDialog] = useState<{
+    kind: ActiveWorkflowDialogKind;
+    task: TaskDto;
+    workflow?: TaskWorkflowHistory | null;
+  } | null>(null);
 
   // Member Detail state
   const [selectedMemberForDetail, setSelectedMemberForDetail] = useState<ProjectMember | null>(null);
@@ -465,15 +477,22 @@ export default function ProjectWorkspacePage() {
 
   const openCreateTask = (sprintId: number | null) => {
     setCreateTaskSprintId(sprintId);
+    createIntentRequestIdRef.current = createRequestId();
     form.setValue("sprintId", sprintId ? String(sprintId) : "none");
     setIsCreateModalOpen(true);
   };
 
   const onSubmitCreate = async (values: z.infer<typeof formSchema>) => {
-    if (!isValidTaskDateRange(values.startDate, values.dueDate)) {
-      const message = t("tasks.date_range_error");
-      form.setError("startDate", { message });
-      form.setError("dueDate", { message });
+    try {
+      if (!isValidTaskDateRange(values.startDate, values.dueDate, project?.timezoneId)) {
+        const message = t("tasks.date_range_error");
+        form.setError("startDate", { message });
+        form.setError("dueDate", { message });
+        toast.error(message);
+        return;
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unsupported project timezone";
       toast.error(message);
       return;
     }
@@ -482,19 +501,26 @@ export default function ProjectWorkspacePage() {
       const selectedSprintId = values.sprintId && values.sprintId !== "none"
         ? Number(values.sprintId)
         : createTaskSprintId;
-      await taskService.createTask({
-        projectId: currentProjectId,
-        sprintId: selectedSprintId ?? undefined,
-        title: values.title,
-        description: values.description,
-        priority: values.priority,
-        position: 0,
-        assigneeId: values.assigneeId && values.assigneeId !== "unassigned" ? Number(values.assigneeId) : undefined,
-        startDate: values.startDate ? `${values.startDate}T00:00:00Z` : undefined,
-        dueDate: values.dueDate ? `${values.dueDate}T23:59:59Z` : undefined,
-      });
+      const requestId = createIntentRequestIdRef.current ?? createRequestId();
+      createIntentRequestIdRef.current = requestId;
+      await taskService.createTask(
+        {
+          projectId: currentProjectId,
+          sprintId: selectedSprintId ?? undefined,
+          title: values.title,
+          description: values.description,
+          priority: values.priority,
+          position: 0,
+          assigneeId: values.assigneeId && values.assigneeId !== "unassigned" ? Number(values.assigneeId) : undefined,
+          startDate: values.startDate || undefined,
+          dueDate: values.dueDate || undefined,
+          requestId,
+        },
+        requestId,
+      );
       toast.success("Task created successfully");
       setIsCreateModalOpen(false);
+      createIntentRequestIdRef.current = null;
       form.reset();
       setCreateTaskSprintId(null);
       void loadData(currentProjectId);
@@ -550,9 +576,12 @@ export default function ProjectWorkspacePage() {
   };
 
   const handleSprintAction = async (action: "start" | "complete" | "delete", sprint: SprintDto) => {
+    if (action === "complete") {
+      setSprintToComplete(sprint);
+      return;
+    }
     try {
       if (action === "start") await sprintService.startSprint(currentProjectId, sprint.id);
-      if (action === "complete") await sprintService.completeSprint(currentProjectId, sprint.id);
       if (action === "delete") {
         const isConfirm = await confirm({
           title: t("sprints.delete_title", { defaultValue: "Xóa Sprint" }),
@@ -579,8 +608,31 @@ export default function ProjectWorkspacePage() {
     }
   };
 
-  const onUpdateTask = async (payload: { title?: string; description?: string; assigneeId?: number; status?: TaskStatus; priority?: TaskPriority; startDate?: string; dueDate?: string }) => {
+  const notifyAndRefreshMissingTaskVersion = async (taskId?: number) => {
+    toast.error(
+      t("tasks.missing_version_error", {
+        defaultValue: "Task version is missing or stale. Refreshing latest task details.",
+      }),
+    );
+    if (taskId !== undefined) {
+      try {
+        const fresh = await taskService.getTaskById(taskId);
+        if (selectedTaskDetail?.task.id === taskId) {
+          setSelectedTaskDetail(fresh.data);
+        }
+      } catch {
+        // Ignore refresh error after surfacing missing version notice
+      }
+    }
+    void loadTabData(currentProjectId, activeTab, true);
+  };
+
+  const onUpdateTask = async (payload: TaskSidebarPatchPayload) => {
     if (!selectedTaskDetail) return;
+    if (!hasObservedTaskVersion(selectedTaskDetail.task.version)) {
+      await notifyAndRefreshMissingTaskVersion(selectedTaskDetail.task.id);
+      return;
+    }
     const nextStartDate = Object.prototype.hasOwnProperty.call(payload, "startDate")
       ? payload.startDate
       : selectedTaskDetail.task.startDate;
@@ -588,28 +640,54 @@ export default function ProjectWorkspacePage() {
       ? payload.dueDate
       : selectedTaskDetail.task.dueDate;
 
-    if (!isValidTaskDateRange(nextStartDate, nextDueDate)) {
-      const message = t("tasks.date_range_error");
+    try {
+      if (!isValidTaskDateRange(nextStartDate, nextDueDate, project?.timezoneId || selectedTaskDetail.task.projectTimezoneId)) {
+        const message = t("tasks.date_range_error");
+        toast.error(message);
+        throw new Error(message);
+      }
+    } catch (err) {
+      if (err instanceof Error && err.message === t("tasks.date_range_error")) {
+        throw err;
+      }
+      const message = err instanceof Error ? err.message : "Unsupported project timezone";
       toast.error(message);
       throw new Error(message);
     }
 
     try {
-      await taskService.updateTask(selectedTaskDetail.task.id, payload);
+      const updatedRes = await taskService.patchTask(selectedTaskDetail.task.id, {
+        ...payload,
+        expectedTaskVersion: selectedTaskDetail.task.version,
+        requestId: createRequestId(),
+      });
       toast.success("Task updated successfully");
 
-      updateTaskInAllStates(selectedTaskDetail.task.id, payload);
+      updateTaskInAllStates(selectedTaskDetail.task.id, updatedRes.data);
 
       const res = await taskService.getTaskById(selectedTaskDetail.task.id);
       setSelectedTaskDetail(res.data);
     } catch (error) {
       toast.error(getApiErrorMessage(error));
+      if (isTaskVersionConflictError(error)) {
+        try {
+          const fresh = await taskService.getTaskById(selectedTaskDetail.task.id);
+          setSelectedTaskDetail(fresh.data);
+          void loadTabData(currentProjectId, activeTab, true);
+        } catch {
+          // Ignore refresh error after surfacing original conflict
+        }
+      }
       throw error; // Let the component handle loading states
     }
   };
 
   const handleDeleteTask = async () => {
     if (!selectedTaskDetail) return;
+    if (!hasObservedTaskVersion(selectedTaskDetail.task.version)) {
+      await notifyAndRefreshMissingTaskVersion(selectedTaskDetail.task.id);
+      return;
+    }
     const isConfirm = await confirm({
       title: t("tasks.delete_title", { defaultValue: "Xóa công việc" }),
       message: t("tasks.delete_confirm", { defaultValue: "Are you sure you want to delete this task? This will also delete all subtasks." }),
@@ -618,24 +696,32 @@ export default function ProjectWorkspacePage() {
     if (!isConfirm) return;
 
     try {
-      await taskService.deleteTask(selectedTaskDetail.task.id);
+      await taskService.deleteTask(selectedTaskDetail.task.id, selectedTaskDetail.task.version, createRequestId());
       toast.success("Task deleted successfully");
       setIsTaskDetailOpen(false);
       void loadData(currentProjectId);
     } catch (error) {
       toast.error(getApiErrorMessage(error));
+      if (isTaskVersionConflictError(error)) {
+        void loadTabData(currentProjectId, activeTab, true);
+      }
     }
   };
 
   const onCreateSubtask = async (title: string) => {
     if (!selectedTaskDetail) return;
     try {
-      await taskService.createTask({
-        projectId: currentProjectId,
-        parentId: selectedTaskDetail.task.id,
-        title,
-        position: 0,
-      });
+      const requestId = createRequestId();
+      await taskService.createTask(
+        {
+          projectId: currentProjectId,
+          parentId: selectedTaskDetail.task.id,
+          title,
+          position: 0,
+          requestId,
+        },
+        requestId,
+      );
       toast.success("Subtask created");
 
       const res = await taskService.getTaskById(selectedTaskDetail.task.id);
@@ -670,13 +756,93 @@ export default function ProjectWorkspacePage() {
     if (!taskIdStr) return;
     const taskId = Number(taskIdStr);
 
-    const task = tasks.find((t) => t.id === taskId);
+    const task = boardData?.tasks.find((t) => t.id === taskId) ?? tasks.find((t) => t.id === taskId);
     if (!task || task.status === status) return;
+    if (!hasObservedTaskVersion(task.version)) {
+      await notifyAndRefreshMissingTaskVersion(task.id);
+      return;
+    }
+
+    // Workflow transitions NEVER bypass via direct moveTaskKanban.
+    if (status === "REVIEW") {
+      if (task.status !== "IN_PROGRESS") {
+        toast.error("Task must be In Progress before submitting for review.");
+        return;
+      }
+      if (task.assigneeId !== myUserId) {
+        toast.error("Only the current active assignee can submit this task for review.");
+        return;
+      }
+      setBoardWorkflowDialog({ kind: "submit", task });
+      return;
+    }
+
+    if (status === "DONE") {
+      if (task.status !== "REVIEW") {
+        toast.error("Task must be submitted for review before marking Done.");
+        return;
+      }
+      try {
+        const wfRes = await taskService.getTaskWorkflow(task.id);
+        const wf = wfRes.data;
+        if (wf.legacyReviewMissingSubmission) {
+          setBoardWorkflowDialog({ kind: "recover_legacy_review", task, workflow: wf });
+        } else if (wf.canReview) {
+          setBoardWorkflowDialog({ kind: "review", task, workflow: wf });
+        } else if (wf.canSelfAttest) {
+          setBoardWorkflowDialog({ kind: "self_attest", task, workflow: wf });
+        } else if (wf.otherActiveManagersExist) {
+          toast.error("Another active manager must independently review this task.");
+        } else {
+          toast.error("Only an active project manager can complete this review.");
+        }
+      } catch (error) {
+        toast.error(getApiErrorMessage(error));
+      }
+      return;
+    }
+
+    if (task.status === "DONE") {
+      if (!isManager) {
+        toast.error("Only an active project manager can reopen a DONE task.");
+        return;
+      }
+      setBoardWorkflowDialog({ kind: "reopen", task });
+      return;
+    }
+
+    if (task.status === "REVIEW") {
+      try {
+        const wfRes = await taskService.getTaskWorkflow(task.id);
+        const wf = wfRes.data;
+        if (wf.legacyReviewMissingSubmission) {
+          setBoardWorkflowDialog({ kind: "recover_legacy_review", task, workflow: wf });
+        } else if (wf.canWithdraw) {
+          setBoardWorkflowDialog({ kind: "withdraw", task, workflow: wf });
+        } else if (wf.canReview) {
+          setBoardWorkflowDialog({ kind: "return", task, workflow: wf });
+        } else {
+          toast.error("Leaving REVIEW requires submission withdrawal or manager return.");
+        }
+      } catch (error) {
+        toast.error(getApiErrorMessage(error));
+      }
+      return;
+    }
 
     updateTaskInAllStates(taskId, { status });
 
     try {
-      await taskService.moveTaskKanban(taskId, { status, position: task.position });
+      const updated = await taskService.moveTaskKanban(
+        taskId,
+        {
+          status,
+          position: task.position,
+          expectedTaskVersion: task.version,
+        },
+        createRequestId(),
+      );
+      updateTaskInAllStates(taskId, updated.data);
     } catch (error) {
       toast.error(getApiErrorMessage(error));
       void loadTabData(currentProjectId, activeTab, true);
@@ -690,12 +856,16 @@ export default function ProjectWorkspacePage() {
     if (!taskIdStr) return;
     const taskId = Number(taskIdStr);
 
-    const task = tasks.find((t) => t.id === taskId);
+    const task = tasks.find((t) => t.id === taskId) ?? boardData?.tasks.find((t) => t.id === taskId);
     if (!task || task.sprintId === sprintId) return;
+    if (!hasObservedTaskVersion(task.version)) {
+      await notifyAndRefreshMissingTaskVersion(task.id);
+      return;
+    }
 
-    updateTaskInAllStates(taskId, { sprintId: sprintId ?? undefined });
+    updateTaskInAllStates(taskId, { sprintId });
     try {
-      await taskService.updateTaskSprint(taskId, sprintId);
+      await taskService.updateTaskSprint(taskId, sprintId, task.version, createRequestId());
       void loadTabData(currentProjectId, activeTab, true);
     } catch (error) {
       toast.error(getApiErrorMessage(error));
@@ -735,9 +905,10 @@ export default function ProjectWorkspacePage() {
     const grouped = new Map<number | undefined, TaskDto[]>();
 
     tasks.forEach(task => {
-      const siblings = grouped.get(task.parentId) ?? [];
+      const parentKey = task.parentId ?? undefined;
+      const siblings = grouped.get(parentKey) ?? [];
       siblings.push(task);
-      grouped.set(task.parentId, siblings);
+      grouped.set(parentKey, siblings);
     });
 
     grouped.forEach(siblings => {
@@ -824,13 +995,12 @@ export default function ProjectWorkspacePage() {
         {timelineTicks.map((tick, index) => (
           <div
             key={tick.left}
-            className={`absolute top-0 flex flex-col gap-1 ${
-              index === 0
+            className={`absolute top-0 flex flex-col gap-1 ${index === 0
                 ? "translate-x-0 items-start"
                 : index === timelineTicks.length - 1
                   ? "-translate-x-full items-end"
                   : "-translate-x-1/2 items-center"
-            }`}
+              }`}
             style={{ left: tick.left }}
           >
             <span className="whitespace-nowrap text-[10px] sm:text-[11px]">{tick.label}</span>
@@ -995,7 +1165,15 @@ export default function ProjectWorkspacePage() {
             </Button>
           )}
 
-          <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
+          <Dialog
+            open={isCreateModalOpen}
+            onOpenChange={(open) => {
+              setIsCreateModalOpen(open);
+              if (!open) {
+                createIntentRequestIdRef.current = null;
+              }
+            }}
+          >
             <DialogTrigger asChild>
               <Button
                 className="gap-2 shadow-sm"
@@ -1155,6 +1333,14 @@ export default function ProjectWorkspacePage() {
             </DialogContent>
           </Dialog>
 
+          <CompleteSprintDialog
+            open={sprintToComplete !== null}
+            projectId={currentProjectId}
+            sprint={sprintToComplete}
+            onClose={() => setSprintToComplete(null)}
+            onCompleted={() => loadData(currentProjectId)}
+          />
+
           <Button type="button" variant="outline" className="gap-2 shadow-sm" onClick={() => void loadData(currentProjectId)}>
             <RefreshCw className={`h-4 w-4 ${isLoadingTasks ? 'animate-spin' : ''}`} />
           </Button>
@@ -1220,72 +1406,72 @@ export default function ProjectWorkspacePage() {
                     </CardContent>
                   </Card>
                 ) : (
-                <div className="flex min-w-[1000px] gap-5 h-[900px]">
-                  {groupedKanban.map((column) => (
-                    <div
-                      key={column.status}
-                      className="flex-1 flex flex-col rounded-xl border border-border/80 bg-card p-3.5 min-w-[300px] shadow-sm"
-                      onDragOver={handleDragOver}
-                      onDrop={(e) => handleDrop(e, column.status)}
-                    >
-                      <div className="flex items-center justify-between mb-4 shrink-0 px-1">
-                        <div className="flex items-center gap-2.5">
-                          <h3 className="text-sm font-semibold tracking-wide">{t(`tasks.col_${column.status.toLowerCase()}`, column.status.replace("_", " "))}</h3>
-                          <Badge variant="secondary" className="text-xs bg-background/60">{column.tasks.length}</Badge>
-                        </div>
-                        <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground" disabled={isArchived} onClick={() => setIsCreateModalOpen(true)}>
-                          <PlusCircle className="h-4 w-4" />
-                        </Button>
-                      </div>
-                      <div className="flex-1 overflow-y-auto space-y-2.5 pr-1 pb-2">
-                        {column.tasks.length === 0 && (
-                          <div className="rounded-lg border-2 border-dashed border-muted/60 px-3 py-10 flex flex-col items-center justify-center text-xs text-muted-foreground bg-background/30">
-                            <FolderKanban className="h-8 w-8 mb-2 opacity-20" />
-                            Drop tasks here
+                  <div className="flex min-w-[1000px] gap-5 h-[900px]">
+                    {groupedKanban.map((column) => (
+                      <div
+                        key={column.status}
+                        className="flex-1 flex flex-col rounded-xl border border-border/80 bg-card p-3.5 min-w-[300px] shadow-sm"
+                        onDragOver={handleDragOver}
+                        onDrop={(e) => handleDrop(e, column.status)}
+                      >
+                        <div className="flex items-center justify-between mb-4 shrink-0 px-1">
+                          <div className="flex items-center gap-2.5">
+                            <h3 className="text-sm font-semibold tracking-wide">{t(`tasks.col_${column.status.toLowerCase()}`, column.status.replace("_", " "))}</h3>
+                            <Badge variant="secondary" className="text-xs bg-background/60">{column.tasks.length}</Badge>
                           </div>
-                        )}
-                        {column.tasks.map((task) => (
-                          <div
-                            key={task.id}
-                            className={`project-task-card space-y-3 rounded-lg border border-border/60 bg-card p-3.5 shadow-sm transition-all group ${!isArchived ? "cursor-grab active:cursor-grabbing hover:border-primary/40 hover:shadow-md" : ""}`}
-                            draggable={!isArchived}
-                            onDragStart={(e) => handleDragStart(e, task.id)}
-                            onClick={() => openTaskDetail(task.id)}
-                          >
-                            <div className="flex flex-col gap-1.5">
-                              {task.parentId && (
-                                <div className="flex items-center gap-1 text-[10px] text-muted-foreground font-medium uppercase tracking-tight">
-                                  <span className="opacity-70">Subtask of</span>
-                                  <span className="text-primary/70">TP-{task.parentId}</span>
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground" disabled={isArchived} onClick={() => openCreateTask(boardData?.workflowMode === "SCRUM" ? boardData.activeSprint?.id ?? null : null)}>
+                            <PlusCircle className="h-4 w-4" />
+                          </Button>
+                        </div>
+                        <div className="flex-1 overflow-y-auto space-y-2.5 pr-1 pb-2">
+                          {column.tasks.length === 0 && (
+                            <div className="rounded-lg border-2 border-dashed border-muted/60 px-3 py-10 flex flex-col items-center justify-center text-xs text-muted-foreground bg-background/30">
+                              <FolderKanban className="h-8 w-8 mb-2 opacity-20" />
+                              Drop tasks here
+                            </div>
+                          )}
+                          {column.tasks.map((task) => (
+                            <div
+                              key={task.id}
+                              className={`project-task-card space-y-3 rounded-lg border border-border/60 bg-card p-3.5 shadow-sm transition-all group ${!isArchived ? "cursor-grab active:cursor-grabbing hover:border-primary/40 hover:shadow-md" : ""}`}
+                              draggable={!isArchived}
+                              onDragStart={(e) => handleDragStart(e, task.id)}
+                              onClick={() => openTaskDetail(task.id)}
+                            >
+                              <div className="flex flex-col gap-1.5">
+                                {task.parentId && (
+                                  <div className="flex items-center gap-1 text-[10px] text-muted-foreground font-medium uppercase tracking-tight">
+                                    <span className="opacity-70">Subtask of</span>
+                                    <span className="text-primary/70">TP-{task.parentId}</span>
+                                  </div>
+                                )}
+                                <p className="text-sm font-medium leading-snug group-hover:text-primary transition-colors">{task.title}</p>
+                              </div>
+                              {task.description && <p className="text-xs text-muted-foreground line-clamp-2 mt-1">{task.description}</p>}
+                              {task.labels && task.labels.length > 0 && (
+                                <div className="flex flex-wrap gap-1 mt-2">
+                                  {task.labels.map(label => (
+                                    <span key={label.id} className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-medium text-white shadow-sm" style={{ backgroundColor: label.color }}>
+                                      {label.name}
+                                    </span>
+                                  ))}
                                 </div>
                               )}
-                              <p className="text-sm font-medium leading-snug group-hover:text-primary transition-colors">{task.title}</p>
-                            </div>
-                            {task.description && <p className="text-xs text-muted-foreground line-clamp-2 mt-1">{task.description}</p>}
-                            {task.labels && task.labels.length > 0 && (
-                              <div className="flex flex-wrap gap-1 mt-2">
-                                {task.labels.map(label => (
-                                  <span key={label.id} className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-medium text-white shadow-sm" style={{ backgroundColor: label.color }}>
-                                    {label.name}
-                                  </span>
-                                ))}
-                              </div>
-                            )}
-                            <div className="flex items-center justify-between text-xs text-muted-foreground mt-3 pt-3 border-t border-border/40">
-                              <span className="font-mono text-[10px] bg-muted/50 px-1.5 py-0.5 rounded font-medium">TP-{task.id}</span>
-                              <div className="flex items-center gap-2">
-                                {task.assigneeId && <div className="flex items-center gap-1.5"><div className="h-4 w-4 rounded-full bg-primary/10 flex items-center justify-center text-[8px] font-bold text-primary">{getAssigneeName(task.assigneeId).substring(0, 1).toUpperCase()}</div></div>}
-                                <Badge variant="outline" className={`text-[9px] border-none px-1.5 py-0 h-4 ${priorityBadgeClass[task.priority]}`}>
-                                  {task.priority}
-                                </Badge>
+                              <div className="flex items-center justify-between text-xs text-muted-foreground mt-3 pt-3 border-t border-border/40">
+                                <span className="font-mono text-[10px] bg-muted/50 px-1.5 py-0.5 rounded font-medium">TP-{task.id}</span>
+                                <div className="flex items-center gap-2">
+                                  {task.assigneeId && <div className="flex items-center gap-1.5"><div className="h-4 w-4 rounded-full bg-primary/10 flex items-center justify-center text-[8px] font-bold text-primary">{getAssigneeName(task.assigneeId).substring(0, 1).toUpperCase()}</div></div>}
+                                  <Badge variant="outline" className={`text-[9px] border-none px-1.5 py-0 h-4 ${priorityBadgeClass[task.priority]}`}>
+                                    {task.priority}
+                                  </Badge>
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        ))}
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
                 )}
               </div>
             )}
@@ -1337,11 +1523,11 @@ export default function ProjectWorkspacePage() {
                         </div>
 
                         <div className="prose prose-sm dark:prose-invert max-w-none">
-                            <h3 className="text-sm font-semibold flex items-center gap-2 mb-3 text-muted-foreground uppercase tracking-wider"><FileText className="h-4 w-4" /> Description</h3>
-                            <div className="bg-muted/10 p-5 rounded-lg border border-border/50 min-h-[120px] text-sm text-foreground/90 whitespace-pre-wrap leading-relaxed">
-                              {project?.description || <span className="text-muted-foreground italic">No description provided. Add one to help your team understand the project goals.</span>}
-                            </div>
+                          <h3 className="text-sm font-semibold flex items-center gap-2 mb-3 text-muted-foreground uppercase tracking-wider"><FileText className="h-4 w-4" /> Description</h3>
+                          <div className="bg-muted/10 p-5 rounded-lg border border-border/50 min-h-[120px] text-sm text-foreground/90 whitespace-pre-wrap leading-relaxed">
+                            {project?.description || <span className="text-muted-foreground italic">No description provided. Add one to help your team understand the project goals.</span>}
                           </div>
+                        </div>
                       </CardContent>
                     </Card>
 
@@ -1435,7 +1621,11 @@ export default function ProjectWorkspacePage() {
                           </div>
                           <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 dark:text-emerald-400 p-3 rounded-lg text-center">
                             <p className="text-xs uppercase font-medium mb-1 opacity-80">Done</p>
-                            <p className="text-xl font-semibold">{projectSummary?.completedTasks || 0}</p>
+                            <p className="text-xl font-semibold">{projectSummary?.doneTasks || 0}</p>
+                          </div>
+                          <div className="bg-violet-500/10 border border-violet-500/20 text-violet-700 dark:text-violet-400 p-3 rounded-lg text-center">
+                            <p className="text-xs uppercase font-medium mb-1 opacity-80">Review</p>
+                            <p className="text-xl font-semibold">{projectSummary?.reviewTasks || 0}</p>
                           </div>
                           <div className="bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-400 p-3 rounded-lg text-center">
                             <p className="text-xs uppercase font-medium mb-1 opacity-80">In Progress</p>
@@ -1443,7 +1633,7 @@ export default function ProjectWorkspacePage() {
                           </div>
                           <div className="bg-blue-500/10 border border-blue-500/20 text-blue-700 dark:text-blue-400 p-3 rounded-lg text-center">
                             <p className="text-xs uppercase font-medium mb-1 opacity-80">To Do</p>
-                            <p className="text-xl font-semibold">{projectSummary?.pendingTasks || 0}</p>
+                            <p className="text-xl font-semibold">{projectSummary?.todoTasks || 0}</p>
                           </div>
                         </div>
                       </CardContent>
@@ -1467,8 +1657,8 @@ export default function ProjectWorkspacePage() {
                               ? m.fullName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
                               : `U${m.userId}`;
                             return (
-                              <div 
-                                key={m.userId} 
+                              <div
+                                key={m.userId}
                                 className="flex items-center justify-between p-4 hover:bg-muted/30 transition-colors cursor-pointer"
                                 onClick={() => openMemberDetail(m)}
                               >
@@ -1504,9 +1694,9 @@ export default function ProjectWorkspacePage() {
                             <FolderKanban className="mr-2 h-4 w-4 text-primary" /> Open Board
                           </Button>
                           {!isManager && (
-                            <Button 
-                              className="w-full justify-start text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/20 bg-background border shadow-sm" 
-                              variant="outline" 
+                            <Button
+                              className="w-full justify-start text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/20 bg-background border shadow-sm"
+                              variant="outline"
                               disabled={isLeaving}
                               onClick={handleLeaveProjectInWorkspace}
                             >
@@ -1654,7 +1844,7 @@ export default function ProjectWorkspacePage() {
                         </div>
                       ) : (
                         <>
-                          <section 
+                          <section
                             className="rounded-lg border bg-background/60"
                             onDragOver={handleDragOver}
                             onDrop={(e) => handleDropToSprint(e, null)}
@@ -1682,18 +1872,23 @@ export default function ProjectWorkspacePage() {
                           </section>
 
                           {backlogData.sprints.map(section => (
-                            <section 
-                              key={section.sprint.id} 
+                            <section
+                              key={section.sprint.id}
                               className="rounded-lg border bg-background/60"
                               onDragOver={handleDragOver}
                               onDrop={(e) => handleDropToSprint(e, section.sprint.id)}
                             >
                               <div className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3">
                                 <div className="space-y-1">
-                                  <div className="flex items-center gap-2">
+                                  <div className="flex flex-wrap items-center gap-2">
                                     <h3 className="font-semibold">{section.sprint.name}</h3>
                                     <Badge variant={section.sprint.status === "ACTIVE" ? "default" : "secondary"}>{section.sprint.status}</Badge>
                                     <Badge variant="outline">{section.tasks.length} tasks</Badge>
+                                    {section.sprint.closureSnapshot && (
+                                      <Badge variant="outline" className="text-[11px]">
+                                        Done retained: {section.sprint.closureSnapshot.doneTasksRetained} · Carried over: {section.sprint.closureSnapshot.carriedOverTotal}
+                                      </Badge>
+                                    )}
                                   </div>
                                   <p className="text-xs text-muted-foreground">
                                     {section.sprint.startDate || "No start"} &rarr; {section.sprint.endDate || "No end"}
@@ -1702,7 +1897,7 @@ export default function ProjectWorkspacePage() {
                                 </div>
                                 <div className="flex items-center gap-2">
                                   {section.sprint.status !== "COMPLETED" && (
-                                      <Button size="sm" variant="outline" className="shrink-0" disabled={isArchived} onClick={() => openCreateTask(section.sprint.id)}>
+                                    <Button size="sm" variant="outline" className="shrink-0" disabled={isArchived} onClick={() => openCreateTask(section.sprint.id)}>
                                       <PlusCircle className="mr-2 h-4 w-4" /> Create Task
                                     </Button>
                                   )}
@@ -1755,6 +1950,7 @@ export default function ProjectWorkspacePage() {
               <div className={activeTab === "calendar" ? "block" : "hidden"}>
                 <ProjectCalendarTab
                   projectId={currentProjectId}
+                  projectTimezoneId={project?.timezoneId}
                   projectMembers={projectMembers}
                   tasks={tasks}
                   currentUserId={myUserId}
@@ -1792,14 +1988,45 @@ export default function ProjectWorkspacePage() {
         onOpenChange={setIsTaskDetailOpen}
         taskDetail={selectedTaskDetail}
         projectMembers={projectMembers}
+        projectTimezoneId={project?.timezoneId}
         onDeleteTask={isArchived ? () => { } : handleDeleteTask}
         onUpdateTask={isArchived ? async () => { } : onUpdateTask}
         onCreateSubtask={isArchived ? async () => { } : onCreateSubtask}
+        onWorkflowChanged={async () => {
+          if (selectedTaskDetail) {
+            try {
+              const fresh = await taskService.getTaskById(selectedTaskDetail.task.id);
+              setSelectedTaskDetail(fresh.data);
+            } catch {
+              // Ignore detail refresh failure if task was moved/changed
+            }
+          }
+          void loadTabData(currentProjectId, activeTab, true);
+          void loadData(currentProjectId);
+        }}
         onOpenTaskDetail={openTaskDetail}
         isManager={isManager}
         currentUserId={myUserId}
         isReadOnly={isArchived}
       />
+
+      {boardWorkflowDialog && (
+        <TaskWorkflowDialogs
+          openKind={boardWorkflowDialog.kind}
+          onClose={() => setBoardWorkflowDialog(null)}
+          task={boardWorkflowDialog.task}
+          workflow={boardWorkflowDialog.workflow}
+          onSuccess={async () => {
+            await Promise.all([
+              loadTabData(currentProjectId, activeTab, true),
+              loadData(currentProjectId),
+            ]);
+          }}
+          onVersionConflict={async () => {
+            await loadTabData(currentProjectId, activeTab, true);
+          }}
+        />
+      )}
 
       {/* MEMBER DETAIL DIALOG */}
       <Dialog open={!!selectedMemberForDetail} onOpenChange={(open) => !open && setSelectedMemberForDetail(null)}>
@@ -1841,8 +2068,8 @@ export default function ProjectWorkspacePage() {
                       <p className="text-sm text-muted-foreground text-center p-4">No tasks assigned in this project.</p>
                     ) : (
                       memberTasks.map(task => (
-                        <div 
-                          key={task.id} 
+                        <div
+                          key={task.id}
                           className="p-3 border rounded-md hover:bg-muted/50 cursor-pointer transition-colors"
                           onClick={() => {
                             setSelectedMemberForDetail(null);
