@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./helpers/isolated-test";
 import { setupWorkspaceMocks, DEFAULT_MOCK_USER } from "./helpers/mock-setup";
 
 const SAMPLE_PROJECTS = [

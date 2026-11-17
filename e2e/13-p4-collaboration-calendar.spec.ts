@@ -1,4 +1,5 @@
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect } from "./helpers/isolated-test";
+import type { Page } from "@playwright/test";
 import { setupWorkspaceMocks, VALID_MOCK_JWT } from "./helpers/mock-setup";
 
 const LEGACY_GROUPS_KEY = "taskpilot_custom_group_chats";

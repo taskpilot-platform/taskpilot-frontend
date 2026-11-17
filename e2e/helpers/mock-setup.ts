@@ -338,7 +338,7 @@ export async function setupWorkspaceMocks(
       return;
     }
 
-    await route.continue();
+    await route.fallback();
   });
 
   // Mock Chat Messages API
@@ -390,7 +390,7 @@ export async function setupWorkspaceMocks(
       return;
     }
 
-    await route.continue();
+    await route.fallback();
   });
 
   // Mock Active Meeting API
@@ -435,7 +435,7 @@ export async function setupWorkspaceMocks(
         message: "Joined successfully",
         data: {
           token: "mock-livekit-token-" + meetingId,
-          livekitUrl: "wss://taskpilot-collab-m3oqfj4g.livekit.cloud",
+          livekitUrl: "wss://livekit.invalid",
           roomName: meeting.roomName,
           identity: `user_${user.id}`,
           participantName: user.fullName,
@@ -558,6 +558,6 @@ export async function setupWorkspaceMocks(
       return;
     }
 
-    await route.continue();
+    await route.fallback();
   });
 }

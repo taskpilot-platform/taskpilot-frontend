@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./helpers/isolated-test";
 import { setupWorkspaceMocks, DEFAULT_MOCK_USER } from "./helpers/mock-setup";
 
 test.describe("Suite 1: Project File Storage - Upload & Validation (TC001 - TC025)", () => {

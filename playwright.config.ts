@@ -19,6 +19,8 @@ export default defineConfig({
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
     video: "retain-on-failure",
+    serviceWorkers: "block",
+    launchOptions: { args: ["--force-webrtc-ip-handling-policy=disable_non_proxied_udp"] },
   },
   projects: [
     {
@@ -30,6 +32,7 @@ export default defineConfig({
     command: "npm run preview -- --port 5173 --host 127.0.0.1",
     url: "http://127.0.0.1:5173",
     reuseExistingServer: false,
+    env: { VITE_API_PROXY_TARGET: "http://127.0.0.1:9" },
     timeout: 30000,
   },
 });

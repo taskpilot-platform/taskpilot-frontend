@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./helpers/isolated-test";
 import { setupWorkspaceMocks, DEFAULT_MOCK_USER } from "./helpers/mock-setup";
 
 test.describe("Phase 4: LiveKit Video Meeting & Collaboration (TC101 - TC130)", () => {

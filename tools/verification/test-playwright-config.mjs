@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import path from "node:path";
+import { readdirSync, readFileSync } from "node:fs";
 import { afterEach, describe, it } from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import axios from "axios";
@@ -188,5 +189,16 @@ describe("playwright.live.config.ts isolation and API binding", () => {
   it("keeps default playwright.config.ts incapable of reusing an arbitrary server", async () => {
     const mod = await import(`${defaultConfigUrl}?defaultCheck=1`);
     assert.equal(mod.default.webServer?.reuseExistingServer, false);
+    assert.equal(mod.default.use?.serviceWorkers, "block");
+    assert.equal(mod.default.webServer?.env?.VITE_API_PROXY_TARGET, "http://127.0.0.1:9");
+  });
+
+  it("requires the network isolation fixture in every mocked browser spec", () => {
+    const dir = path.join(frontendRoot, "e2e");
+    for (const file of readdirSync(dir).filter((name) => name.endsWith(".spec.ts"))) {
+      const source = readFileSync(path.join(dir, file), "utf8");
+      assert.match(source, /from ["']\.\/helpers\/isolated-test["']/, file);
+      assert.doesNotMatch(source, /import\s*\{[^}]*\btest\b[^}]*\}\s*from\s*["']@playwright\/test["']/, file);
+    }
   });
 });

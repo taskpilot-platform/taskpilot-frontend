@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./helpers/isolated-test";
 import { readFile } from "node:fs/promises";
 import { setupWorkspaceMocks, DEFAULT_MOCK_USER, TEAMMATE_USER, VALID_MOCK_JWT } from "./helpers/mock-setup";
 
