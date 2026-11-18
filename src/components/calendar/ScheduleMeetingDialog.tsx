@@ -291,7 +291,7 @@ export function ScheduleMeetingDialog({
               data-testid="schedule-meeting-rec-checkbox"
             />
             <Label htmlFor="sched-rec" className="text-xs cursor-pointer font-normal">
-              {t("calendar.enable_recording", { defaultValue: "Bật tính năng ghi âm & lưu trữ cuộc họp (Cloud Recording)" })}
+              {t("calendar.enable_recording", { defaultValue: "Dự kiến ghi hình trong cuộc họp" })}
             </Label>
           </div>
 

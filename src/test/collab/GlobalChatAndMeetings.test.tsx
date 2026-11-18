@@ -9,6 +9,8 @@ import { profileService } from "@/services/profile.service";
 import { meetingService } from "@/services/meeting.service";
 import { projectChatService } from "@/services/project-chat.service";
 
+vi.mock("livekit-client", () => import("../../../e2e/helpers/livekit-sdk-stub"));
+
 const MOCK_PROJECTS = [
   {
     id: 100,
@@ -208,7 +210,20 @@ describe("Global Chat & Meetings Components", () => {
   });
 
   describe("LiveMeetingRoom UI & Theme Check", () => {
-    it("renders room without pitch-black background and contains media controls", () => {
+    it("renders media controls after a connected room is acknowledged", async () => {
+      const meeting = (await meetingService.getMeetings(100))[0];
+      vi.spyOn(meetingService, "joinMeeting").mockResolvedValue({
+        token: "isolated-sdk-fixture-501",
+        livekitUrl: "wss://livekit.invalid",
+        roomName: meeting.roomName,
+        identity: "user_1",
+        participantName: "Alex Rivera",
+        isHost: true,
+        meeting,
+      });
+      vi.spyOn(meetingService, "confirmAttendance").mockResolvedValue({
+        status: 200, message: "Attendance verified", data: null,
+      });
       // Mock navigator.mediaDevices
       Object.defineProperty(navigator, "mediaDevices", {
         writable: true,
@@ -229,7 +244,8 @@ describe("Global Chat & Meetings Components", () => {
         />
       );
 
-      const room = screen.getByTestId("live-meeting-room");
+      const room = await screen.findByTestId("live-meeting-room");
+      expect(meetingService.confirmAttendance).toHaveBeenCalledWith(100, 501, "PA_fixture");
       expect(room).toBeInTheDocument();
 
       // Must not use pitch-black bg-slate-950

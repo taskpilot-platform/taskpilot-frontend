@@ -504,14 +504,16 @@ export function ProjectCalendarTab({
                                 ? t("calendar.meeting_status_active", { defaultValue: "Đang diễn ra" })
                                 : isScheduled
                                   ? t("calendar.meeting_status_scheduled", { defaultValue: "Đã lên lịch" })
-                                  : t("calendar.meeting_status_ended", { defaultValue: "Đã kết thúc" })}
+                                  : m.status === "ENDING"
+                                    ? t("meetings.meeting_closing", { defaultValue: "Đang đóng phòng họp" })
+                                    : t("calendar.meeting_status_ended", { defaultValue: "Đã kết thúc" })}
                             </Badge>
                             <span className="text-xs font-mono font-semibold text-muted-foreground">
                               {timeDisplay}
                             </span>
-                            {m.recordingEnabled && (
-                              <Badge variant="outline" className="text-[10px] text-red-500 border-red-500/30 py-0">
-                                REC
+                            {m.recordingFileId != null && (
+                              <Badge variant="outline" className="text-[10px] py-0">
+                                {t("meetings.recording_available", { defaultValue: "Có bản ghi" })}
                               </Badge>
                             )}
                           </div>
