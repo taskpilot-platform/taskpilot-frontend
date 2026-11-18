@@ -86,6 +86,31 @@ export type ChatComposerProps = {
 
 export type MetricDataStatus = "MEASURED" | "INSUFFICIENT_DATA" | "UNVERIFIED" | "DEFAULT" | "MISSING_REQUIREMENTS";
 export type RecommendationDifferentiationStatus = "DIFFERENTIATED" | "INSUFFICIENT_TO_DIFFERENTIATE" | "UNKNOWN";
+export type RecommendationDecisionType = "ACCEPT" | "OVERRIDE" | "REJECT";
+export type RecordedRecommendationDecisionType = "ACCEPTED" | "OVERRIDDEN" | "REJECTED" | "CANCELED" | "EXPIRED";
+
+export interface RecommendationDecisionRequest {
+  decisionType: RecommendationDecisionType;
+  selectedCandidateId?: number;
+  taskId?: number;
+  expectedTaskVersion?: number;
+  requestId?: string;
+  reasonCode?: string;
+  note?: string;
+}
+
+export interface RecommendationDecisionResponse {
+  decisionId: string;
+  snapshotId: string;
+  projectId: number;
+  taskId: number | null;
+  decisionType: RecordedRecommendationDecisionType;
+  selectedCandidateId: number | null;
+  recommendedCandidateId: number | null;
+  taskVersion: number | null;
+  assignmentVersion: number | null;
+  createdAt: string;
+}
 
 export type RecommendedCandidateView = {
   rank: number;
@@ -108,6 +133,9 @@ export type RecommendedCandidateView = {
 };
 
 export type RecommendationView = {
+  snapshotId?: string | null;
+  taskId?: number | null;
+  taskVersion?: number | null;
   projectId?: number;
   requiredSkills?: string[];
   candidates: RecommendedCandidateView[];
@@ -116,4 +144,5 @@ export type RecommendationView = {
   scoringModelVersion?: string;
   heuristicMode?: string;
   aiExplanation?: string | null;
+  recordedDecision?: RecommendationDecisionResponse | null;
 };

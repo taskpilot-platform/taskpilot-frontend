@@ -542,7 +542,15 @@
       "performance_measured": "Chất lượng trung bình {{percent}}% qua {{count}} công việc đã duyệt. Dữ liệu này chiếm {{evidence}}% trong tiêu chí chất lượng dùng để xếp hạng.",
       "candidates_list_title": "Danh sách ứng viên:",
       "mode_label": "Chế độ phân công: {{mode}}",
-      "skills_label": "Kỹ năng yêu cầu: {{skills}}"
+      "skills_label": "Kỹ năng yêu cầu: {{skills}}",
+      "decision_accept": "Chấp nhận & Phân công",
+      "decision_override": "Chọn & Phân công người này",
+      "decision_reject": "Từ chối đề xuất",
+      "decision_saving": "Đang lưu quyết định...",
+      "decision_recorded_accept": "Đã chấp nhận đề xuất và phân công",
+      "decision_recorded_override": "Đã phân công ứng viên thay thế",
+      "decision_recorded_reject": "Đã ghi nhận từ chối đề xuất",
+      "decision_error": "Không thể ghi nhận quyết định đề xuất."
     }
   },
   "comments": {

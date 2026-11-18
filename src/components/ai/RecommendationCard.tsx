@@ -1,14 +1,62 @@
 import { useState } from "react";
-import { Sparkles, AlertCircle, Info, ChevronDown, ChevronUp, User } from "lucide-react";
+import { Sparkles, AlertCircle, Info, ChevronDown, ChevronUp, User, CheckCircle2, XCircle } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import type { RecommendationView, RecommendedCandidateView } from "./aiChatTypes";
-import { recommendationFitText, recommendationPerformanceText } from "./aiChatHelpers";
+import { aiService } from "@/services/ai.service";
+import type {
+  RecommendationDecisionResponse,
+  RecommendationDecisionType,
+  RecommendationView,
+  RecommendedCandidateView,
+} from "./aiChatTypes";
+import { notifyTaskMutation, recommendationFitText, recommendationPerformanceText } from "./aiChatHelpers";
 
-export function RecommendationCard({ view }: { view: RecommendationView }) {
+export function RecommendationCard({
+  view,
+  onDecisionRecorded,
+}: {
+  view: RecommendationView;
+  onDecisionRecorded?: (decision: RecommendationDecisionResponse) => void;
+}) {
   const { t } = useTranslation();
   const [showTechnicalDetails, setShowTechnicalDetails] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [decisionError, setDecisionError] = useState<string | null>(null);
+  const [recordedDecision, setRecordedDecision] = useState<RecommendationDecisionResponse | null>(
+    view.recordedDecision ?? null,
+  );
 
   const isTied = view.differentiationStatus === "INSUFFICIENT_TO_DIFFERENTIATE";
+  const { snapshotId, taskId, taskVersion } = view;
+  const canRecordDecision = Boolean(snapshotId && taskId != null && taskVersion != null && view.candidates?.length > 0);
+
+  const handleDecision = async (decisionType: RecommendationDecisionType, candidate?: RecommendedCandidateView) => {
+    if (!snapshotId || taskId == null || taskVersion == null || submitting || recordedDecision) {
+      return;
+    }
+    setSubmitting(true);
+    setDecisionError(null);
+    try {
+      const response = await aiService.recordRecommendationDecision(snapshotId, {
+        decisionType,
+        selectedCandidateId: candidate?.candidateId,
+        taskId,
+        expectedTaskVersion: taskVersion,
+      });
+      setRecordedDecision(response);
+      if (response.decisionType === "ACCEPTED" || response.decisionType === "OVERRIDDEN") {
+        notifyTaskMutation({
+          actionId: response.decisionId,
+          taskId,
+          projectId: response.projectId,
+        });
+      }
+      onDecisionRecorded?.(response);
+    } catch {
+      setDecisionError(t("copilot.recommendation.decision_error"));
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   return (
     <div
@@ -74,7 +122,14 @@ export function RecommendationCard({ view }: { view: RecommendationView }) {
       <div className="p-4 space-y-3">
         {view.candidates && view.candidates.length > 0 ? (
           view.candidates.map((candidate) => (
-            <CandidateRow key={candidate.rank} candidate={candidate} />
+            <CandidateRow
+              key={candidate.rank}
+              candidate={candidate}
+              canDecide={canRecordDecision && !recordedDecision}
+              submitting={submitting}
+              isChosen={recordedDecision?.selectedCandidateId != null && recordedDecision.selectedCandidateId === candidate.candidateId}
+              onSelect={() => handleDecision(candidate.rank === 1 ? "ACCEPT" : "OVERRIDE", candidate)}
+            />
           ))
         ) : (
           <div className="text-center py-4 text-xs text-neutral-500">
@@ -82,6 +137,46 @@ export function RecommendationCard({ view }: { view: RecommendationView }) {
           </div>
         )}
       </div>
+
+      {/* Explicit Recommendation Decision Footer (when bound to snapshot + task) */}
+      {canRecordDecision && (
+        <div
+          data-testid="recommendation-decision-bar"
+          className="px-4 py-2.5 border-t border-neutral-100 dark:border-neutral-800 bg-neutral-50/40 dark:bg-neutral-900/40 flex flex-wrap items-center justify-between gap-2 text-xs"
+        >
+          {recordedDecision ? (
+            <div
+              data-testid="decision-recorded-banner"
+              className="flex items-center gap-1.5 font-medium text-emerald-700 dark:text-emerald-400"
+            >
+              <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+              <span>
+                {recordedDecision.decisionType === "ACCEPTED"
+                  ? t("copilot.recommendation.decision_recorded_accept")
+                  : recordedDecision.decisionType === "OVERRIDDEN"
+                    ? t("copilot.recommendation.decision_recorded_override")
+                    : t("copilot.recommendation.decision_recorded_reject")}
+              </span>
+            </div>
+          ) : (
+            <button
+              type="button"
+              data-testid="decision-reject-btn"
+              disabled={submitting}
+              onClick={() => handleDecision("REJECT")}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-neutral-300 dark:border-neutral-700 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800 disabled:opacity-50"
+            >
+              <XCircle className="h-3.5 w-3.5 text-rose-500" />
+              <span>{submitting ? t("copilot.recommendation.decision_saving") : t("copilot.recommendation.decision_reject")}</span>
+            </button>
+          )}
+          {decisionError && (
+            <span data-testid="decision-error-banner" className="text-rose-600 dark:text-rose-400 font-medium">
+              {decisionError}
+            </span>
+          )}
+        </div>
+      )}
 
       {/* Technical Details (Collapsible) */}
       {(view.presentationContractVersion || view.scoringModelVersion) && (
@@ -115,7 +210,19 @@ export function RecommendationCard({ view }: { view: RecommendationView }) {
   );
 }
 
-function CandidateRow({ candidate }: { candidate: RecommendedCandidateView }) {
+function CandidateRow({
+  candidate,
+  canDecide,
+  submitting,
+  isChosen,
+  onSelect,
+}: {
+  candidate: RecommendedCandidateView;
+  canDecide: boolean;
+  submitting: boolean;
+  isChosen: boolean;
+  onSelect: () => void;
+}) {
   const { t } = useTranslation();
   const rankColors: Record<number, string> = {
     1: "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/30",
@@ -194,6 +301,31 @@ function CandidateRow({ candidate }: { candidate: RecommendedCandidateView }) {
             </span>
           </span>
         </div>
+
+        {(canDecide || isChosen) && (
+          <div className="flex items-center">
+            {isChosen ? (
+              <span
+                data-testid={`decision-chosen-badge-${candidate.rank}`}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 font-medium"
+              >
+                <CheckCircle2 className="h-3.5 w-3.5" />
+              </span>
+            ) : (
+              <button
+                type="button"
+                data-testid={`decision-action-${candidate.rank}`}
+                disabled={submitting}
+                onClick={onSelect}
+                className="px-2.5 py-1 rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 font-medium transition-colors"
+              >
+                {candidate.rank === 1
+                  ? t("copilot.recommendation.decision_accept")
+                  : t("copilot.recommendation.decision_override")}
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

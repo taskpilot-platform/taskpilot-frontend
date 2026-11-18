@@ -542,7 +542,15 @@
       "performance_measured": "Average reviewed quality {{percent}}% across {{count}} tasks. Evidence contributes {{evidence}}% to the ranking's quality input.",
       "candidates_list_title": "Candidate List:",
       "mode_label": "Assignment mode: {{mode}}",
-      "skills_label": "Required skills: {{skills}}"
+      "skills_label": "Required skills: {{skills}}",
+      "decision_accept": "Accept & Assign",
+      "decision_override": "Assign This Candidate",
+      "decision_reject": "Reject Recommendation",
+      "decision_saving": "Saving decision...",
+      "decision_recorded_accept": "Accepted recommendation & assigned task",
+      "decision_recorded_override": "Assigned selected candidate (override)",
+      "decision_recorded_reject": "Recommendation rejected without assignment",
+      "decision_error": "Could not record recommendation decision."
     }
   },
   "comments": {
