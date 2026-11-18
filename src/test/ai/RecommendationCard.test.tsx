@@ -1,7 +1,8 @@
-import { describe, it, expect, beforeEach, afterAll } from "vitest";
+import { describe, it, expect, beforeEach, afterAll, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import i18n from "@/lib/i18n";
 import { RecommendationCard } from "@/components/ai/RecommendationCard";
+import { AssignmentRequestForm } from "@/components/ai/AssignmentRequestForm";
 import { formatFriendlyToolPayload, isRecommendationView } from "@/components/ai/aiChatHelpers";
 import type { RecommendationView } from "@/components/ai/aiChatTypes";
 
@@ -113,6 +114,43 @@ describe("Phase 1 B3: Frontend Recommendation View Contract", () => {
     const alert = screen.getByTestId("differentiation-alert");
     expect(alert).toBeInTheDocument();
     expect(alert.textContent).toContain("Dữ liệu hiện tại không đủ để phân biệt mức độ vượt trội");
+  });
+
+  it("shows reviewed sample size and prior blending, and identifies missing requirements", () => {
+    const view: RecommendationView = {
+      ...sampleView,
+      candidates: [{
+        ...sampleView.candidates[0],
+        fitStatus: "MISSING_REQUIREMENTS",
+        presentationFitValue: null,
+        performanceStatus: "MEASURED",
+        performanceSampleCount: 1,
+        observedQualityMean: 0.75,
+        evidenceWeight: 1 / 6,
+      }],
+    };
+    render(<RecommendationCard view={view} />);
+    expect(screen.getByText("Chưa khai báo kỹ năng yêu cầu")).toBeInTheDocument();
+    expect(screen.getByText(/Chất lượng trung bình 75% qua 1 công việc đã duyệt/)).toBeInTheDocument();
+    expect(screen.getByTestId("metric-performance")).toHaveTextContent("17%");
+    expect(formatFriendlyToolPayload(JSON.stringify(view))).toContain("1 công việc đã duyệt");
+  });
+
+  it("requests ranking from the form even if a task has no supplied skills or difficulty", () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    render(<AssignmentRequestForm
+      formKey="p6"
+      draft={{ projectId: "42", mode: "recommend", rows: [{ id: "row", taskId: "81", skills: "", difficulty: "" }] }}
+      onUpdateDraft={vi.fn()}
+      skillDirectory={[]}
+      onSubmit={onSubmit}
+    />);
+    fireEvent.click(screen.getByRole("button", { name: "Gửi thông tin" }));
+    expect(onSubmit).toHaveBeenCalledOnce();
+    const prompt = onSubmit.mock.calls[0][0];
+    expect(prompt).toContain("recommendTaskAssignmentCandidates");
+    expect(prompt).toContain("neutral skill fit");
+    expect(prompt).not.toContain("recommendAndAssignTask");
   });
 
   it("provides collapsible technical details with presentationContractVersion and scoringModelVersion", () => {
