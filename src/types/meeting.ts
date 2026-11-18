@@ -1,4 +1,4 @@
-export type MeetingStatus = "ACTIVE" | "SCHEDULED" | "ENDED";
+export type MeetingStatus = "ACTIVE" | "SCHEDULED" | "ENDING" | "ENDED";
 export type MeetingRole = "HOST" | "PARTICIPANT";
 export type MeetingRecordingStatus =
   | "IDLE"
@@ -84,6 +84,18 @@ export interface MeetingTokenResponse {
   participantName: string;
   isHost: boolean;
   meeting: ProjectMeetingDto;
+}
+
+export interface MeetingRecordingDto {
+  id: string;
+  state: "REQUESTED" | "CAPTURING" | "FINALIZING" | "UPLOADING" | "READY" | "FAILED" | "INTERRUPTED";
+  version: number;
+  fileId?: number | null;
+  durationMs?: number | null;
+  mimeType?: string | null;
+  createdAt: string;
+  origin: "BROWSER" | "IMPORT";
+  coverage: string;
 }
 
 export interface MeetingParticipantDto {

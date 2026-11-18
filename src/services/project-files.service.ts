@@ -32,7 +32,8 @@ export const projectFilesService = {
   uploadFile: (
     projectId: number,
     file: File,
-    description?: string
+    description?: string,
+    signal?: AbortSignal
   ): Promise<ApiResponse<ProjectFile>> => {
     const formData = new FormData();
     formData.append("file", file);
@@ -43,7 +44,8 @@ export const projectFilesService = {
     return http
       .post<ApiResponse<ProjectFile>>(
         `/v1/projects/${projectId}/files`,
-        formData
+        formData,
+        signal ? { signal } : undefined
       )
       .then((r) => r.data);
   },

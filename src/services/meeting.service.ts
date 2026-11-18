@@ -4,6 +4,7 @@ import type {
   CreateMeetingRequest,
   MeetingParticipantDto,
   MeetingRecordingPlaybackResponse,
+  MeetingRecordingDto,
   MeetingStatus,
   MeetingTokenResponse,
   PresignRecordingUploadRequest,
@@ -47,9 +48,13 @@ export const meetingService = {
       .post<MeetingTokenResponse>(`/v1/projects/${projectId}/meetings/${meetingId}/join`)
       .then(unwrap<MeetingTokenResponse>),
 
-  leaveMeeting: (projectId: number, meetingId: number): Promise<void> =>
+  confirmAttendance: (projectId: number, meetingId: number, participantSid: string) =>
+    api.post(`/v1/projects/${projectId}/meetings/${meetingId}/attendance`, { participantSid }),
+
+  leaveMeeting: (projectId: number, meetingId: number, participantSid?: string): Promise<void> =>
     api
-      .post<void>(`/v1/projects/${projectId}/meetings/${meetingId}/leave`)
+      .post<void>(`/v1/projects/${projectId}/meetings/${meetingId}/leave`, participantSid ? { participantSid } : undefined,
+        { timeout: 5_000 })
       .then(() => {}),
 
   endMeeting: (projectId: number, meetingId: number): Promise<ProjectMeetingDto> =>
@@ -153,6 +158,31 @@ export const meetingService = {
       durationSeconds: options?.durationSeconds,
     });
   },
+  getRecordings: (projectId: number, meetingId: number) =>
+    api.get<MeetingRecordingDto[]>(`/v1/projects/${projectId}/meetings/${meetingId}/recordings`)
+      .then(unwrap<MeetingRecordingDto[]>),
+
+  beginRecording: (projectId: number, meetingId: number, payload: {
+    idempotencyKey: string;
+    origin: "BROWSER" | "IMPORT";
+    coverage: string;
+  }) => api.post<MeetingRecordingDto>(`/v1/projects/${projectId}/meetings/${meetingId}/recordings`, payload,
+    { timeout: 10_000 }).then(unwrap<MeetingRecordingDto>),
+
+  markRecording: (projectId: number, meetingId: number, recordingId: string,
+    state: "CAPTURING" | "FINALIZING" | "UPLOADING" | "FAILED", version: number) =>
+    api.post<MeetingRecordingDto>(`/v1/projects/${projectId}/meetings/${meetingId}/recordings/${recordingId}/state`,
+      { state, expectedVersion: version }, { timeout: 10_000 }).then(unwrap<MeetingRecordingDto>),
+
+  finalizeRecording: (projectId: number, meetingId: number, recordingId: string, payload: {
+    projectFileId: number;
+    durationMs?: number;
+    byteLength: number;
+    mimeType: string;
+    checksum: string;
+    expectedVersion: number;
+  }) => api.post<MeetingRecordingDto>(`/v1/projects/${projectId}/meetings/${meetingId}/recordings/${recordingId}/finalize`,
+    payload, { timeout: 15_000 }).then(unwrap<MeetingRecordingDto>),
 
   getParticipants: (projectId: number, meetingId: number): Promise<MeetingParticipantDto[]> =>
     api
