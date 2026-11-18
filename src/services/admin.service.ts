@@ -76,3 +76,28 @@ export const adminSettingsService = {
   updateSetting: (payload: SystemSettingUpdateRequest) =>
     api.put<SystemSettingResponse>("/v1/admin/settings", payload),
 };
+
+export const adminAdaptiveService = {
+  getDatasetReport: (params?: {
+    projectId?: number;
+    managerId?: number;
+    mode?: string;
+    page?: number;
+    limit?: number;
+  }) => {
+    const query: Record<string, string | number> = {};
+    if (params?.projectId != null) query.projectId = params.projectId;
+    if (params?.managerId != null) query.managerId = params.managerId;
+    if (params?.mode?.trim()) query.mode = params.mode.trim();
+    if (params?.page != null) query.page = params.page;
+    if (params?.limit != null) query.limit = params.limit;
+    return api.get<import("@/types/admin").AdaptiveDatasetQualityReport>(
+      "/v1/admin/ai/adaptive/dataset-report",
+      Object.keys(query).length > 0 ? query : undefined,
+    );
+  },
+  replayDueJournalEntries: (limit = 50) =>
+    api.post<import("@/types/admin").AdaptiveJournalReplayResult>(
+      `/v1/admin/ai/adaptive/journal/replay?limit=${encodeURIComponent(String(limit))}`,
+    ),
+};

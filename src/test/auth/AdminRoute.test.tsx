@@ -133,7 +133,7 @@ describe("P1.3 Admin route & navigation guard", () => {
     await Promise.resolve(useAuthStore.getState().hydrate());
 
     const { router } = await import("@/routes/router");
-    for (const adminPath of ["/admin/users", "/admin/skills", "/admin/settings"]) {
+    for (const adminPath of ["/admin/users", "/admin/skills", "/admin/settings", "/admin/adaptive"]) {
       const memoryRouter = createMemoryRouter(router.routes, {
         initialEntries: [adminPath],
       });

@@ -19,7 +19,7 @@ import {
 import { useAuthStore } from "@/stores/auth.store";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import type { NotificationItem } from "@/types/notification";
-import { LayoutDashboard, ShieldCheck, UserRound, LogOut, FolderKanban, Users, Code, Settings, Menu, ChevronLeft, Bot, Bell, MessageSquare, MessagesSquare, Video, CalendarDays } from "lucide-react";
+import { LayoutDashboard, ShieldCheck, UserRound, LogOut, FolderKanban, Users, Code, Settings, Menu, ChevronLeft, Bot, Bell, MessageSquare, MessagesSquare, Video, CalendarDays, BarChart3 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { toast } from "react-toastify";
 import { notificationService } from "@/services/notification.service";
@@ -448,6 +448,10 @@ export default function MainLayout() {
                       <Settings className="h-4 w-4 shrink-0" />
                       <span className="truncate">{t("admin.system_settings.title", { defaultValue: "Cấu hình AI & Hệ thống" })}</span>
                     </NavLink>
+                    <NavLink to="/admin/adaptive" onClick={() => setIsMobileNavOpen(false)} className={({isActive}) => `flex items-center gap-2 rounded-md px-3 py-2 transition-colors ${isActive ? "bg-accent font-medium text-primary" : "hover:bg-accent"}`} title={t("admin.adaptive.nav", { defaultValue: "Adaptive Quality" })} data-testid="nav-admin-adaptive-mobile">
+                      <BarChart3 className="h-4 w-4 shrink-0" />
+                      <span className="truncate">{t("admin.adaptive.nav", { defaultValue: "Adaptive Quality" })}</span>
+                    </NavLink>
                   </>
                 ) : (
                   <>
@@ -643,6 +647,19 @@ export default function MainLayout() {
               >
                 <Settings className="h-4 w-4 shrink-0" />
                 {!isCollapsed && <span className="truncate">{t("admin.system_settings.title", { defaultValue: "Cấu hình AI & Hệ thống" })}</span>}
+              </NavLink>
+              <NavLink
+                to="/admin/adaptive"
+                className={({ isActive }) =>
+                  `flex items-center gap-2 rounded-md ${isCollapsed ? 'justify-center px-0' : 'px-3'} py-2 transition-colors ${
+                    isActive ? "bg-accent font-medium text-primary" : "hover:bg-accent"
+                  }`
+                }
+                title={t("admin.adaptive.nav", { defaultValue: "Adaptive Quality" })}
+                data-testid="nav-admin-adaptive"
+              >
+                <BarChart3 className="h-4 w-4 shrink-0" />
+                {!isCollapsed && <span className="truncate">{t("admin.adaptive.nav", { defaultValue: "Adaptive Quality" })}</span>}
               </NavLink>
             </>
           ) : (

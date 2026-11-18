@@ -26,6 +26,7 @@ import TaskLinkResolverPage from "@/pages/TaskLinkResolverPage";
 import AdminUsersPage from "@/pages/AdminUsersPage";
 import AdminGlobalSkillsPage from "@/pages/AdminGlobalSkillsPage";
 import AdminSettingsPage from "@/pages/AdminSettingsPage";
+import AdminAdaptiveReportPage from "@/pages/AdminAdaptiveReportPage";
 import AiChatPage from "@/pages/AiChatPage";
 import NotificationsPage from "@/pages/NotificationsPage";
 import CommentsPage from "@/pages/CommentsPage";
@@ -211,6 +212,14 @@ export const router = createBrowserRouter([
         element: (
           <AdminRoute>
             <AdminSettingsPage />
+          </AdminRoute>
+        ),
+      },
+      {
+        path: "/admin/adaptive",
+        element: (
+          <AdminRoute>
+            <AdminAdaptiveReportPage />
           </AdminRoute>
         ),
       },

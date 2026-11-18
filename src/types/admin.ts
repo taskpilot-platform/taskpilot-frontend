@@ -71,3 +71,97 @@ export interface SystemSettingUpdateRequest {
   valueJson: unknown;
   description?: string;
 }
+
+export type AdaptiveExclusionReason =
+  | "NONE"
+  | "NO_SNAPSHOT_OR_DECISION"
+  | "REJECTED_NO_SELECTION"
+  | "MANUAL_ASSIGNMENT"
+  | "SELF_ATTESTED_REVIEW"
+  | "LEGACY_OUTCOME_V1"
+  | "SYNTHETIC_ROW"
+  | "INVALIDATED_OUTCOME"
+  | "MISSING_COMPARISON_POOL"
+  | "CHOSEN_CANDIDATE_NOT_IN_SNAPSHOT";
+
+export interface AdaptiveCandidateFeatureRow {
+  candidateId: number;
+  fit: number;
+  load: number;
+  performanceInput: number;
+  performanceStatus: string | null;
+  recommended: boolean;
+  selected: boolean;
+}
+
+export interface AdaptiveChosenOutcomeDiagnostics {
+  outcomeId: string;
+  evaluationId: number;
+  evaluationVersion: number;
+  evidenceStatus: string | null;
+  qualityRating: number | null;
+  rubricVersion: string | null;
+  onTime: boolean | null;
+  timelinessStatus: string | null;
+  acceptedSubmittedAt: string | null;
+  reviewedAt: string | null;
+  commitmentDueAt: string | null;
+}
+
+export interface AdaptiveDatasetRow {
+  rowId: string;
+  snapshotId: string | null;
+  decisionId: string | null;
+  taskId: number | null;
+  projectId: number | null;
+  managerId: number | null;
+  heuristicMode: string | null;
+  scoringModelVersion: string | null;
+  presentationContractVersion: string | null;
+  weightVersion: string | null;
+  selectedCandidateId: number | null;
+  recommendedCandidateId: number | null;
+  decisionType: string | null;
+  selectedCandidateFit: number;
+  selectedCandidateLoad: number;
+  selectedCandidatePerformance: number;
+  selectedCandidatePerformanceStatus: string | null;
+  candidates: AdaptiveCandidateFeatureRow[];
+  outcomeDiagnostics: AdaptiveChosenOutcomeDiagnostics | null;
+}
+
+export interface AdaptiveDatasetQualityReport {
+  datasetVersion: string;
+  scope: {
+    projectId: number | null;
+    managerId: number | null;
+    heuristicMode: string | null;
+    page: number;
+    limit: number;
+  };
+  totalOutcomesEvaluated: number;
+  eligibleSamplesCount: number;
+  excludedSamplesCount: number;
+  manualEvidenceCount: number;
+  selfAttestedEvidenceCount: number;
+  rejectedFeedbackCount: number;
+  invalidatedOutcomesCount: number;
+  legacyOutcomeCount: number;
+  syntheticRowsCount: number;
+  pendingJournalCount: number;
+  failedJournalCount: number;
+  exclusionBreakdown: Record<string, number>;
+  canonicalDatasetSha256: string | null;
+  sufficientEvidenceForProposal: boolean;
+  minimumRequiredSamples: number;
+  readinessStatus: string;
+  readinessMessage: string;
+  generatedAt: string;
+  sampleRows: AdaptiveDatasetRow[];
+}
+
+export interface AdaptiveJournalReplayResult {
+  replayedCount: number;
+  pendingCount: number;
+  failedCount: number;
+}
