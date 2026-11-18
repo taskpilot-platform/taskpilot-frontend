@@ -530,6 +530,8 @@
       "skill_fit_label": "Phù hợp kỹ năng",
       "skill_fit_measured": "{{percent}}% (Đã đo lường)",
       "skill_fit_insufficient": "Chưa đủ dữ liệu kỹ năng",
+      "skill_fit_missing_requirements": "Chưa khai báo kỹ năng yêu cầu",
+      "skill_fit_declared": "Phù hợp {{percent}}% theo kỹ năng khai báo",
       "workload_label": "Khối lượng công việc",
       "active_task_count": "Số công việc đang hoạt động: {{count}}",
       "unverified_workload_value": "Giá trị workload đã lưu: {{value}}",
@@ -537,6 +539,7 @@
       "unverified_workload_fallback": "Chưa có dữ liệu workload đáng tin cậy",
       "performance_label": "Hiệu suất",
       "performance_unavailable": "Chưa đủ dữ liệu hiệu suất",
+      "performance_measured": "Chất lượng trung bình {{percent}}% qua {{count}} công việc đã duyệt. Dữ liệu này chiếm {{evidence}}% trong tiêu chí chất lượng dùng để xếp hạng.",
       "candidates_list_title": "Danh sách ứng viên:",
       "mode_label": "Chế độ phân công: {{mode}}",
       "skills_label": "Kỹ năng yêu cầu: {{skills}}"

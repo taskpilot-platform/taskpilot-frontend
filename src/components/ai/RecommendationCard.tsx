@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Sparkles, AlertCircle, Info, ChevronDown, ChevronUp, User } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { RecommendationView, RecommendedCandidateView } from "./aiChatTypes";
+import { recommendationFitText, recommendationPerformanceText } from "./aiChatHelpers";
 
 export function RecommendationCard({ view }: { view: RecommendationView }) {
   const { t } = useTranslation();
@@ -158,11 +159,11 @@ function CandidateRow({ candidate }: { candidate: RecommendedCandidateView }) {
           <span className="text-[10px] text-neutral-400 uppercase font-medium">{t("copilot.recommendation.skill_fit_label")}</span>
           {candidate.fitStatus === "MEASURED" && candidate.presentationFitValue !== null && candidate.presentationFitValue !== undefined ? (
             <span className="font-semibold text-emerald-600 dark:text-emerald-400">
-              {t("copilot.recommendation.skill_fit_measured", { percent: Math.round(candidate.presentationFitValue * 100) })}
+              {recommendationFitText(candidate)}
             </span>
           ) : (
             <span className="font-medium text-neutral-500 dark:text-neutral-400">
-              {t("copilot.recommendation.skill_fit_insufficient")}
+              {recommendationFitText(candidate)}
             </span>
           )}
         </div>
@@ -189,7 +190,7 @@ function CandidateRow({ candidate }: { candidate: RecommendedCandidateView }) {
           <span className="text-[10px] text-neutral-400 uppercase font-medium">{t("copilot.recommendation.performance_label")}</span>
           <span className="font-medium text-neutral-600 dark:text-neutral-300">
             <span className="text-[10px] text-neutral-400">
-              {t("copilot.recommendation.performance_unavailable")}
+              {recommendationPerformanceText(candidate)}
             </span>
           </span>
         </div>

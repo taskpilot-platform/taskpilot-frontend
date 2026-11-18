@@ -530,6 +530,8 @@
       "skill_fit_label": "Skill Fit",
       "skill_fit_measured": "{{percent}}% (Measured)",
       "skill_fit_insufficient": "Insufficient skill data",
+      "skill_fit_missing_requirements": "No required skills specified",
+      "skill_fit_declared": "{{percent}}% fit from declared skills",
       "workload_label": "Workload",
       "active_task_count": "Active assigned tasks: {{count}}",
       "unverified_workload_value": "Stored workload value: {{value}}",
@@ -537,6 +539,7 @@
       "unverified_workload_fallback": "No reliable workload data available",
       "performance_label": "Performance",
       "performance_unavailable": "Insufficient performance data",
+      "performance_measured": "Average reviewed quality {{percent}}% across {{count}} tasks. Evidence contributes {{evidence}}% to the ranking's quality input.",
       "candidates_list_title": "Candidate List:",
       "mode_label": "Assignment mode: {{mode}}",
       "skills_label": "Required skills: {{skills}}"

@@ -8,6 +8,7 @@ import type {
   PendingActionConfirmation,
   ConfirmedTaskMutation,
   RecommendationView,
+  RecommendedCandidateView,
 } from "./aiChatTypes";
 import i18n from "../../lib/i18n";
 
@@ -335,6 +336,29 @@ export function isRecommendationView(data: unknown): data is RecommendationView 
   );
 }
 
+export function recommendationFitText(candidate: RecommendedCandidateView): string {
+  if (candidate.fitStatus === "MISSING_REQUIREMENTS") {
+    return i18n.t("copilot.recommendation.skill_fit_missing_requirements");
+  }
+  if (candidate.fitStatus === "MEASURED" && candidate.presentationFitValue != null) {
+    const key = candidate.fitSource === "DECLARED_PROFILE" ? "skill_fit_declared" : "skill_fit_measured";
+    return i18n.t(`copilot.recommendation.${key}`, { percent: Math.round(candidate.presentationFitValue * 100) });
+  }
+  return i18n.t("copilot.recommendation.skill_fit_insufficient");
+}
+
+export function recommendationPerformanceText(candidate: RecommendedCandidateView): string {
+  if (candidate.performanceStatus === "MEASURED" && candidate.observedQualityMean != null
+    && candidate.performanceSampleCount != null && candidate.evidenceWeight != null) {
+    return i18n.t("copilot.recommendation.performance_measured", {
+      percent: Math.round(candidate.observedQualityMean * 100),
+      count: candidate.performanceSampleCount,
+      evidence: Math.round(candidate.evidenceWeight * 100),
+    });
+  }
+  return i18n.t("copilot.recommendation.performance_unavailable");
+}
+
 export function formatRecommendationView(view: RecommendationView): string {
   const lines: string[] = [];
   lines.push(`### ${i18n.t("copilot.recommendation.title")}`);
@@ -350,15 +374,13 @@ export function formatRecommendationView(view: RecommendationView): string {
   if (view.candidates && view.candidates.length > 0) {
     lines.push(`\n**${i18n.t("copilot.recommendation.candidates_list_title")}**`);
     view.candidates.forEach((c) => {
-      const fitText = c.fitStatus === "MEASURED" && c.presentationFitValue !== null && c.presentationFitValue !== undefined
-        ? i18n.t("copilot.recommendation.skill_fit_measured", { percent: Math.round(c.presentationFitValue * 100) })
-        : i18n.t("copilot.recommendation.skill_fit_insufficient");
+      const fitText = recommendationFitText(c);
       const workloadText = c.workloadStatus === "MEASURED" && c.workloadUnit === "ACTIVE_TASK_COUNT"
         ? i18n.t("copilot.recommendation.active_task_count", { count: c.storedWorkloadValue ?? 0 })
         : c.storedWorkloadValue !== null && c.storedWorkloadValue !== undefined
         ? `${i18n.t("copilot.recommendation.unverified_workload_value", { value: c.storedWorkloadValue })} ${i18n.t("copilot.recommendation.unverified_workload_explanation")}`
         : i18n.t("copilot.recommendation.unverified_workload_fallback");
-      const perfText = i18n.t("copilot.recommendation.performance_unavailable");
+      const perfText = recommendationPerformanceText(c);
       lines.push(`${c.rank}. **${c.displayName}** (${c.memberStatus ?? "AVAILABLE"})`);
       lines.push(`   - ${i18n.t("copilot.recommendation.skill_fit_label")}: ${fitText}`);
       lines.push(`   - ${i18n.t("copilot.recommendation.workload_label")}: ${workloadText}`);

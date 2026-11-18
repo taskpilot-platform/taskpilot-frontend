@@ -84,7 +84,7 @@ export type ChatComposerProps = {
   stopTooltip: string;
 };
 
-export type MetricDataStatus = "MEASURED" | "INSUFFICIENT_DATA" | "UNVERIFIED" | "DEFAULT";
+export type MetricDataStatus = "MEASURED" | "INSUFFICIENT_DATA" | "UNVERIFIED" | "DEFAULT" | "MISSING_REQUIREMENTS";
 export type RecommendationDifferentiationStatus = "DIFFERENTIATED" | "INSUFFICIENT_TO_DIFFERENTIATE" | "UNKNOWN";
 
 export type RecommendedCandidateView = {
@@ -93,12 +93,17 @@ export type RecommendedCandidateView = {
   displayName: string;
   presentationFitValue?: number | null;
   fitStatus: MetricDataStatus;
+  fitSource?: "DECLARED_PROFILE";
   storedWorkloadValue?: number | null;
   workloadStatus: MetricDataStatus;
   workloadUnit?: string | null;
   workloadScope?: string | null;
   workloadMeasuredAt?: string | null;
   performanceStatus: MetricDataStatus;
+  performanceSampleCount?: number | null;
+  performanceWindowLimit?: number | null;
+  observedQualityMean?: number | null;
+  evidenceWeight?: number | null;
   memberStatus?: string | null;
 };
 
