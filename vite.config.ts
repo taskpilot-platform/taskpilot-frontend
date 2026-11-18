@@ -12,6 +12,9 @@ export default defineConfig(({ mode }) => {
     resolve: {
       alias: {
         "@": path.resolve(__dirname, "./src"),
+        ...(mode === "isolated-e2e" && {
+          "livekit-client": path.resolve(__dirname, "./e2e/helpers/livekit-sdk-stub.ts"),
+        }),
       },
     },
     test: {

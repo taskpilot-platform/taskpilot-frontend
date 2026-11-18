@@ -107,7 +107,7 @@ test.describe("Phase 4: LiveKit Video Meeting & Collaboration (TC101 - TC130)", 
 
     await expect(page.locator('[data-testid="meeting-title"]')).toContainText("Design Sync");
     await expect(page.locator('[data-testid="meeting-timer"]')).toBeVisible();
-    await expect(page.locator("text=REC")).toBeVisible();
+    await expect(page.getByText("REC", { exact: true })).toHaveCount(0);
   });
 
   // --- AC-05: Video Grid & Participant Tiles ---

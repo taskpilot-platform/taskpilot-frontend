@@ -476,7 +476,7 @@ export async function setupWorkspaceMocks(
         status: 200,
         message: "Joined successfully",
         data: {
-          token: "mock-livekit-token-" + meetingId,
+          token: "isolated-sdk-fixture-" + meetingId,
           livekitUrl: "wss://livekit.invalid",
           roomName: meeting.roomName,
           identity: `user_${user.id}`,
@@ -487,6 +487,27 @@ export async function setupWorkspaceMocks(
       }),
     });
   });
+
+  await page.route(/\/(?:api\/)?v1\/projects\/100\/meetings\/\d+\/attendance$/, async (route) => {
+    const sid = route.request().postDataJSON()?.participantSid;
+    await route.fulfill({ status: sid === "PA_fixture" ? 200 : 409, json: { data: null } });
+  });
+
+  await page.route(/\/(?:api\/)?v1\/projects\/100\/meetings\/\d+\/recordings$/, async (route) => {
+    const meetingId = Number(route.request().url().split("/").at(-2));
+    const linked = meetings.find((meeting: { id: number }) => meeting.id === meetingId)?.recordingFileId;
+    if (route.request().method() !== "GET") {
+      await route.fulfill({ status: 501, json: {} });
+      return;
+    }
+    await route.fulfill({ status: 200, json: linked ? [{
+      id: "fixture-clip", state: "READY", fileId: linked,
+      createdAt: "2026-11-18T10:00:00Z", version: 1, origin: "BROWSER", coverage: "SCREEN_ONLY",
+    }] : [] });
+  });
+
+  await page.route(/\/(?:api\/)?v1\/projects\/100\/files\/777\/download$/, (route) =>
+    route.fulfill({ status: 200, contentType: "video/webm", path: "e2e/fixtures/recording-test.webm" }));
 
   // Mock Leave Meeting API
   await page.route(/\/(?:api\/)?v1\/projects\/100\/meetings\/\d+\/leave(\?.*)?$/, async (route) => {
