@@ -316,6 +316,41 @@ describe("Meeting Recording and Screen Sharing Features", () => {
       });
       expect(projectFilesService.uploadFile).not.toHaveBeenCalled();
     });
+
+    it("plays local IndexedDB fallback recording even when server recordingStatus is FAILED", async () => {
+      const fallbackBlob = new Blob(["local-fallback-webm-bytes"], { type: "video/webm" });
+      await meetingRecordingStore.saveRecording(234, fallbackBlob, {
+        title: "Sprint Review Session",
+        projectId: 4,
+        durationSeconds: 90,
+      });
+
+      vi.mocked(meetingService.getRecordingPlaybackUrl).mockResolvedValueOnce({
+        url: null,
+        provider: null,
+        requiresAuthHeader: false,
+        egressId: "EG_FAIL_1",
+        recordingStatus: "FAILED",
+        backupStorageUsed: false,
+        recordingError: "Cloud egress failed",
+      });
+
+      render(
+        <ConfirmProvider>
+          <MeetingRecordingModal
+            isOpen={true}
+            onClose={vi.fn()}
+            meeting={{ ...mockEndedMeeting, recordingStatus: "FAILED" }}
+          />
+        </ConfirmProvider>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId("recording-video-player")).toBeInTheDocument();
+        expect(screen.getByTestId("local-fallback-recording-badge")).toBeInTheDocument();
+        expect(screen.getByTestId("retry-local-b2-upload-btn")).toBeInTheDocument();
+      });
+    });
   });
 
   describe("ProjectMeetingsTab Integration", () => {
@@ -607,6 +642,91 @@ describe("Meeting Recording and Screen Sharing Features", () => {
       });
       expect(getDisplayMediaMock).not.toHaveBeenCalled();
       expect(screen.queryByTestId("meeting-fallback-recording-badge")).not.toBeInTheDocument();
+    });
+
+    it("awaits async MediaRecorder.stop() -> onstop -> B2 upload before calling onLeave", async () => {
+      const stopTrack = vi.fn();
+      Object.defineProperty(navigator, "mediaDevices", {
+        writable: true,
+        value: {
+          getUserMedia: vi.fn().mockResolvedValue({
+            getTracks: () => [{ stop: vi.fn() }],
+          }),
+          getDisplayMedia: vi.fn().mockResolvedValue({
+            getTracks: () => [{ stop: stopTrack }],
+            getVideoTracks: () => [{ addEventListener: vi.fn(), removeEventListener: vi.fn(), stop: stopTrack }],
+          }),
+        },
+      });
+
+      // Realistic ASYNC MediaRecorder: onstop fires asynchronously after stop() returns
+      class AsyncMockMediaRecorder {
+        state = "inactive";
+        mimeType = "video/webm";
+        ondataavailable: ((e: { data: Blob }) => void) | null = null;
+        onstop: (() => void) | null = null;
+        static isTypeSupported = () => true;
+        start() {
+          this.state = "recording";
+        }
+        stop() {
+          this.state = "inactive";
+          setTimeout(() => {
+            this.ondataavailable?.({ data: new Blob(["async-fallback-bytes"], { type: "video/webm" }) });
+            this.onstop?.();
+          }, 30);
+        }
+      }
+      (globalThis as any).MediaRecorder = AsyncMockMediaRecorder;
+
+      let resolveUpload!: (v: any) => void;
+      const uploadPromise = new Promise<any>((res) => {
+        resolveUpload = res;
+      });
+      vi.mocked(meetingService.startRecording).mockRejectedValueOnce(new Error("Egress down"));
+      vi.mocked(meetingService.uploadFallbackRecordingToB2).mockReturnValueOnce(uploadPromise);
+      vi.mocked(meetingService.leaveMeeting).mockResolvedValueOnce(undefined);
+      vi.mocked(meetingService.joinMeeting).mockResolvedValue({
+        token: "mock-token",
+        livekitUrl: "wss://mock.livekit.cloud",
+        roomName: "tp-proj-4-m-234",
+        identity: "user_1",
+        participantName: "Admin",
+        isHost: true,
+        meeting: { ...mockEndedMeeting, status: "ACTIVE", recordingStatus: "IDLE" },
+      });
+
+      const onLeave = vi.fn();
+      render(
+        <ConfirmProvider>
+          <LiveMeetingRoom
+            projectId={4}
+            meetingId={234}
+            currentUserId={1}
+            onLeave={onLeave}
+          />
+        </ConfirmProvider>
+      );
+
+      const recBtn = await screen.findByTestId("toggle-recording-btn");
+      fireEvent.click(recBtn);
+      await screen.findByTestId("meeting-fallback-recording-badge");
+
+      // Click Leave while fallback recording is still active
+      fireEvent.click(screen.getByTestId("leave-meeting-btn"));
+
+      // Wait until uploadFallbackRecordingToB2 has been invoked asynchronously after onstop
+      await waitFor(() => {
+        expect(meetingService.uploadFallbackRecordingToB2).toHaveBeenCalledTimes(1);
+      });
+      // onLeave MUST NOT have fired yet while upload is still in flight
+      expect(onLeave).not.toHaveBeenCalled();
+
+      // Now complete the B2 upload -> onLeave fires right after
+      resolveUpload({ ...mockEndedMeeting, recordingFileId: 1002, recordingStatus: "COMPLETED" });
+      await waitFor(() => {
+        expect(onLeave).toHaveBeenCalledTimes(1);
+      });
     });
   });
 });

@@ -51,6 +51,8 @@ export function MeetingRecordingModal({
   const [isLoading, setIsLoading] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isDemoMode, setIsDemoMode] = useState(false);
+  const [isLocalFallbackOnly, setIsLocalFallbackOnly] = useState(false);
+  const [isRetryingLocalUpload, setIsRetryingLocalUpload] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const objectUrlRef = useRef<string | null>(null);
 
@@ -65,10 +67,11 @@ export function MeetingRecordingModal({
     if (!isOpen || !meeting) return;
     setIsLoading(true);
     setIsDemoMode(false);
+    setIsLocalFallbackOnly(false);
 
     const isCancelled = () => Boolean(cancelledRef?.current);
 
-    const showBlob = (blob: Blob) => {
+    const showBlob = (blob: Blob, localOnly = false) => {
       if (isCancelled()) return;
       revokeCurrentObjectUrl();
       const nextUrl = URL.createObjectURL(blob);
@@ -76,6 +79,7 @@ export function MeetingRecordingModal({
       setVideoBlob(blob);
       setVideoUrl(nextUrl);
       setIsDemoMode(false);
+      setIsLocalFallbackOnly(localOnly);
     };
 
     const showDirectUrl = (url: string, info: MeetingRecordingPlaybackResponse) => {
@@ -85,6 +89,7 @@ export function MeetingRecordingModal({
       setVideoUrl(resolvePlaybackUrl(url));
       setPlaybackInfo(info);
       setIsDemoMode(false);
+      setIsLocalFallbackOnly(false);
     };
 
     const showSample = () => {
@@ -93,13 +98,15 @@ export function MeetingRecordingModal({
       setVideoUrl("/sample-meeting-recording.webm");
       setVideoBlob(null);
       setIsDemoMode(true);
+      setIsLocalFallbackOnly(false);
     };
 
     try {
+      let playback: MeetingRecordingPlaybackResponse | null = null;
       // 1. Try cloud Egress playback URL endpoint first (direct B2 presigned GET or signed Range proxy)
       if (meeting.projectId && typeof meetingService.getRecordingPlaybackUrl === "function") {
         try {
-          const playback = await meetingService.getRecordingPlaybackUrl(meeting.projectId, meeting.id);
+          playback = await meetingService.getRecordingPlaybackUrl(meeting.projectId, meeting.id);
           if (playback && !isCancelled()) {
             setPlaybackInfo(playback);
             if (playback.url) {
@@ -107,11 +114,9 @@ export function MeetingRecordingModal({
               return;
             }
             if (
-              playback.backupStorageUsed ||
               playback.recordingStatus === "STARTING" ||
               playback.recordingStatus === "RECORDING" ||
-              playback.recordingStatus === "PROCESSING" ||
-              playback.recordingStatus === "FAILED"
+              playback.recordingStatus === "PROCESSING"
             ) {
               revokeCurrentObjectUrl();
               setVideoBlob(null);
@@ -124,7 +129,7 @@ export function MeetingRecordingModal({
         }
       }
 
-      // 2. Try local IndexedDB store (historical client recordings)
+      // 2. Always check local IndexedDB store (preserves Tier 3 fallback recordings even when cloud status is FAILED)
       const record = await meetingRecordingStore.getRecording(meeting.id);
       if (record && record.blob) {
         let playableBlob = record.blob;
@@ -136,7 +141,15 @@ export function MeetingRecordingModal({
             playableBlob = record.blob;
           }
         }
-        showBlob(playableBlob);
+        showBlob(playableBlob, true);
+        return;
+      }
+
+      // 2b. If no local fallback copy exists and cloud status is FAILED or backupStorageUsed, surface status view
+      if (playback && (playback.backupStorageUsed || playback.recordingStatus === "FAILED")) {
+        revokeCurrentObjectUrl();
+        setVideoBlob(null);
+        setVideoUrl(null);
         return;
       }
 
@@ -145,7 +158,7 @@ export function MeetingRecordingModal({
         const fileId = meeting.recordingFileId ?? (await findLegacyRecordingId(meeting));
         if (fileId) {
           const blob = await projectFilesService.downloadFileBlob(meeting.projectId, fileId);
-          showBlob(blob);
+          showBlob(blob, false);
           return;
         }
       }
@@ -185,10 +198,11 @@ export function MeetingRecordingModal({
     setIsSyncing(true);
     try {
       const synced = await meetingService.syncRecording(meeting.projectId, meeting.id);
-      if (synced) {
-        onMeetingUpdated?.(synced);
+      if (synced && onMeetingUpdated) {
+        onMeetingUpdated(synced);
+      } else {
+        await loadRecording();
       }
-      await loadRecording();
     } catch (err: any) {
       console.warn("Could not synchronize recording status:", err);
       toast.error(
@@ -198,6 +212,38 @@ export function MeetingRecordingModal({
       );
     } finally {
       setIsSyncing(false);
+    }
+  };
+
+  const handleRetryLocalUploadToB2 = async () => {
+    if (!meeting?.projectId || !videoBlob || isRetryingLocalUpload) return;
+    setIsRetryingLocalUpload(true);
+    try {
+      const ext = videoBlob.type.toLowerCase().includes("mp4") ? ".mp4" : ".webm";
+      const updated = await meetingService.uploadFallbackRecordingToB2(meeting.projectId, meeting.id, videoBlob, {
+        fileName: `meeting_${meeting.id}_fallback_${Date.now()}${ext}`,
+        durationSeconds: meeting.durationSeconds || 30,
+      });
+      toast.success(
+        t("meetings.upload_video_success", {
+          defaultValue: "Đã tải bản ghi lên Backblaze B2 thành công!",
+        })
+      );
+      if (updated && onMeetingUpdated) {
+        onMeetingUpdated(updated);
+      } else {
+        await loadRecording();
+      }
+    } catch (err: any) {
+      toast.error(
+        err?.response?.data?.message ||
+          err?.message ||
+          t("meetings.upload_video_b2_failed", {
+            defaultValue: "Không thể tải bản ghi cục bộ lên Backblaze B2.",
+          })
+      );
+    } finally {
+      setIsRetryingLocalUpload(false);
     }
   };
 
@@ -291,15 +337,16 @@ export function MeetingRecordingModal({
           fileName: uploadName,
           durationSeconds: meeting.durationSeconds || 30,
         });
-        if (updated) {
-          onMeetingUpdated?.(updated);
-        }
         toast.success(
           t("meetings.upload_video_success", {
             defaultValue: "Đã tải bản ghi lên Backblaze B2 thành công!",
           })
         );
-        await loadRecording();
+        if (updated && onMeetingUpdated) {
+          onMeetingUpdated(updated);
+        } else {
+          await loadRecording();
+        }
       } catch (b2Err: any) {
         console.warn("Direct B2 presigned upload failed:", b2Err);
         toast.error(
@@ -401,6 +448,17 @@ export function MeetingRecordingModal({
                   }
                 }}
               />
+              {isLocalFallbackOnly && !isDemoMode && (
+                <div
+                  className="absolute top-3 left-3 bg-amber-500/90 text-slate-950 px-2.5 py-1 rounded-md text-[11px] font-medium shadow-xs flex items-center gap-1.5"
+                  data-testid="local-fallback-recording-badge"
+                >
+                  <span className="w-2 h-2 rounded-full bg-slate-950" />
+                  {t("meetings.local_fallback_badge", {
+                    defaultValue: "Bản ghi cục bộ trên trình duyệt (chưa đồng bộ B2)",
+                  })}
+                </div>
+              )}
               {isDemoMode && (
                 <div
                   className="absolute top-3 left-3 bg-background/90 px-2.5 py-1 rounded-md text-[11px] font-medium text-emerald-500 border border-border shadow-xs flex items-center gap-1.5"
@@ -553,16 +611,33 @@ export function MeetingRecordingModal({
         {/* Footer */}
         <DialogFooter className="p-4 border-t border-border/60 bg-muted/10 flex flex-row items-center justify-between gap-2">
           {videoUrl ? (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={handleDownload}
-              className="gap-1.5 text-xs"
-              data-testid="download-recording-btn"
-            >
-              <Download className="w-3.5 h-3.5" />
-              {downloadLabel}
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleDownload}
+                className="gap-1.5 text-xs"
+                data-testid="download-recording-btn"
+              >
+                <Download className="w-3.5 h-3.5" />
+                {downloadLabel}
+              </Button>
+              {isLocalFallbackOnly && videoBlob && meeting?.isHost !== false && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleRetryLocalUploadToB2}
+                  disabled={isRetryingLocalUpload}
+                  className="gap-1.5 text-xs border-amber-500/40 text-amber-700 dark:text-amber-300"
+                  data-testid="retry-local-b2-upload-btn"
+                >
+                  <Upload className="w-3.5 h-3.5" />
+                  {isRetryingLocalUpload
+                    ? t("meetings.recording_uploading_b2", { defaultValue: "Đang tải lên B2..." })
+                    : t("meetings.retry_b2_upload", { defaultValue: "Tải lên Backblaze B2" })}
+                </Button>
+              )}
+            </div>
           ) : (
             <div />
           )}

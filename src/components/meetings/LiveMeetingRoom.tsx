@@ -354,7 +354,7 @@ export function LiveMeetingRoom({
   const [isUploadingFallback, setIsUploadingFallback] = useState(false);
   const fallbackRecorderRef = useRef<MediaRecorder | null>(null);
   const fallbackStreamRef = useRef<MediaStream | null>(null);
-  const fallbackUploadPromiseRef = useRef<Promise<void> | null>(null);
+  const fallbackCompletionRef = useRef<{ promise: Promise<void>; resolve: () => void } | null>(null);
 
   // Drawers
   const [isParticipantsOpen, setIsParticipantsOpen] = useState(false);
@@ -445,6 +445,29 @@ export function LiveMeetingRoom({
     window.addEventListener("beforeunload", handleBeforeUnload);
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
   }, [recordingMode, isRecording, isUploadingFallback]);
+
+  // Periodically sync server-side Cloud Egress status so all participants see live REC / PROCESSING state
+  useEffect(() => {
+    if (connectionState !== "connected" || typeof meetingService.getMeetingById !== "function") return;
+    let active = true;
+    const interval = setInterval(async () => {
+      if (!active || recordingMode === "fallback") return;
+      try {
+        const latest = await meetingService.getMeetingById(projectId, meetingId);
+        if (!active || !latest) return;
+        setMeeting(latest);
+        const cloudActive = latest.recordingStatus === "STARTING" || latest.recordingStatus === "RECORDING";
+        setIsRecording(cloudActive);
+        setRecordingMode(cloudActive ? "cloud" : "none");
+      } catch {
+        // Non-fatal background refresh
+      }
+    }, 15000);
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
+  }, [connectionState, projectId, meetingId, recordingMode]);
 
   // Format timer
   const formatTime = (secs: number) => {
@@ -844,6 +867,7 @@ export function LiveMeetingRoom({
       }
     }
 
+    let resolveFallbackDone: (() => void) | null = null;
     try {
       const localChunks: Blob[] = [];
       const startedAt = Date.now();
@@ -853,6 +877,22 @@ export function LiveMeetingRoom({
         ? "video/webm"
         : "";
       const recorder = new MediaRecorder(streamToRecord, mime ? { mimeType: mime } : undefined);
+
+      // Create completion barrier BEFORE recorder.start() so Leave/End always waits across async recorder.stop() -> onstop -> B2 upload.
+      let resolveDone!: () => void;
+      const donePromise = new Promise<void>((res) => {
+        resolveDone = res;
+      });
+      resolveFallbackDone = resolveDone;
+      const completionHandle = { promise: donePromise, resolve: resolveDone };
+      fallbackCompletionRef.current = completionHandle;
+
+      const finishCompletion = () => {
+        resolveDone();
+        if (fallbackCompletionRef.current === completionHandle) {
+          fallbackCompletionRef.current = null;
+        }
+      };
 
       const handleTrackEnded = () => {
         if (recorder.state === "recording") {
@@ -893,10 +933,12 @@ export function LiveMeetingRoom({
         const durationSec = Math.max(1, Math.round(durationMs / 1000));
         const detectedType = recorder.mimeType || "video/webm";
         const initialBlob = new Blob(localChunks, { type: detectedType });
-        if (initialBlob.size === 0) return;
+        if (initialBlob.size === 0) {
+          finishCompletion();
+          return;
+        }
 
-        let uploadTask: Promise<void> | null = null;
-        uploadTask = (async () => {
+        void (async () => {
           setIsUploadingFallback(true);
           try {
             let blob = initialBlob;
@@ -942,13 +984,9 @@ export function LiveMeetingRoom({
             }
           } finally {
             setIsUploadingFallback(false);
-            if (fallbackUploadPromiseRef.current === uploadTask) {
-              fallbackUploadPromiseRef.current = null;
-            }
+            finishCompletion();
           }
         })();
-
-        fallbackUploadPromiseRef.current = uploadTask;
       };
 
       recorder.start(1000);
@@ -967,6 +1005,8 @@ export function LiveMeetingRoom({
       return true;
     } catch (recErr) {
       console.warn("Could not start fallback MediaRecorder:", recErr);
+      resolveFallbackDone?.();
+      fallbackCompletionRef.current = null;
       if (ownsStream && streamToRecord) {
         streamToRecord.getTracks().forEach((t) => t.stop());
       }
@@ -1031,12 +1071,25 @@ export function LiveMeetingRoom({
           const status = cloudErr?.response?.status ?? cloudErr?.status;
           // Never fall back to local browser recording on authorization, conflict, or bad-request errors.
           if (status === 409) {
-            setIsRecording(true);
-            setRecordingMode("cloud");
+            if (typeof meetingService.getMeetingById === "function") {
+              try {
+                const latest = await meetingService.getMeetingById(projectId, meetingId);
+                if (latest) {
+                  setMeeting(latest);
+                  const cloudActive =
+                    latest.recordingStatus === "STARTING" || latest.recordingStatus === "RECORDING";
+                  setIsRecording(cloudActive);
+                  setRecordingMode(cloudActive ? "cloud" : "none");
+                }
+              } catch {
+                // Keep existing state if refresh fails
+              }
+            }
             toast.info(
-              t("meetings.recording_already_active", {
-                defaultValue: "Cuộc họp đang được ghi hình trên đám mây.",
-              })
+              cloudErr?.response?.data?.message ||
+                t("meetings.recording_already_active", {
+                  defaultValue: "Cuộc họp đang có bản ghi đám mây đang chạy hoặc đang xử lý.",
+                })
             );
             return;
           }
@@ -1078,18 +1131,20 @@ export function LiveMeetingRoom({
   };
 
   const flushFallbackRecordingBeforeExit = async () => {
+    const completion = fallbackCompletionRef.current;
     if (fallbackRecorderRef.current && fallbackRecorderRef.current.state === "recording") {
       try {
         fallbackRecorderRef.current.stop();
       } catch (e) {
         console.warn("Error stopping fallback recorder before exit", e);
+        completion?.resolve();
       }
     }
-    if (fallbackUploadPromiseRef.current) {
+    if (completion) {
       try {
-        await fallbackUploadPromiseRef.current;
+        await completion.promise;
       } catch {
-        // Error already toasted inside onstop uploadTask
+        // Error already toasted inside onstop
       }
     }
   };
