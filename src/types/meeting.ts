@@ -1,5 +1,12 @@
 export type MeetingStatus = "ACTIVE" | "SCHEDULED" | "ENDED";
 export type MeetingRole = "HOST" | "PARTICIPANT";
+export type MeetingRecordingStatus =
+  | "IDLE"
+  | "STARTING"
+  | "RECORDING"
+  | "PROCESSING"
+  | "COMPLETED"
+  | "FAILED";
 
 export interface ProjectMeetingDto {
   id: number;
@@ -13,6 +20,10 @@ export interface ProjectMeetingDto {
   status: MeetingStatus;
   recordingEnabled: boolean;
   recordingFileId?: number | null;
+  egressId?: string | null;
+  recordingStatus?: MeetingRecordingStatus | null;
+  recordingError?: string | null;
+  backupStorageUsed?: boolean | null;
   scheduledStartTime?: string | null;
   scheduledEndTime?: string | null;
   startedAt: string;
@@ -21,6 +32,21 @@ export interface ProjectMeetingDto {
   activeParticipantsCount: number;
   totalParticipantsCount: number;
   isHost: boolean;
+}
+
+export interface MeetingRecordingPlaybackResponse {
+  url?: string | null;
+  provider?: "b2" | "gdrive" | "s3" | string | null;
+  requiresAuthHeader: boolean;
+  contentType?: string | null;
+  fileName?: string | null;
+  fileSize?: number | null;
+  expiresAt?: string | null;
+  recordingFileId?: number | null;
+  egressId?: string | null;
+  recordingStatus?: MeetingRecordingStatus | null;
+  backupStorageUsed: boolean;
+  recordingError?: string | null;
 }
 
 export interface CreateMeetingRequest {

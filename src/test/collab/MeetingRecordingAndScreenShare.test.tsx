@@ -17,6 +17,36 @@ vi.mock("@/services/meeting.service", () => ({
     leaveMeeting: vi.fn(),
     endMeeting: vi.fn(),
     updateRecordingFile: vi.fn().mockResolvedValue({}),
+    startRecording: vi.fn().mockResolvedValue({
+      id: 234,
+      projectId: 4,
+      egressId: "EG_TEST_1",
+      recordingStatus: "RECORDING",
+      recordingEnabled: true,
+    }),
+    stopRecording: vi.fn().mockResolvedValue({
+      id: 234,
+      projectId: 4,
+      egressId: "EG_TEST_1",
+      recordingStatus: "PROCESSING",
+      recordingEnabled: true,
+    }),
+    syncRecording: vi.fn().mockResolvedValue({
+      id: 234,
+      projectId: 4,
+      egressId: "EG_TEST_1",
+      recordingStatus: "COMPLETED",
+      recordingFileId: 999,
+      recordingEnabled: true,
+    }),
+    getRecordingPlaybackUrl: vi.fn().mockResolvedValue({
+      url: null,
+      provider: null,
+      requiresAuthHeader: false,
+      recordingStatus: "IDLE",
+      backupStorageUsed: false,
+      recordingError: null,
+    }),
   },
 }));
 
@@ -147,6 +177,91 @@ describe("Meeting Recording and Screen Sharing Features", () => {
         expect(screen.getByTestId("recording-video-player")).toBeInTheDocument();
       });
     });
+
+    it("plays direct Backblaze B2 presigned URL returned by playback-url endpoint", async () => {
+      vi.mocked(meetingService.getRecordingPlaybackUrl).mockResolvedValueOnce({
+        url: "https://s3.us-east-005.backblazeb2.com/taskpilot-recordings-2026/recordings/meeting.mp4?X-Amz-Signature=abc",
+        provider: "b2",
+        requiresAuthHeader: false,
+        contentType: "video/mp4",
+        fileName: "meeting-234.mp4",
+        fileSize: 102400,
+        recordingFileId: 777,
+        egressId: "EG_B2_1",
+        recordingStatus: "COMPLETED",
+        backupStorageUsed: false,
+      });
+
+      render(
+        <ConfirmProvider>
+          <MeetingRecordingModal
+            isOpen={true}
+            onClose={vi.fn()}
+            meeting={{ ...mockEndedMeeting, recordingFileId: 777, recordingStatus: "COMPLETED" }}
+          />
+        </ConfirmProvider>
+      );
+
+      await waitFor(() => {
+        const video = screen.getByTestId("recording-video-player") as HTMLVideoElement;
+        expect(video).toBeInTheDocument();
+        expect(video.getAttribute("src")).toContain("backblazeb2.com");
+      });
+    });
+
+    it("shows LiveKit backup storage warning clearly when backupStorageUsed is true", async () => {
+      vi.mocked(meetingService.getRecordingPlaybackUrl).mockResolvedValueOnce({
+        url: null,
+        provider: null,
+        requiresAuthHeader: false,
+        egressId: "EG_BACKUP_99",
+        recordingStatus: "FAILED",
+        backupStorageUsed: true,
+        recordingError: "Primary S3 upload failed",
+      });
+
+      render(
+        <ConfirmProvider>
+          <MeetingRecordingModal
+            isOpen={true}
+            onClose={vi.fn()}
+            meeting={{ ...mockEndedMeeting, egressId: "EG_BACKUP_99", recordingStatus: "FAILED", backupStorageUsed: true }}
+          />
+        </ConfirmProvider>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId("recording-backup-storage-alert")).toBeInTheDocument();
+        expect(screen.getByText(/kho dự phòng LiveKit/i)).toBeInTheDocument();
+        expect(screen.getByText(/EG_BACKUP_99/)).toBeInTheDocument();
+      });
+    });
+
+    it("shows processing state with manual sync button when Egress is PROCESSING", async () => {
+      vi.mocked(meetingService.getRecordingPlaybackUrl).mockResolvedValueOnce({
+        url: null,
+        provider: null,
+        requiresAuthHeader: false,
+        egressId: "EG_PROC_1",
+        recordingStatus: "PROCESSING",
+        backupStorageUsed: false,
+      });
+
+      render(
+        <ConfirmProvider>
+          <MeetingRecordingModal
+            isOpen={true}
+            onClose={vi.fn()}
+            meeting={{ ...mockEndedMeeting, egressId: "EG_PROC_1", recordingStatus: "PROCESSING" }}
+          />
+        </ConfirmProvider>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId("recording-processing-view")).toBeInTheDocument();
+        expect(screen.getByTestId("sync-recording-btn")).toBeInTheDocument();
+      });
+    });
   });
 
   describe("ProjectMeetingsTab Integration", () => {
@@ -235,6 +350,52 @@ describe("Meeting Recording and Screen Sharing Features", () => {
       await waitFor(() => {
         expect(screen.getByText("Kết thúc cuộc họp")).toBeInTheDocument();
         expect(screen.getByText("Bạn có chắc chắn muốn kết thúc cuộc họp này cho tất cả thành viên?")).toBeInTheDocument();
+      });
+    });
+
+    it("starts and stops cloud Egress recording when toggling the record button", async () => {
+      Object.defineProperty(navigator, "mediaDevices", {
+        writable: true,
+        value: {
+          getUserMedia: vi.fn().mockResolvedValue({
+            getTracks: () => [{ stop: vi.fn() }],
+          }),
+        },
+      });
+
+      vi.mocked(meetingService.joinMeeting).mockResolvedValue({
+        token: "mock-token",
+        livekitUrl: "wss://mock.livekit.cloud",
+        roomName: "tp-proj-4-m-234",
+        identity: "user_1",
+        participantName: "Admin",
+        isHost: true,
+        meeting: { ...mockEndedMeeting, status: "ACTIVE", recordingStatus: "IDLE" },
+      });
+
+      render(
+        <ConfirmProvider>
+          <LiveMeetingRoom
+            projectId={4}
+            meetingId={234}
+            currentUserId={1}
+            onLeave={vi.fn()}
+            onEndMeeting={vi.fn()}
+          />
+        </ConfirmProvider>
+      );
+
+      const recBtn = await screen.findByTestId("toggle-recording-btn");
+      fireEvent.click(recBtn);
+
+      await waitFor(() => {
+        expect(meetingService.startRecording).toHaveBeenCalledWith(4, 234);
+      });
+
+      fireEvent.click(recBtn);
+
+      await waitFor(() => {
+        expect(meetingService.stopRecording).toHaveBeenCalledWith(4, 234);
       });
     });
   });

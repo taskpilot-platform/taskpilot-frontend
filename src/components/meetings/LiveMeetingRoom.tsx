@@ -25,9 +25,6 @@ import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { meetingService } from "@/services/meeting.service";
-import { meetingRecordingStore } from "@/services/meetingRecordingStore";
-import { projectFilesService } from "@/services/project-files.service";
-import fixWebmDuration from "fix-webm-duration";
 import {
   videoBackgroundBlurService,
   BLUR_PRESETS,
@@ -348,11 +345,9 @@ export function LiveMeetingRoom({
   const [isBlurMenuOpen, setIsBlurMenuOpen] = useState(false);
   const rawWebcamStreamRef = useRef<MediaStream | null>(null);
 
-  // Recording controls
+  // Cloud Egress recording controls
   const [isRecording, setIsRecording] = useState(false);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const recordedChunksRef = useRef<Blob[]>([]);
-  const recordingStartTimeRef = useRef<number>(0);
+  const [isRecordingBusy, setIsRecordingBusy] = useState(false);
 
   // Drawers
   const [isParticipantsOpen, setIsParticipantsOpen] = useState(false);
@@ -394,6 +389,10 @@ export function LiveMeetingRoom({
         setTokenData(res);
         if (res?.meeting) {
           setMeeting(res.meeting);
+          setIsRecording(
+            res.meeting.recordingStatus === "STARTING" ||
+              res.meeting.recordingStatus === "RECORDING"
+          );
         }
 
         // Connect to LiveKit Room
@@ -611,13 +610,6 @@ export function LiveMeetingRoom({
     setBlurStream(null);
     setBlurPreset("off");
 
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
-      try {
-        mediaRecorderRef.current.stop();
-      } catch (e) {
-        console.warn("Error stopping media recorder", e);
-      }
-    }
     if (screenStream) {
       screenStream.getTracks().forEach((t) => t.stop());
       setScreenStream(null);
@@ -629,91 +621,6 @@ export function LiveMeetingRoom({
         console.warn("Error disconnecting room", e);
       }
       roomRef.current = null;
-    }
-  };
-
-  // Recording management
-  const startRecording = (streamToRecord: MediaStream) => {
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
-      return;
-    }
-    try {
-      recordedChunksRef.current = [];
-      recordingStartTimeRef.current = Date.now();
-      const mime = typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported("video/webm;codecs=vp8,opus")
-        ? "video/webm;codecs=vp8,opus"
-        : typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported("video/webm")
-        ? "video/webm"
-        : "";
-
-      const options = mime ? { mimeType: mime } : undefined;
-      const recorder = new MediaRecorder(streamToRecord, options);
-
-      recorder.ondataavailable = (e) => {
-        if (e.data && e.data.size > 0) {
-          recordedChunksRef.current.push(e.data);
-        }
-      };
-
-      recorder.onstop = async () => {
-        const durationMs = Math.max(1000, Date.now() - recordingStartTimeRef.current);
-        const durationSec = Math.max(1, Math.round(durationMs / 1000));
-        let blob = new Blob(recordedChunksRef.current, { type: recorder.mimeType || "video/webm" });
-        if (blob.size > 0) {
-          try {
-            blob = await fixWebmDuration(blob, durationMs);
-          } catch (fixErr) {
-            console.warn("Could not patch WebM duration header:", fixErr);
-          }
-
-          await meetingRecordingStore.saveRecording(meetingId, blob, {
-            title: meeting?.title || tokenData?.meeting?.title || `Cuộc họp #${meetingId}`,
-            projectId,
-            durationSeconds: durationSec,
-          });
-
-          // Attempt uploading to project files if connected
-          try {
-            const fileName = `meeting_${meetingId}_rec_${Date.now()}.webm`;
-            const file = new File([blob], fileName, { type: blob.type || "video/webm" });
-            const uploaded = await projectFilesService.uploadFile(
-              projectId,
-              file,
-              `Bản ghi cuộc họp: ${meeting?.title || meetingId}`
-            );
-            if (uploaded?.data?.id) {
-              await meetingService.updateRecordingFile(projectId, meetingId, uploaded.data.id);
-            }
-          } catch (err) {
-            console.warn("Recording upload/link failed; local copy kept", err);
-            toast.warning(
-              t("meetings.recording_upload_failed", {
-                defaultValue:
-                  "Không thể tải bản ghi lên máy chủ; bản ghi vẫn được lưu trên thiết bị này.",
-              })
-            );
-          }
-        }
-      };
-
-      recorder.start(1000);
-      mediaRecorderRef.current = recorder;
-      setIsRecording(true);
-      toast.info(t("meetings.recording_started", { defaultValue: "Đã bắt đầu ghi hình cuộc họp" }));
-    } catch (recErr) {
-      console.warn("Could not start MediaRecorder:", recErr);
-    }
-  };
-
-  const stopRecording = () => {
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
-      try {
-        mediaRecorderRef.current.stop();
-        setIsRecording(false);
-        toast.success(t("meetings.recording_saved", { defaultValue: "Bản ghi hình cuộc họp đã được lưu vào Lịch sử cuộc họp" }));
-      } catch (err) {
-        console.warn("Stop recording error:", err);
-      }
     }
   };
 
@@ -860,11 +767,6 @@ export function LiveMeetingRoom({
           } catch {}
         }
 
-        // Auto-record screen share if recording is enabled or desired
-        if ((meeting?.recordingEnabled || isRecording) && !mediaRecorderRef.current) {
-          startRecording(stream);
-        }
-
         toast.info(t("meetings.screen_sharing_active", { defaultValue: "Đang chia sẻ màn hình" }));
       } catch (e: any) {
         console.warn("Screen share cancel/error", e);
@@ -873,29 +775,49 @@ export function LiveMeetingRoom({
     }
   };
 
+  // Cloud Egress recording toggle (LiveKit Egress -> Backblaze B2)
+  const handleToggleCloudRecording = async () => {
+    if (isRecordingBusy) return;
+    setIsRecordingBusy(true);
+    try {
+      if (isRecording) {
+        const updated = await meetingService.stopRecording(projectId, meetingId);
+        if (updated) {
+          setMeeting(updated);
+        }
+        setIsRecording(false);
+        toast.success(
+          t("meetings.recording_stopping", {
+            defaultValue: "Đã dừng ghi hình đám mây. Video đang được xử lý và lưu tự động.",
+          })
+        );
+      } else {
+        const updated = await meetingService.startRecording(projectId, meetingId);
+        if (updated) {
+          setMeeting(updated);
+        }
+        setIsRecording(true);
+        toast.info(
+          t("meetings.recording_started_cloud", {
+            defaultValue: "Đã bắt đầu ghi hình đám mây (LiveKit Egress)",
+          })
+        );
+      }
+    } catch (err: any) {
+      const msg =
+        err?.response?.data?.message ||
+        err?.message ||
+        t("meetings.recording_toggle_error", {
+          defaultValue: "Không thể điều khiển ghi hình đám mây",
+        });
+      toast.error(msg);
+    } finally {
+      setIsRecordingBusy(false);
+    }
+  };
+
   // Leave Meeting
   const handleLeave = async () => {
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
-      try {
-        mediaRecorderRef.current.stop();
-      } catch {}
-    }
-    if (meeting?.recordingEnabled || isRecording) {
-      try {
-        const existing = await meetingRecordingStore.getRecording(meetingId);
-        if (!existing) {
-          const res = await fetch("/sample-meeting-recording.webm");
-          if (res.ok) {
-            const sampleBlob = await res.blob();
-            await meetingRecordingStore.saveRecording(meetingId, sampleBlob, {
-              title: meeting?.title || `Cuộc họp #${meetingId}`,
-              projectId,
-              durationSeconds: meeting?.durationSeconds || 16,
-            });
-          }
-        }
-      } catch {}
-    }
     try {
       await meetingService.leaveMeeting(projectId, meetingId);
     } catch (e) {
@@ -916,28 +838,6 @@ export function LiveMeetingRoom({
     });
 
     if (isConfirmed) {
-      if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
-        try {
-          mediaRecorderRef.current.stop();
-        } catch {}
-      }
-      // Ensure meeting recording is preserved for completed meetings with recordingEnabled
-      if (meeting?.recordingEnabled || isRecording) {
-        try {
-          const existing = await meetingRecordingStore.getRecording(meetingId);
-          if (!existing) {
-            const res = await fetch("/sample-meeting-recording.webm");
-            if (res.ok) {
-              const sampleBlob = await res.blob();
-              await meetingRecordingStore.saveRecording(meetingId, sampleBlob, {
-                title: meeting?.title || `Cuộc họp #${meetingId}`,
-                projectId,
-                durationSeconds: meeting?.durationSeconds || 16,
-              });
-            }
-          }
-        } catch {}
-      }
       try {
         await meetingService.endMeeting(projectId, meetingId);
         toast.success(t("meetings.end_meeting_success", { defaultValue: "Cuộc họp đã kết thúc" }));
@@ -1034,10 +934,36 @@ export function LiveMeetingRoom({
           <Badge variant="outline" className="bg-muted text-foreground border-border text-xs gap-1 font-mono" data-testid="meeting-timer">
             {formatTime(elapsedSeconds)}
           </Badge>
-          {(meeting?.recordingEnabled ?? tokenData?.meeting?.recordingEnabled ?? tokenDataRef.current?.meeting?.recordingEnabled) && (
-            <Badge variant="outline" className="bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/30 text-xs gap-1 font-medium">
+          {(isRecording ||
+            meeting?.recordingStatus === "STARTING" ||
+            meeting?.recordingStatus === "RECORDING") && (
+            <Badge
+              variant="outline"
+              className="bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/30 text-xs gap-1 font-medium"
+              data-testid="meeting-recording-badge"
+            >
               <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse"></span>
               REC
+            </Badge>
+          )}
+          {meeting?.recordingStatus === "PROCESSING" && (
+            <Badge
+              variant="outline"
+              className="bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30 text-xs gap-1 font-medium"
+              data-testid="meeting-recording-processing-badge"
+            >
+              {t("meetings.recording_processing", { defaultValue: "Đang xử lý bản ghi..." })}
+            </Badge>
+          )}
+          {meeting?.backupStorageUsed && (
+            <Badge
+              variant="outline"
+              className="bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/40 text-xs gap-1 font-medium"
+              data-testid="meeting-backup-storage-badge"
+            >
+              {t("meetings.recording_backup_short", {
+                defaultValue: "Upload lỗi — đang ở kho dự phòng LiveKit",
+              })}
             </Badge>
           )}
         </div>
@@ -1359,36 +1285,29 @@ export function LiveMeetingRoom({
           <span className="hidden sm:inline text-xs">{isScreenSharing ? t("meetings.stop_share", { defaultValue: "Dừng chia sẻ" }) : t("meetings.share_screen", { defaultValue: "Chia sẻ màn hình" })}</span>
         </Button>
 
-        {/* Recording Toggle */}
+        {/* Cloud Egress Recording Toggle */}
         <Button
           type="button"
           size="sm"
+          disabled={isRecordingBusy || meeting?.recordingStatus === "PROCESSING"}
           variant={isRecording ? "destructive" : "outline"}
-          onClick={() => {
-            if (isRecording) {
-              stopRecording();
-            } else {
-              if (screenStream) {
-                startRecording(screenStream);
-              } else if (typeof navigator !== "undefined" && navigator.mediaDevices?.getDisplayMedia) {
-                navigator.mediaDevices.getDisplayMedia({ video: true, audio: true })
-                  .then((st) => startRecording(st))
-                  .catch(() => toast.warning(t("meetings.no_permission_record", { defaultValue: "Chưa cấp quyền ghi hình màn hình" })));
-              } else {
-                toast.warning(t("meetings.browser_unsupported_record", { defaultValue: "Trình duyệt không hỗ trợ ghi hình" }));
-              }
-            }
-          }}
+          onClick={handleToggleCloudRecording}
           className={`h-10 px-3 sm:px-4 rounded-xl gap-2 font-medium transition-all ${
             isRecording
               ? "bg-red-600 text-white hover:bg-red-500 shadow-sm animate-pulse"
               : "border-border bg-background hover:bg-accent text-foreground"
           }`}
-          title={isRecording ? t("meetings.stop_record", { defaultValue: "Dừng ghi" }) : t("meetings.record", { defaultValue: "Ghi hình" })}
+          title={isRecording ? t("meetings.stop_record", { defaultValue: "Dừng ghi" }) : t("meetings.record", { defaultValue: "Ghi hình đám mây" })}
           data-testid="toggle-recording-btn"
         >
           <Disc className={`w-4 h-4 ${isRecording ? "text-white" : "text-red-500"}`} />
-          <span className="hidden sm:inline text-xs">{isRecording ? t("meetings.stop_record", { defaultValue: "Dừng ghi" }) : t("meetings.record", { defaultValue: "Ghi hình" })}</span>
+          <span className="hidden sm:inline text-xs">
+            {isRecordingBusy
+              ? t("meetings.recording_busy", { defaultValue: "Đang xử lý..." })
+              : isRecording
+              ? t("meetings.stop_record", { defaultValue: "Dừng ghi" })
+              : t("meetings.record", { defaultValue: "Ghi hình" })}
+          </span>
         </Button>
 
         {/* Participants Drawer Toggle */}

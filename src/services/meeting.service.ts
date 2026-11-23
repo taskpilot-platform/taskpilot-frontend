@@ -2,6 +2,7 @@ import { api } from "@/lib/http";
 import type {
   CreateMeetingRequest,
   MeetingParticipantDto,
+  MeetingRecordingPlaybackResponse,
   MeetingStatus,
   MeetingTokenResponse,
   ProjectMeetingDto,
@@ -64,6 +65,31 @@ export const meetingService = {
         { recordingFileId }
       )
       .then(unwrap<ProjectMeetingDto>),
+
+  startRecording: (projectId: number, meetingId: number): Promise<ProjectMeetingDto> =>
+    api
+      .post<ProjectMeetingDto>(`/v1/projects/${projectId}/meetings/${meetingId}/recording/start`)
+      .then(unwrap<ProjectMeetingDto>),
+
+  stopRecording: (projectId: number, meetingId: number): Promise<ProjectMeetingDto> =>
+    api
+      .post<ProjectMeetingDto>(`/v1/projects/${projectId}/meetings/${meetingId}/recording/stop`)
+      .then(unwrap<ProjectMeetingDto>),
+
+  syncRecording: (projectId: number, meetingId: number): Promise<ProjectMeetingDto> =>
+    api
+      .post<ProjectMeetingDto>(`/v1/projects/${projectId}/meetings/${meetingId}/recording/sync`)
+      .then(unwrap<ProjectMeetingDto>),
+
+  getRecordingPlaybackUrl: (
+    projectId: number,
+    meetingId: number
+  ): Promise<MeetingRecordingPlaybackResponse> =>
+    api
+      .get<MeetingRecordingPlaybackResponse>(
+        `/v1/projects/${projectId}/meetings/${meetingId}/recording/playback-url`
+      )
+      .then(unwrap<MeetingRecordingPlaybackResponse>),
 
   getParticipants: (projectId: number, meetingId: number): Promise<MeetingParticipantDto[]> =>
     api

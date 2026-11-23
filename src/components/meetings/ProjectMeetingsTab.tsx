@@ -424,11 +424,27 @@ export function ProjectMeetingsTab({
                       )}
                     </Badge>
 
-                    {m.recordingEnabled && (
+                    {m.backupStorageUsed ? (
+                      <Badge variant="outline" className="text-[10px] text-amber-600 border-amber-500/40 bg-amber-500/10">
+                        {t("meetings.backup_badge", { defaultValue: "Kho dự phòng LiveKit" })}
+                      </Badge>
+                    ) : m.recordingStatus === "PROCESSING" ? (
+                      <Badge variant="outline" className="text-[10px] text-amber-600 border-amber-500/30">
+                        {t("meetings.processing_badge", { defaultValue: "Đang xử lý video" })}
+                      </Badge>
+                    ) : m.recordingStatus === "FAILED" ? (
+                      <Badge variant="outline" className="text-[10px] text-destructive border-destructive/30">
+                        {t("meetings.failed_badge", { defaultValue: "Lỗi ghi hình" })}
+                      </Badge>
+                    ) : m.recordingStatus === "COMPLETED" || m.recordingFileId ? (
+                      <Badge variant="outline" className="text-[10px] text-emerald-600 border-emerald-500/30">
+                        {t("meetings.recorded_badge", { defaultValue: "Có bản ghi" })}
+                      </Badge>
+                    ) : m.recordingEnabled ? (
                       <Badge variant="outline" className="text-[10px] text-red-500 border-red-500/30">
                         REC
                       </Badge>
-                    )}
+                    ) : null}
                   </div>
 
                   <CardTitle className="text-base font-semibold mt-2 line-clamp-1" title={m.title}>
