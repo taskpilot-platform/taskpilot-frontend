@@ -6,6 +6,7 @@ import { LiveMeetingRoom } from "@/components/meetings/LiveMeetingRoom";
 import { bumpSessionGeneration } from "@/lib/http";
 import { meetingService } from "@/services/meeting.service";
 import { meetingRecordingStore } from "@/services/meetingRecordingStore";
+import type { ProjectMeetingDto } from "@/types/meeting";
 
 vi.mock("livekit-client", () => import("../../../e2e/helpers/livekit-sdk-stub"));
 
@@ -64,8 +65,20 @@ class DeferredMediaRecorder {
   }
 }
 
+interface StubTrack {
+  kind: string;
+  readyState: string;
+  enabled: boolean;
+  addEventListener: ReturnType<typeof vi.fn>;
+  removeEventListener: ReturnType<typeof vi.fn>;
+  stop: ReturnType<typeof vi.fn>;
+}
+
 class StubMediaStream {
-  constructor(public tracks: any[] = []) {}
+  tracks: StubTrack[];
+  constructor(tracks: StubTrack[] = []) {
+    this.tracks = tracks;
+  }
   getTracks() {
     return this.tracks;
   }
@@ -127,13 +140,13 @@ function setupFallbackRecordingEnvironment() {
     isHost: true,
     meeting: activeMeeting,
   });
-  vi.mocked(meetingService.confirmAttendance).mockResolvedValue({} as any);
+  vi.mocked(meetingService.confirmAttendance).mockResolvedValue({} as never);
   vi.mocked(meetingService.startRecording).mockRejectedValue({ response: { status: 503 } });
   vi.mocked(meetingService.getMeetingById).mockResolvedValue(activeMeeting);
   vi.mocked(meetingService.leaveMeeting).mockResolvedValue(undefined);
-  vi.mocked(meetingRecordingStore.save).mockResolvedValue("ok" as any);
-  vi.mocked(meetingRecordingStore.appendChunk).mockResolvedValue("ok" as any);
-  vi.mocked(meetingRecordingStore.clearChunks).mockResolvedValue(undefined as any);
+  vi.mocked(meetingRecordingStore.save).mockResolvedValue("ok" as IDBValidKey);
+  vi.mocked(meetingRecordingStore.appendChunk).mockResolvedValue("ok" as IDBValidKey);
+  vi.mocked(meetingRecordingStore.clearChunks).mockResolvedValue(undefined);
 }
 
 async function startFallbackAndDisconnect(onLeave = vi.fn()) {
@@ -246,7 +259,7 @@ describe("LiveMeetingRoom R1 — Retry & finalization barrier", () => {
   });
 
   it("4. prevents duplicate room joins or duplicate uploads on rapid double Retry and concurrent Leave", async () => {
-    let resolveUpload!: (value: any) => void;
+    let resolveUpload!: (value: ProjectMeetingDto) => void;
     vi.mocked(meetingService.uploadFallbackRecordingToB2).mockImplementation(
       () => new Promise((resolve) => { resolveUpload = resolve; })
     );
