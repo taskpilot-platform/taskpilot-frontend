@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Video, Download, Play, Clock, User, AlertCircle, Upload, RefreshCw, ShieldAlert } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { toast } from "react-toastify";
 import { meetingRecordingStore } from "@/services/meetingRecordingStore";
 import { projectFilesService } from "@/services/project-files.service";
 import { meetingService } from "@/services/meeting.service";
@@ -24,7 +25,7 @@ function resolvePlaybackUrl(rawUrl: string): string {
   }
   const apiBase = import.meta.env.VITE_API_BASE_URL?.trim() || "";
   if (/^https?:\/\//i.test(apiBase)) {
-    const origin = apiBase.replace(/\/api\/?$/i, "");
+    const origin = apiBase.replace(/\/api\/?$/i, "").replace(/\/+$/, "");
     return rawUrl.startsWith("/") ? `${origin}${rawUrl}` : `${origin}/${rawUrl}`;
   }
   return rawUrl;
@@ -34,12 +35,14 @@ interface MeetingRecordingModalProps {
   isOpen: boolean;
   onClose: () => void;
   meeting: ProjectMeetingDto | null;
+  onMeetingUpdated?: (meeting: ProjectMeetingDto) => void;
 }
 
 export function MeetingRecordingModal({
   isOpen,
   onClose,
   meeting,
+  onMeetingUpdated,
 }: MeetingRecordingModalProps) {
   const { t } = useTranslation();
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
@@ -181,10 +184,18 @@ export function MeetingRecordingModal({
     if (!meeting?.projectId || isSyncing) return;
     setIsSyncing(true);
     try {
-      await meetingService.syncRecording(meeting.projectId, meeting.id);
+      const synced = await meetingService.syncRecording(meeting.projectId, meeting.id);
+      if (synced) {
+        onMeetingUpdated?.(synced);
+      }
       await loadRecording();
-    } catch (err) {
+    } catch (err: any) {
       console.warn("Could not synchronize recording status:", err);
+      toast.error(
+        err?.response?.data?.message ||
+          err?.message ||
+          t("meetings.sync_recording_failed", { defaultValue: "Không thể đồng bộ trạng thái bản ghi" })
+      );
     } finally {
       setIsSyncing(false);
     }
@@ -201,6 +212,10 @@ export function MeetingRecordingModal({
     }
 
     if (!downloadUrl) return;
+
+    if (!videoBlob && downloadUrl.includes("/stream")) {
+      downloadUrl = downloadUrl.includes("?") ? `${downloadUrl}&download=true` : `${downloadUrl}?download=true`;
+    }
 
     const defaultExt = playbackInfo?.contentType?.includes("mp4") ? "mp4" : "webm";
     const downloadName = playbackInfo?.fileName || `meeting_${meeting.id}_recording.${defaultExt}`;
@@ -272,25 +287,29 @@ export function MeetingRecordingModal({
       const ext = file.name.includes(".") ? file.name.slice(file.name.lastIndexOf(".")) : ".webm";
       const uploadName = `meeting_${meeting.id}_rec_${Date.now()}${ext}`;
       try {
-        await meetingService.uploadFallbackRecordingToB2(meeting.projectId, meeting.id, patchedFile, {
+        const updated = await meetingService.uploadFallbackRecordingToB2(meeting.projectId, meeting.id, patchedFile, {
           fileName: uploadName,
           durationSeconds: meeting.durationSeconds || 30,
         });
-      } catch (b2Err) {
-        console.warn("Direct B2 presigned upload unavailable, falling back to project files API:", b2Err);
-        try {
-          const uploadFileObj = new File([patchedFile], uploadName, { type: patchedFile.type || "video/webm" });
-          const uploaded = await projectFilesService.uploadFile(
-            meeting.projectId,
-            uploadFileObj,
-            `Bản ghi cuộc họp: ${meeting.title}`
-          );
-          if (uploaded?.data?.id) {
-            await meetingService.updateRecordingFile(meeting.projectId, meeting.id, uploaded.data.id);
-          }
-        } catch (err) {
-          console.warn("Could not upload/link custom recording file:", err);
+        if (updated) {
+          onMeetingUpdated?.(updated);
         }
+        toast.success(
+          t("meetings.upload_video_success", {
+            defaultValue: "Đã tải bản ghi lên Backblaze B2 thành công!",
+          })
+        );
+        await loadRecording();
+      } catch (b2Err: any) {
+        console.warn("Direct B2 presigned upload failed:", b2Err);
+        toast.error(
+          b2Err?.response?.data?.message ||
+            b2Err?.message ||
+            t("meetings.upload_video_b2_failed", {
+              defaultValue:
+                "Không thể tải video lên Backblaze B2 (chỉ hỗ trợ .webm/.mp4/.mkv). Bản sao cục bộ vẫn được giữ để xem tạm.",
+            })
+        );
       }
     }
   };
@@ -332,7 +351,7 @@ export function MeetingRecordingModal({
                 </Badge>
                 {playbackInfo?.provider === "b2" && (
                   <Badge variant="outline" className="text-[10px] text-emerald-600 border-emerald-500/30">
-                    Cloud MP4
+                    {playbackInfo?.contentType?.includes("webm") ? "Cloud B2 (WebM)" : "Cloud B2 (MP4)"}
                   </Badge>
                 )}
                 {playbackInfo?.provider === "gdrive" && (
@@ -519,9 +538,10 @@ export function MeetingRecordingModal({
                     <input
                       type="file"
                       ref={fileInputRef}
-                      accept="video/*"
+                      accept="video/webm,video/mp4,video/x-matroska,.webm,.mp4,.mkv"
                       onChange={handleUploadCustomVideo}
                       className="hidden"
+                      data-testid="custom-recording-upload-input"
                     />
                   </>
                 )}

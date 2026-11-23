@@ -351,10 +351,10 @@ export function LiveMeetingRoom({
   const [isRecording, setIsRecording] = useState(false);
   const [recordingMode, setRecordingMode] = useState<"none" | "cloud" | "fallback">("none");
   const [isRecordingBusy, setIsRecordingBusy] = useState(false);
+  const [isUploadingFallback, setIsUploadingFallback] = useState(false);
   const fallbackRecorderRef = useRef<MediaRecorder | null>(null);
   const fallbackStreamRef = useRef<MediaStream | null>(null);
-  const fallbackChunksRef = useRef<Blob[]>([]);
-  const fallbackStartTimeRef = useRef<number>(0);
+  const fallbackUploadPromiseRef = useRef<Promise<void> | null>(null);
 
   // Drawers
   const [isParticipantsOpen, setIsParticipantsOpen] = useState(false);
@@ -433,6 +433,18 @@ export function LiveMeetingRoom({
     }, 1000);
     return () => clearInterval(timer);
   }, []);
+
+  // Warn user before closing tab while Tier 3 local fallback recording or B2 upload is in progress
+  useEffect(() => {
+    const protectTab = (recordingMode === "fallback" && isRecording) || isUploadingFallback;
+    if (!protectTab) return;
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [recordingMode, isRecording, isUploadingFallback]);
 
   // Format timer
   const formatTime = (secs: number) => {
@@ -833,8 +845,8 @@ export function LiveMeetingRoom({
     }
 
     try {
-      fallbackChunksRef.current = [];
-      fallbackStartTimeRef.current = Date.now();
+      const localChunks: Blob[] = [];
+      const startedAt = Date.now();
       const mime = MediaRecorder.isTypeSupported("video/webm;codecs=vp8,opus")
         ? "video/webm;codecs=vp8,opus"
         : MediaRecorder.isTypeSupported("video/webm")
@@ -842,58 +854,101 @@ export function LiveMeetingRoom({
         : "";
       const recorder = new MediaRecorder(streamToRecord, mime ? { mimeType: mime } : undefined);
 
-      recorder.ondataavailable = (e) => {
-        if (e.data && e.data.size > 0) {
-          fallbackChunksRef.current.push(e.data);
+      const handleTrackEnded = () => {
+        if (recorder.state === "recording") {
+          try {
+            recorder.stop();
+          } catch (stopErr) {
+            console.warn("Could not stop fallback recorder on track end:", stopErr);
+          }
         }
       };
 
-      recorder.onstop = async () => {
-        if (ownsStream && fallbackStreamRef.current) {
-          fallbackStreamRef.current.getTracks().forEach((t) => t.stop());
+      const videoTrack = streamToRecord.getVideoTracks?.()[0];
+      if (videoTrack && typeof videoTrack.addEventListener === "function") {
+        videoTrack.addEventListener("ended", handleTrackEnded, { once: true });
+      }
+
+      recorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) {
+          localChunks.push(e.data);
+        }
+      };
+
+      recorder.onstop = () => {
+        if (videoTrack && typeof videoTrack.removeEventListener === "function") {
+          videoTrack.removeEventListener("ended", handleTrackEnded);
+        }
+        if (fallbackRecorderRef.current === recorder) {
+          fallbackRecorderRef.current = null;
+        }
+        if (ownsStream && fallbackStreamRef.current === streamToRecord) {
+          streamToRecord.getTracks().forEach((t) => t.stop());
           fallbackStreamRef.current = null;
         }
-        const durationMs = Math.max(1000, Date.now() - fallbackStartTimeRef.current);
+        setIsRecording(false);
+        setRecordingMode("none");
+
+        const durationMs = Math.max(1000, Date.now() - startedAt);
         const durationSec = Math.max(1, Math.round(durationMs / 1000));
-        let blob = new Blob(fallbackChunksRef.current, { type: recorder.mimeType || "video/webm" });
-        if (blob.size === 0) return;
+        const detectedType = recorder.mimeType || "video/webm";
+        const initialBlob = new Blob(localChunks, { type: detectedType });
+        if (initialBlob.size === 0) return;
 
-        try {
-          blob = await fixWebmDuration(blob, durationMs);
-        } catch (fixErr) {
-          console.warn("Could not patch WebM duration header:", fixErr);
-        }
+        let uploadTask: Promise<void> | null = null;
+        uploadTask = (async () => {
+          setIsUploadingFallback(true);
+          try {
+            let blob = initialBlob;
+            const isWebm = !blob.type || blob.type.toLowerCase().includes("webm");
+            if (isWebm) {
+              try {
+                blob = await fixWebmDuration(blob, durationMs);
+              } catch (fixErr) {
+                console.warn("Could not patch WebM duration header:", fixErr);
+              }
+            }
 
-        await meetingRecordingStore.saveRecording(meetingId, blob, {
-          title: meeting?.title || tokenData?.meeting?.title || `Cuộc họp #${meetingId}`,
-          projectId,
-          durationSeconds: durationSec,
-        });
+            await meetingRecordingStore.saveRecording(meetingId, blob, {
+              title: meeting?.title || tokenData?.meeting?.title || `Cuộc họp #${meetingId}`,
+              projectId,
+              durationSeconds: durationSec,
+            });
 
-        try {
-          const updated = await meetingService.uploadFallbackRecordingToB2(projectId, meetingId, blob, {
-            fileName: `meeting_${meetingId}_fallback_${Date.now()}.webm`,
-            durationSeconds: durationSec,
-          });
-          if (updated) {
-            setMeeting(updated);
+            const ext = blob.type.toLowerCase().includes("mp4") ? ".mp4" : ".webm";
+            try {
+              const updated = await meetingService.uploadFallbackRecordingToB2(projectId, meetingId, blob, {
+                fileName: `meeting_${meetingId}_fallback_${Date.now()}${ext}`,
+                durationSeconds: durationSec,
+              });
+              if (updated) {
+                setMeeting(updated);
+              }
+              toast.success(
+                t("meetings.fallback_upload_success", {
+                  defaultValue: "Đã tải bản ghi dự phòng lên Backblaze B2 thành công!",
+                })
+              );
+            } catch (uploadErr: any) {
+              console.warn("Fallback B2 presigned upload failed; local IndexedDB copy preserved", uploadErr);
+              toast.warning(
+                uploadErr?.response?.data?.message ||
+                  uploadErr?.message ||
+                  t("meetings.recording_upload_failed", {
+                    defaultValue:
+                      "Không thể tải bản ghi dự phòng lên Backblaze B2; bản sao cục bộ vẫn được giữ trên trình duyệt.",
+                  })
+              );
+            }
+          } finally {
+            setIsUploadingFallback(false);
+            if (fallbackUploadPromiseRef.current === uploadTask) {
+              fallbackUploadPromiseRef.current = null;
+            }
           }
-          toast.success(
-            t("meetings.fallback_upload_success", {
-              defaultValue: "Đã tải bản ghi dự phòng lên Backblaze B2 thành công!",
-            })
-          );
-        } catch (uploadErr: any) {
-          console.warn("Fallback B2 presigned upload failed; local IndexedDB copy preserved", uploadErr);
-          toast.warning(
-            uploadErr?.response?.data?.message ||
-              uploadErr?.message ||
-              t("meetings.recording_upload_failed", {
-                defaultValue:
-                  "Không thể tải bản ghi dự phòng lên Backblaze B2; bản sao cục bộ vẫn được giữ trên trình duyệt.",
-              })
-          );
-        }
+        })();
+
+        fallbackUploadPromiseRef.current = uploadTask;
       };
 
       recorder.start(1000);
@@ -921,16 +976,25 @@ export function LiveMeetingRoom({
 
   // Cloud Egress recording toggle with graceful degradation to Tier 3 browser fallback
   const handleToggleCloudRecording = async () => {
-    if (isRecordingBusy) return;
+    if (isRecordingBusy || isUploadingFallback) return;
+    if (!tokenData?.isHost) {
+      toast.error(
+        t("meetings.recording_host_only", {
+          defaultValue: "Chỉ chủ phòng hoặc quản lý dự án mới có quyền ghi hình cuộc họp.",
+        })
+      );
+      return;
+    }
     setIsRecordingBusy(true);
     try {
       if (isRecording) {
         if (recordingMode === "fallback") {
           if (fallbackRecorderRef.current && fallbackRecorderRef.current.state === "recording") {
             fallbackRecorderRef.current.stop();
+          } else {
+            setIsRecording(false);
+            setRecordingMode("none");
           }
-          setIsRecording(false);
-          setRecordingMode("none");
           toast.info(
             t("meetings.fallback_stopping", {
               defaultValue: "Đã dừng ghi hình dự phòng. Đang tải video lên Backblaze B2...",
@@ -964,6 +1028,29 @@ export function LiveMeetingRoom({
             })
           );
         } catch (cloudErr: any) {
+          const status = cloudErr?.response?.status ?? cloudErr?.status;
+          // Never fall back to local browser recording on authorization, conflict, or bad-request errors.
+          if (status === 409) {
+            setIsRecording(true);
+            setRecordingMode("cloud");
+            toast.info(
+              t("meetings.recording_already_active", {
+                defaultValue: "Cuộc họp đang được ghi hình trên đám mây.",
+              })
+            );
+            return;
+          }
+          if (typeof status === "number" && status >= 400 && status < 500) {
+            const msg =
+              cloudErr?.response?.data?.message ||
+              cloudErr?.message ||
+              t("meetings.recording_toggle_error", {
+                defaultValue: "Không thể bắt đầu ghi hình đám mây",
+              });
+            toast.error(msg);
+            return;
+          }
+
           console.warn("LiveKit Egress start failed, attempting Tier 3 browser fallback:", cloudErr);
           const startedFallback = await startFallbackBrowserRecording();
           if (!startedFallback) {
@@ -990,8 +1077,26 @@ export function LiveMeetingRoom({
     }
   };
 
+  const flushFallbackRecordingBeforeExit = async () => {
+    if (fallbackRecorderRef.current && fallbackRecorderRef.current.state === "recording") {
+      try {
+        fallbackRecorderRef.current.stop();
+      } catch (e) {
+        console.warn("Error stopping fallback recorder before exit", e);
+      }
+    }
+    if (fallbackUploadPromiseRef.current) {
+      try {
+        await fallbackUploadPromiseRef.current;
+      } catch {
+        // Error already toasted inside onstop uploadTask
+      }
+    }
+  };
+
   // Leave Meeting
   const handleLeave = async () => {
+    await flushFallbackRecordingBeforeExit();
     try {
       await meetingService.leaveMeeting(projectId, meetingId);
     } catch (e) {
@@ -1012,6 +1117,7 @@ export function LiveMeetingRoom({
     });
 
     if (isConfirmed) {
+      await flushFallbackRecordingBeforeExit();
       try {
         await meetingService.endMeeting(projectId, meetingId);
         toast.success(t("meetings.end_meeting_success", { defaultValue: "Cuộc họp đã kết thúc" }));
@@ -1133,6 +1239,15 @@ export function LiveMeetingRoom({
                 REC
               </Badge>
             )
+          )}
+          {isUploadingFallback && (
+            <Badge
+              variant="outline"
+              className="bg-sky-500/15 text-sky-700 dark:text-sky-300 border-sky-500/40 text-xs gap-1 font-medium"
+              data-testid="meeting-fallback-uploading-badge"
+            >
+              {t("meetings.recording_uploading_b2", { defaultValue: "Đang tải bản ghi lên B2..." })}
+            </Badge>
           )}
           {meeting?.recordingStatus === "PROCESSING" && (
             <Badge
@@ -1473,30 +1588,32 @@ export function LiveMeetingRoom({
           <span className="hidden sm:inline text-xs">{isScreenSharing ? t("meetings.stop_share", { defaultValue: "Dừng chia sẻ" }) : t("meetings.share_screen", { defaultValue: "Chia sẻ màn hình" })}</span>
         </Button>
 
-        {/* Cloud Egress Recording Toggle */}
-        <Button
-          type="button"
-          size="sm"
-          disabled={isRecordingBusy || meeting?.recordingStatus === "PROCESSING"}
-          variant={isRecording ? "destructive" : "outline"}
-          onClick={handleToggleCloudRecording}
-          className={`h-10 px-3 sm:px-4 rounded-xl gap-2 font-medium transition-all ${
-            isRecording
-              ? "bg-red-600 text-white hover:bg-red-500 shadow-sm animate-pulse"
-              : "border-border bg-background hover:bg-accent text-foreground"
-          }`}
-          title={isRecording ? t("meetings.stop_record", { defaultValue: "Dừng ghi" }) : t("meetings.record", { defaultValue: "Ghi hình đám mây" })}
-          data-testid="toggle-recording-btn"
-        >
-          <Disc className={`w-4 h-4 ${isRecording ? "text-white" : "text-red-500"}`} />
-          <span className="hidden sm:inline text-xs">
-            {isRecordingBusy
-              ? t("meetings.recording_busy", { defaultValue: "Đang xử lý..." })
-              : isRecording
-              ? t("meetings.stop_record", { defaultValue: "Dừng ghi" })
-              : t("meetings.record", { defaultValue: "Ghi hình" })}
-          </span>
-        </Button>
+        {/* Cloud Egress Recording Toggle (Host / Project Manager only) */}
+        {tokenData?.isHost && (
+          <Button
+            type="button"
+            size="sm"
+            disabled={isRecordingBusy || isUploadingFallback || meeting?.recordingStatus === "PROCESSING"}
+            variant={isRecording ? "destructive" : "outline"}
+            onClick={handleToggleCloudRecording}
+            className={`h-10 px-3 sm:px-4 rounded-xl gap-2 font-medium transition-all ${
+              isRecording
+                ? "bg-red-600 text-white hover:bg-red-500 shadow-sm animate-pulse"
+                : "border-border bg-background hover:bg-accent text-foreground"
+            }`}
+            title={isRecording ? t("meetings.stop_record", { defaultValue: "Dừng ghi" }) : t("meetings.record", { defaultValue: "Ghi hình đám mây" })}
+            data-testid="toggle-recording-btn"
+          >
+            <Disc className={`w-4 h-4 ${isRecording ? "text-white" : "text-red-500"}`} />
+            <span className="hidden sm:inline text-xs">
+              {isRecordingBusy || isUploadingFallback
+                ? t("meetings.recording_busy", { defaultValue: "Đang xử lý..." })
+                : isRecording
+                ? t("meetings.stop_record", { defaultValue: "Dừng ghi" })
+                : t("meetings.record", { defaultValue: "Ghi hình" })}
+            </span>
+          </Button>
+        )}
 
         {/* Participants Drawer Toggle */}
         <Button

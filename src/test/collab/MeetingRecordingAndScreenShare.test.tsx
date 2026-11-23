@@ -284,6 +284,38 @@ describe("Meeting Recording and Screen Sharing Features", () => {
         expect(screen.getByTestId("sync-recording-btn")).toBeInTheDocument();
       });
     });
+
+    it("does NOT silently fall back to 50MB projectFilesService when B2 presigned custom upload fails", async () => {
+      vi.mocked(meetingService.getRecordingPlaybackUrl).mockResolvedValueOnce({
+        url: null,
+        provider: null,
+        requiresAuthHeader: false,
+        egressId: null,
+        recordingStatus: "FAILED",
+        backupStorageUsed: false,
+        recordingError: "Egress failed",
+      });
+      vi.mocked(meetingService.uploadFallbackRecordingToB2).mockRejectedValueOnce(new Error("B2 unavailable"));
+
+      render(
+        <ConfirmProvider>
+          <MeetingRecordingModal
+            isOpen={true}
+            onClose={vi.fn()}
+            meeting={{ ...mockEndedMeeting, recordingStatus: "FAILED" }}
+          />
+        </ConfirmProvider>
+      );
+
+      const input = await screen.findByTestId("custom-recording-upload-input");
+      const file = new File(["video-bytes"], "demo.mp4", { type: "video/mp4" });
+      fireEvent.change(input, { target: { files: [file] } });
+
+      await waitFor(() => {
+        expect(meetingService.uploadFallbackRecordingToB2).toHaveBeenCalled();
+      });
+      expect(projectFilesService.uploadFile).not.toHaveBeenCalled();
+    });
   });
 
   describe("ProjectMeetingsTab Integration", () => {
@@ -494,6 +526,87 @@ describe("Meeting Recording and Screen Sharing Features", () => {
           expect.objectContaining({ fileName: expect.stringContaining("meeting_234_fallback_") })
         );
       });
+    });
+
+    it("hides recording toggle button for non-host participants", async () => {
+      Object.defineProperty(navigator, "mediaDevices", {
+        writable: true,
+        value: {
+          getUserMedia: vi.fn().mockResolvedValue({
+            getTracks: () => [{ stop: vi.fn() }],
+          }),
+        },
+      });
+
+      vi.mocked(meetingService.joinMeeting).mockResolvedValue({
+        token: "mock-token",
+        livekitUrl: "wss://mock.livekit.cloud",
+        roomName: "tp-proj-4-m-234",
+        identity: "user_2",
+        participantName: "Member",
+        isHost: false,
+        meeting: { ...mockEndedMeeting, status: "ACTIVE", isHost: false, recordingStatus: "IDLE" },
+      });
+
+      render(
+        <ConfirmProvider>
+          <LiveMeetingRoom
+            projectId={4}
+            meetingId={234}
+            currentUserId={2}
+            onLeave={vi.fn()}
+          />
+        </ConfirmProvider>
+      );
+
+      await screen.findByTestId("toggle-screen-share-btn");
+      expect(screen.queryByTestId("toggle-recording-btn")).not.toBeInTheDocument();
+    });
+
+    it("does NOT start Tier 3 browser fallback on 409 Conflict (cloud recording already active)", async () => {
+      const getDisplayMediaMock = vi.fn();
+      Object.defineProperty(navigator, "mediaDevices", {
+        writable: true,
+        value: {
+          getUserMedia: vi.fn().mockResolvedValue({
+            getTracks: () => [{ stop: vi.fn() }],
+          }),
+          getDisplayMedia: getDisplayMediaMock,
+        },
+      });
+
+      vi.mocked(meetingService.startRecording).mockRejectedValueOnce({
+        response: { status: 409, data: { message: "Recording already in progress" } },
+      });
+      vi.mocked(meetingService.joinMeeting).mockResolvedValue({
+        token: "mock-token",
+        livekitUrl: "wss://mock.livekit.cloud",
+        roomName: "tp-proj-4-m-234",
+        identity: "user_1",
+        participantName: "Admin",
+        isHost: true,
+        meeting: { ...mockEndedMeeting, status: "ACTIVE", recordingStatus: "IDLE" },
+      });
+
+      render(
+        <ConfirmProvider>
+          <LiveMeetingRoom
+            projectId={4}
+            meetingId={234}
+            currentUserId={1}
+            onLeave={vi.fn()}
+          />
+        </ConfirmProvider>
+      );
+
+      const recBtn = await screen.findByTestId("toggle-recording-btn");
+      fireEvent.click(recBtn);
+
+      await waitFor(() => {
+        expect(meetingService.startRecording).toHaveBeenCalledWith(4, 234);
+      });
+      expect(getDisplayMediaMock).not.toHaveBeenCalled();
+      expect(screen.queryByTestId("meeting-fallback-recording-badge")).not.toBeInTheDocument();
     });
   });
 });

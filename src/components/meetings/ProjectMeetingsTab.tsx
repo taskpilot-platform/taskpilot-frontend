@@ -523,6 +523,10 @@ export function ProjectMeetingsTab({
         isOpen={Boolean(selectedRecordingMeeting)}
         onClose={() => setSelectedRecordingMeeting(null)}
         meeting={selectedRecordingMeeting}
+        onMeetingUpdated={(updated) => {
+          setSelectedRecordingMeeting(updated);
+          setMeetings((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
+        }}
       />
     </div>
   );
