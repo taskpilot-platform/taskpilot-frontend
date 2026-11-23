@@ -1,8 +1,7 @@
-import { createHash } from "node:crypto";
 import { test, expect } from "./helpers/isolated-test";
 import { DEFAULT_MOCK_USER, TEAMMATE_USER, setupWorkspaceMocks } from "./helpers/mock-setup";
 
-test("captures browser media and plays the finalized project file from a second account", async ({ page }) => {
+test("falls back from Egress to browser capture, uploads to B2, and plays from a second account", async ({ page }) => {
   const session = {
     id: 412, projectId: 100, title: "Recording acceptance fixture", status: "ACTIVE",
     roomName: "room-412", startedAt: new Date().toISOString(),
@@ -35,43 +34,33 @@ test("captures browser media and plays the finalized project file from a second 
   });
 
   let uploaded: Buffer | undefined;
-  let clip = { id: "", state: "REQUESTED", version: 0, origin: "BROWSER", coverage: "SCREEN_ONLY", fileId: 0 };
-  await page.route(/\/projects\/100\/meetings\/412\/recordings$/, async (route) => {
-    if (route.request().method() === "POST") {
-      clip.id = route.request().postDataJSON().idempotencyKey;
-      await route.fulfill({ json: clip });
-    } else {
-      await route.fulfill({ json: [clip] });
-    }
+  let completed = false;
+  const mediaPath = "/api/isolated-b2/412.webm";
+  const mediaUrl = new URL(mediaPath, "http://127.0.0.1:5173").href;
+  await page.route(/\/projects\/100\/meetings\/412\/recording\/start$/, (route) =>
+    route.fulfill({ status: 503, json: { message: "Egress unavailable in this fixture" } }));
+  await page.route(/\/projects\/100\/meetings\/412\/recording\/presign-upload$/, async (route) => {
+    expect(route.request().postDataJSON().contentType).toBe("video/webm");
+    await route.fulfill({ json: {
+      uploadUrl: mediaUrl, uploadToken: "fixture-signed-upload", contentType: "video/webm",
+      fileName: "meeting_412_fallback.webm", maxFileSizeBytes: 50 * 1024 * 1024,
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+    } });
   });
-  await page.route(/\/projects\/100\/meetings\/412\/recordings\/[^/]+\/state$/, async (route) => {
-    const data = route.request().postDataJSON();
-    expect(data.expectedVersion).toBe(clip.version);
-    clip = { ...clip, state: data.state, version: clip.version + 1 };
-    await route.fulfill({ json: clip });
-  });
-  await page.route(/\/projects\/100\/files(\?.*)?$/, async (route) => {
-    if (route.request().method() !== "POST") {
-      await route.fulfill({ json: { data: { content: [] } } });
-      return;
-    }
-    const type = route.request().headers()["content-type"];
-    const boundary = type.split("boundary=")[1];
-    const body = route.request().postDataBuffer()!;
-    const start = body.indexOf("\r\n\r\n") + 4;
-    uploaded = body.subarray(start, body.indexOf(`\r\n--${boundary}`, start));
+  await page.route("**" + mediaPath, async (route) => {
+    expect(route.request().method()).toBe("PUT");
+    expect(route.request().headers()["content-type"]).toBe("video/webm");
+    uploaded = route.request().postDataBuffer()!;
     expect(uploaded.length).toBeGreaterThan(100);
-    await route.fulfill({ json: { data: { id: 888 } } });
+    await route.fulfill({ status: 200, body: "" });
   });
-  await page.route(/\/projects\/100\/meetings\/412\/recordings\/[^/]+\/finalize$/, async (route) => {
-    expect(clip.state).toBe("UPLOADING");
-    const data = route.request().postDataJSON();
-    expect(data.projectFileId).toBe(888);
-    expect(data.expectedVersion).toBe(clip.version);
-    expect(data.byteLength).toBe(uploaded?.length);
-    expect(data.checksum).toBe(createHash("sha256").update(uploaded!).digest("hex"));
-    clip = { ...clip, fileId: 888, state: "READY", version: clip.version + 1 };
-    await route.fulfill({ json: clip });
+  await page.route(/\/projects\/100\/meetings\/412\/recording\/complete-upload$/, async (route) => {
+    expect(uploaded?.length).toBeGreaterThan(100);
+    expect(route.request().postDataJSON()).toEqual({
+      uploadToken: "fixture-signed-upload", durationSeconds: expect.any(Number),
+    });
+    completed = true;
+    await route.fulfill({ json: { ...session, recordingFileId: 888, recordingStatus: "COMPLETED" } });
   });
 
   await page.goto("/projects/100/meetings");
@@ -80,12 +69,11 @@ test("captures browser media and plays the finalized project file from a second 
   await recordButton.click();
   await page.getByRole("button", { name: "Chỉ ghi hình" }).click();
   await expect(recordButton).toHaveText(/Dừng ghi/);
-  await expect.poll(() => clip.state).toBe("CAPTURING");
-  await expect(page.getByText("Chỉ có hình ảnh.", { exact: false })).toBeVisible();
+  await expect(page.getByTestId("meeting-fallback-recording-badge")).toBeVisible();
   // Let Chromium emit at least one timed frame before requesting finalization.
   await page.waitForTimeout(650);
   await recordButton.click();
-  await expect.poll(() => clip.state).toBe("READY");
+  await expect.poll(() => completed).toBe(true);
 
   const guest = await page.context().newPage();
   try {
@@ -93,7 +81,10 @@ test("captures browser media and plays the finalized project file from a second 
       language: "vi", user: TEAMMATE_USER, isManager: false,
       initialMeetings: [{ ...session, status: "ENDED", recordingFileId: 888, isHost: false }],
     });
-    await guest.route(/\/projects\/100\/files\/888\/download$/, (route) =>
+    await guest.route(/\/projects\/100\/meetings\/412\/recording\/playback-url$/, (route) =>
+      route.fulfill({ json: { url: mediaUrl, contentType: "video/webm", recordingStatus: "COMPLETED",
+        requiresAuthHeader: false, backupStorageUsed: false, recordingFileId: 888 } }));
+    await guest.route("**" + mediaPath, (route) =>
       route.fulfill({ contentType: "video/webm", body: uploaded }));
     await guest.goto("/projects/100/meetings");
     await guest.getByTestId("watch-recording-btn-412").click();

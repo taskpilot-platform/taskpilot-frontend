@@ -493,6 +493,12 @@ export async function setupWorkspaceMocks(
     await route.fulfill({ status: sid === "PA_fixture" ? 200 : 409, json: { data: null } });
   });
 
+  await page.route(/\/(?:api\/)?v1\/projects\/100\/meetings\/\d+\/recording\/playback-url$/, async (route) => {
+    await route.fulfill({ status: 200, json: {
+      url: null, requiresAuthHeader: false, recordingStatus: "IDLE", backupStorageUsed: false,
+    } });
+  });
+
   await page.route(/\/(?:api\/)?v1\/projects\/100\/meetings\/\d+\/recordings$/, async (route) => {
     const meetingId = Number(route.request().url().split("/").at(-2));
     const linked = meetings.find((meeting: { id: number }) => meeting.id === meetingId)?.recordingFileId;

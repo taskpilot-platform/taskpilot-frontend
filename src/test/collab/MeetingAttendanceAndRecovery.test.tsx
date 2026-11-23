@@ -17,6 +17,7 @@ import type { ProjectMeetingDto } from "@/types/meeting";
 vi.mock("@/services/meeting.service", () => ({
   meetingService: {
     getMeetings: vi.fn(),
+    uploadFallbackRecordingToB2: vi.fn(),
     getRecordings: vi.fn().mockResolvedValue([]),
     joinMeeting: vi.fn(),
     leaveMeeting: vi.fn(),
@@ -138,6 +139,7 @@ describe("Meeting Recording and Screen Sharing Features", () => {
       bumpSessionGeneration();
       await act(async () => { finishWrite("local-owner-1"); });
       expect(syncMeetingRecording).not.toHaveBeenCalled();
+      expect(meetingService.uploadFallbackRecordingToB2).not.toHaveBeenCalled();
     });
 
     it("honors denied server access without offering local playback", async () => {

@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { api } from "@/lib/http";
+import { api, getSessionGeneration } from "@/lib/http";
 import { meetingService } from "@/services/meeting.service";
 
 vi.mock("@/lib/http", () => ({
+  getSessionGeneration: vi.fn().mockReturnValue(0),
   api: {
     get: vi.fn(),
     post: vi.fn(),
@@ -15,6 +16,7 @@ describe("meetingService.uploadFallbackRecordingToB2", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(getSessionGeneration).mockReturnValue(0);
   });
 
   afterEach(() => {
@@ -75,6 +77,18 @@ describe("meetingService.uploadFallbackRecordingToB2", () => {
         durationSeconds: 45,
       }
     );
+  });
+
+  it("does not complete a B2 upload under a different account", async () => {
+    vi.mocked(api.post).mockResolvedValueOnce({ status: 200, message: "OK", data: {
+      uploadUrl: "https://b2.invalid/clip", contentType: "video/webm", uploadToken: "token", maxFileSizeBytes: 1024,
+    } });
+    globalThis.fetch = vi.fn(async () => {
+      vi.mocked(getSessionGeneration).mockReturnValue(1);
+      return { ok: true, status: 200 } as Response;
+    });
+    await expect(meetingService.uploadFallbackRecordingToB2(4, 234, new Blob(["clip"]))).rejects.toThrow(/Session changed/);
+    expect(api.post).toHaveBeenCalledTimes(1);
   });
 
   it("rejects oversize blobs client-side before sending PUT to Backblaze B2", async () => {
