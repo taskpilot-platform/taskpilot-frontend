@@ -34,6 +34,7 @@ export async function setupWorkspaceMocks(
     initialFiles?: any[];
     initialMessages?: any[];
     initialMeetings?: any[];
+    language?: "en" | "vi";
   } = {}
 ) {
   const user = options.user || DEFAULT_MOCK_USER;
@@ -45,13 +46,14 @@ export async function setupWorkspaceMocks(
 
   // Seed localStorage with valid auth token before page load
   await page.addInitScript(
-    ({ token, userData }) => {
+    ({ token, userData, language }) => {
+      localStorage.setItem("i18nextLng", language);
       localStorage.setItem("taskpilot_access_token", token);
       localStorage.setItem("taskpilot_refresh_token", token);
       localStorage.setItem("auth_token", token);
       localStorage.setItem("user", JSON.stringify(userData));
     },
-    { token: VALID_MOCK_JWT, userData: user }
+    { token: VALID_MOCK_JWT, userData: user, language: options.language ?? "en" }
   );
 
   // Mock Notifications stream & APIs (SSE & REST)
@@ -81,7 +83,7 @@ export async function setupWorkspaceMocks(
   });
 
   // Mock Profile API
-  await page.route("**/api/v1/users/me", async (route) => {
+  await page.route("**/v1/users/me", async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -104,7 +106,7 @@ export async function setupWorkspaceMocks(
   });
 
   // Mock Project Details
-  await page.route("**/api/v1/projects/100", async (route) => {
+  await page.route(/\/(?:api\/)?v1\/projects\/100(\?.*)?$/, async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -126,7 +128,7 @@ export async function setupWorkspaceMocks(
   });
 
   // Mock My Projects
-  await page.route("**/api/v1/projects/my**", async (route) => {
+  await page.route("**/v1/projects/my**", async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -159,7 +161,7 @@ export async function setupWorkspaceMocks(
   });
 
   // Mock Project Members
-  await page.route("**/api/v1/projects/100/members", async (route) => {
+  await page.route("**/v1/projects/100/members**", async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -185,7 +187,7 @@ export async function setupWorkspaceMocks(
   });
 
   // Mock Project Summary
-  await page.route("**/api/v1/projects/100/summary", async (route) => {
+  await page.route("**/v1/projects/100/summary**", async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -194,9 +196,10 @@ export async function setupWorkspaceMocks(
         message: "Success",
         data: {
           totalTasks: 12,
-          completedTasks: 8,
+          todoTasks: 1,
           inProgressTasks: 3,
-          pendingTasks: 1,
+          reviewTasks: 0,
+          doneTasks: 8,
           completionRate: 67,
         },
       }),
@@ -204,7 +207,7 @@ export async function setupWorkspaceMocks(
   });
 
   // Mock Board / Sprints / Tasks endpoints
-  await page.route("**/api/v1/projects/100/board", async (route) => {
+  await page.route("**/v1/projects/100/board**", async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -222,7 +225,7 @@ export async function setupWorkspaceMocks(
     });
   });
 
-  await page.route("**/api/v1/projects/100/tasks**", async (route) => {
+  await page.route("**/v1/projects/100/tasks**", async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -234,7 +237,7 @@ export async function setupWorkspaceMocks(
     });
   });
 
-  await page.route("**/api/v1/projects/100/sprints**", async (route) => {
+  await page.route("**/v1/projects/100/sprints**", async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -242,16 +245,67 @@ export async function setupWorkspaceMocks(
         status: 200,
         message: "Success",
         data: [],
+      }),
+    });
+  });
+
+  await page.route(/\/(?:api\/)?v1\/tasks\/\d+\/workflow$/, async (route) => {
+    const match = route.request().url().match(/\/v1\/tasks\/(\d+)\/workflow$/);
+    const taskId = match ? Number(match[1]) : 1;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        status: 200,
+        message: "Success",
+        data: {
+          taskId,
+          projectId: 100,
+          taskVersion: 0,
+          assignmentVersion: 0,
+          criteriaRevision: 0,
+          dueCommitmentRevision: 0,
+          status: "TODO",
+          completionEvidenceStatus: null,
+          completedAt: null,
+          currentSubmissionId: null,
+          currentEvaluationId: null,
+          legacyReviewMissingSubmission: false,
+          otherActiveManagersExist: true,
+          canSubmit: false,
+          canWithdraw: false,
+          canReview: false,
+          canSelfAttest: false,
+          canReopen: false,
+          canSupersede: false,
+          canRecoverLegacyReview: false,
+          rubricVersion: "quality-v1",
+          rubric: [],
+          submissions: [],
+          reviews: [],
+          evaluations: [],
+          deadlineRevisions: [],
+        },
       }),
     });
   });
 
   // Mock Files API
-  await page.route("**/api/v1/projects/100/files**", async (route) => {
+  await page.route("**/v1/projects/100/files**", async (route) => {
     const request = route.request();
     const url = new URL(request.url());
 
     if (request.method() === "GET") {
+      const downloadMatch = url.pathname.match(/\/files\/(\d+)\/download$/);
+      if (downloadMatch) {
+        const file = files.find((f) => f.id === Number(downloadMatch[1]));
+        await route.fulfill({
+          status: file ? 200 : 404,
+          contentType: file?.contentType || "application/octet-stream",
+          body: file ? `Mock file bytes: ${file.originalName}` : "File not found",
+        });
+        return;
+      }
       const keyword = url.searchParams.get("keyword")?.toLowerCase();
       let filtered = [...files];
       if (keyword) {
@@ -326,11 +380,11 @@ export async function setupWorkspaceMocks(
       return;
     }
 
-    await route.continue();
+    await route.fallback();
   });
 
   // Mock Chat Messages API
-  await page.route("**/api/v1/projects/100/chat/messages**", async (route) => {
+  await page.route("**/v1/projects/100/chat/messages**", async (route) => {
     const request = route.request();
 
     if (request.method() === "GET") {
@@ -378,11 +432,11 @@ export async function setupWorkspaceMocks(
       return;
     }
 
-    await route.continue();
+    await route.fallback();
   });
 
   // Mock Active Meeting API
-  await page.route(/\/api\/v1\/projects\/100\/meetings\/active(\?.*)?$/, async (route) => {
+  await page.route(/\/(?:api\/)?v1\/projects\/100\/meetings\/active(\?.*)?$/, async (route) => {
     const active = meetings.find((m: any) => m.status === "ACTIVE") || null;
     await route.fulfill({
       status: 200,
@@ -396,7 +450,7 @@ export async function setupWorkspaceMocks(
   });
 
   // Mock Join Meeting API
-  await page.route(/\/api\/v1\/projects\/100\/meetings\/\d+\/join(\?.*)?$/, async (route) => {
+  await page.route(/\/(?:api\/)?v1\/projects\/100\/meetings\/\d+\/join(\?.*)?$/, async (route) => {
     const url = route.request().url();
     const match = url.match(/\/meetings\/(\d+)\/join/);
     const meetingId = match ? parseInt(match[1]) : 1;
@@ -422,8 +476,8 @@ export async function setupWorkspaceMocks(
         status: 200,
         message: "Joined successfully",
         data: {
-          token: "mock-livekit-token-" + meetingId,
-          livekitUrl: "wss://taskpilot-collab-m3oqfj4g.livekit.cloud",
+          token: "isolated-sdk-fixture-" + meetingId,
+          livekitUrl: "wss://livekit.invalid",
           roomName: meeting.roomName,
           identity: `user_${user.id}`,
           participantName: user.fullName,
@@ -434,8 +488,35 @@ export async function setupWorkspaceMocks(
     });
   });
 
+  await page.route(/\/(?:api\/)?v1\/projects\/100\/meetings\/\d+\/attendance$/, async (route) => {
+    const sid = route.request().postDataJSON()?.participantSid;
+    await route.fulfill({ status: sid === "PA_fixture" ? 200 : 409, json: { data: null } });
+  });
+
+  await page.route(/\/(?:api\/)?v1\/projects\/100\/meetings\/\d+\/recording\/playback-url(?:\?.*)?$/, async (route) => {
+    await route.fulfill({ status: 200, json: {
+      url: null, requiresAuthHeader: false, recordingStatus: "IDLE", backupStorageUsed: false,
+    } });
+  });
+
+  await page.route(/\/(?:api\/)?v1\/projects\/100\/meetings\/\d+\/recordings$/, async (route) => {
+    const meetingId = Number(route.request().url().split("/").at(-2));
+    const linked = meetings.find((meeting: { id: number }) => meeting.id === meetingId)?.recordingFileId;
+    if (route.request().method() !== "GET") {
+      await route.fulfill({ status: 501, json: {} });
+      return;
+    }
+    await route.fulfill({ status: 200, json: linked ? [{
+      id: "fixture-clip", state: "READY", fileId: linked,
+      createdAt: "2026-11-18T10:00:00Z", version: 1, origin: "BROWSER", coverage: "SCREEN_ONLY",
+    }] : [] });
+  });
+
+  await page.route(/\/(?:api\/)?v1\/projects\/100\/files\/777\/download$/, (route) =>
+    route.fulfill({ status: 200, contentType: "video/webm", path: "e2e/fixtures/recording-test.webm" }));
+
   // Mock Leave Meeting API
-  await page.route(/\/api\/v1\/projects\/100\/meetings\/\d+\/leave(\?.*)?$/, async (route) => {
+  await page.route(/\/(?:api\/)?v1\/projects\/100\/meetings\/\d+\/leave(\?.*)?$/, async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -448,7 +529,7 @@ export async function setupWorkspaceMocks(
   });
 
   // Mock End Meeting API
-  await page.route(/\/api\/v1\/projects\/100\/meetings\/\d+\/end(\?.*)?$/, async (route) => {
+  await page.route(/\/(?:api\/)?v1\/projects\/100\/meetings\/\d+\/end(\?.*)?$/, async (route) => {
     const url = route.request().url();
     const match = url.match(/\/meetings\/(\d+)\/end/);
     const meetingId = match ? parseInt(match[1]) : 1;
@@ -471,7 +552,7 @@ export async function setupWorkspaceMocks(
   });
 
   // Mock Meeting Participants API
-  await page.route(/\/api\/v1\/projects\/100\/meetings\/\d+\/participants(\?.*)?$/, async (route) => {
+  await page.route(/\/(?:api\/)?v1\/projects\/100\/meetings\/\d+\/participants(\?.*)?$/, async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -494,7 +575,7 @@ export async function setupWorkspaceMocks(
   });
 
   // Mock Meetings List & Create API
-  await page.route(/\/api\/v1\/projects\/100\/meetings(\?.*)?$/, async (route) => {
+  await page.route(/\/(?:api\/)?v1\/projects\/100\/meetings(\?.*)?$/, async (route) => {
     const request = route.request();
 
     if (request.method() === "GET") {
@@ -546,6 +627,6 @@ export async function setupWorkspaceMocks(
       return;
     }
 
-    await route.continue();
+    await route.fallback();
   });
 }

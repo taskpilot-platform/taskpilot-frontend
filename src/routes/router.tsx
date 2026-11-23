@@ -11,6 +11,10 @@ import RegisterPage from "@/pages/RegisterPage";
 import ForgotPasswordPage from "@/pages/ForgotPasswordPage";
 import ResetPasswordPage from "@/pages/ResetPasswordPage";
 import AuthCallbackPage from "@/pages/AuthCallbackPage";
+import VerifyEmailPage from "@/pages/VerifyEmailPage";
+import PasswordSetupPage from "@/pages/PasswordSetupPage";
+import RestoreAccountPage from "@/pages/RestoreAccountPage";
+import AcceptInvitationPage from "@/pages/AcceptInvitationPage";
 import DashboardPage from "@/pages/DashboardPage";
 import ProfilePage from "@/pages/ProfilePage";
 import MySkillsPage from "@/pages/MySkillsPage";
@@ -22,6 +26,7 @@ import TaskLinkResolverPage from "@/pages/TaskLinkResolverPage";
 import AdminUsersPage from "@/pages/AdminUsersPage";
 import AdminGlobalSkillsPage from "@/pages/AdminGlobalSkillsPage";
 import AdminSettingsPage from "@/pages/AdminSettingsPage";
+import AdminAdaptiveReportPage from "@/pages/AdminAdaptiveReportPage";
 import AiChatPage from "@/pages/AiChatPage";
 import NotificationsPage from "@/pages/NotificationsPage";
 import CommentsPage from "@/pages/CommentsPage";
@@ -30,19 +35,12 @@ import GlobalMeetingsPage from "@/pages/GlobalMeetingsPage";
 import GlobalCalendarPage from "@/pages/GlobalCalendarPage";
 import DemoRecommendationCardPage from "@/pages/DemoRecommendationCardPage";
 import LandingPage from "@/pages/LandingPage";
-import { useAuthStore } from "@/stores/auth.store";
-import { Navigate } from "react-router-dom";
+import { setRedirectLoginHandler } from "@/lib/http";
 
 // Import Guard
 import ProtectedRoute from "./ProtectedRoute";
-
-function RootIndexRoute() {
-  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
-  if (!isAuthenticated) {
-    return <LandingPage />;
-  }
-  return <Navigate to="/dashboard" replace />;
-}
+import AdminRoute from "./AdminRoute";
+import RootIndexRoute from "./RootIndexRoute";
 
 export const router = createBrowserRouter([
   // 0. Public Landing Page (Truy cập công khai cho quảng bá & SEO)
@@ -81,7 +79,23 @@ export const router = createBrowserRouter([
         path: "/auth/callback",
         element: <AuthCallbackPage />,
       },
+      {
+        path: "/verify-email",
+        element: <VerifyEmailPage />,
+      },
+      {
+        path: "/setup-password",
+        element: <PasswordSetupPage />,
+      },
+      {
+        path: "/restore-account",
+        element: <RestoreAccountPage />,
+      },
     ],
+  },
+  {
+    path: "/invitations/accept",
+    element: <AcceptInvitationPage />,
   },
 
   // 2. Nhóm Main (Bắt buộc phải đăng nhập)
@@ -179,16 +193,40 @@ export const router = createBrowserRouter([
       // Admin
       {
         path: "/admin/users",
-        element: <AdminUsersPage />,
+        element: (
+          <AdminRoute>
+            <AdminUsersPage />
+          </AdminRoute>
+        ),
       },
       {
         path: "/admin/skills",
-        element: <AdminGlobalSkillsPage />,
+        element: (
+          <AdminRoute>
+            <AdminGlobalSkillsPage />
+          </AdminRoute>
+        ),
       },
       {
         path: "/admin/settings",
-        element: <AdminSettingsPage />,
+        element: (
+          <AdminRoute>
+            <AdminSettingsPage />
+          </AdminRoute>
+        ),
+      },
+      {
+        path: "/admin/adaptive",
+        element: (
+          <AdminRoute>
+            <AdminAdaptiveReportPage />
+          </AdminRoute>
+        ),
       },
     ],
   },
 ]);
+
+setRedirectLoginHandler(() => {
+  void router.navigate("/login", { replace: true });
+});

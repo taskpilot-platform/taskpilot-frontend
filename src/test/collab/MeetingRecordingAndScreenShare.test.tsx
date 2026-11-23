@@ -1,19 +1,27 @@
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { meetingRecordingStore } from "@/services/meetingRecordingStore";
+/// <reference types="node" />
+import "fake-indexeddb/auto";
+import { Blob as NativeBlob, File as NativeFile } from "node:buffer";
+import { act, render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { meetingRecordingStore, type MeetingRecordingRecord } from "@/services/meetingRecordingStore";
 import { MeetingRecordingModal } from "@/components/meetings/MeetingRecordingModal";
 import { ProjectMeetingsTab } from "@/components/meetings/ProjectMeetingsTab";
 import { LiveMeetingRoom } from "@/components/meetings/LiveMeetingRoom";
 import { ConfirmProvider } from "@/components/ui/confirm-dialog";
+import { Room, RoomEvent } from "livekit-client";
 import { meetingService } from "@/services/meeting.service";
 import { projectFilesService } from "@/services/project-files.service";
 import type { ProjectMeetingDto } from "@/types/meeting";
+
+vi.mock("livekit-client", () => import("../../../e2e/helpers/livekit-sdk-stub"));
 
 // Mock services
 vi.mock("@/services/meeting.service", () => ({
   meetingService: {
     getMeetings: vi.fn(),
     joinMeeting: vi.fn(),
+    confirmAttendance: vi.fn().mockResolvedValue({}),
+    getRecordings: vi.fn().mockResolvedValue([]),
     leaveMeeting: vi.fn(),
     endMeeting: vi.fn(),
     updateRecordingFile: vi.fn().mockResolvedValue({}),
@@ -101,35 +109,55 @@ const mockEndedMeeting: ProjectMeetingDto = {
   isHost: true,
 };
 
+const localRecord = (blob?: Blob): MeetingRecordingRecord => ({
+  userId: 1, projectId: 4, meetingId: 234, recordingId: "fixture-clip",
+  recordedAt: new Date().toISOString(), title: "Sprint Review Session",
+  origin: "BROWSER", coverage: "SCREEN_SOURCE_AUDIO", uploadState: "LOCAL_ONLY", uploadTarget: "B2",
+  mimeType: "video/webm", durationMs: 45000, blob,
+});
+
 describe("Meeting Recording and Screen Sharing Features", () => {
+  afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
   beforeEach(async () => {
     vi.clearAllMocks();
+    vi.stubGlobal("Blob", NativeBlob);
+    vi.stubGlobal("File", NativeFile);
     globalThis.URL.createObjectURL = vi.fn().mockReturnValue("blob:http://localhost/mock-video");
     globalThis.URL.revokeObjectURL = vi.fn();
-    await meetingRecordingStore.deleteRecording(234);
-    await meetingRecordingStore.deleteRecording(888);
+    await new Promise<void>((resolve, reject) => {
+      const request = indexedDB.deleteDatabase("taskpilot_recordings_db");
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error);
+    });
+    vi.stubGlobal("MediaStream", class {
+      tracks: { kind: string }[];
+      constructor(tracks: { kind: string }[] = []) { this.tracks = tracks; }
+      getTracks() { return this.tracks; }
+      getVideoTracks() { return this.tracks.filter((track) => track.kind === "video"); }
+      getAudioTracks() { return this.tracks.filter((track) => track.kind === "audio"); }
+    });
   });
 
   describe("meetingRecordingStore", () => {
-    it("saves, retrieves, and checks recordings", async () => {
-      const dummyBlob = new Blob(["mock video data"], { type: "video/webm" });
-      await meetingRecordingStore.saveRecording(234, dummyBlob, {
-        title: "Test Recording",
-        durationSeconds: 45,
-        projectId: 4,
-      });
+    it("stores multiple clips with account, project, and meeting isolation", async () => {
+      const record = localRecord(new Blob(["mock video data"], { type: "video/webm" }));
+      await meetingRecordingStore.save(record);
+      await meetingRecordingStore.save({ ...record, recordingId: "another-clip" });
+      expect(await meetingRecordingStore.list({ userId: 1, projectId: 4, meetingId: 234 })).toHaveLength(2);
+      expect(await meetingRecordingStore.list({ userId: 2, projectId: 4, meetingId: 234 })).toEqual([]);
+      expect(await meetingRecordingStore.list({ userId: 1, projectId: 5, meetingId: 234 })).toEqual([]);
+      expect(await meetingRecordingStore.list({ userId: 1, projectId: 4, meetingId: 888 })).toEqual([]);
+    });
 
-      const has = await meetingRecordingStore.hasRecording(234);
-      expect(has).toBe(true);
-
-      const rec = await meetingRecordingStore.getRecording(234);
-      expect(rec).not.toBeNull();
-      expect(rec?.title).toBe("Test Recording");
-      expect(rec?.durationSeconds).toBe(45);
-
-      await meetingRecordingStore.deleteRecording(234);
-      const afterDelete = await meetingRecordingStore.getRecording(234);
-      expect(afterDelete).toBeNull();
+    it("recovers ordered durable chunks without exposing another account's chunks", async () => {
+      const record = localRecord();
+      await meetingRecordingStore.save(record);
+      await meetingRecordingStore.appendChunk(record, 1, new Blob(["second"]));
+      await meetingRecordingStore.appendChunk(record, 0, new Blob(["first"]));
+      expect((await meetingRecordingStore.recoverChunks(record)).size).toBe(11);
+      expect((await meetingRecordingStore.recoverChunks({ ...record, userId: 2 })).size).toBe(0);
+      await meetingRecordingStore.clearChunks(record);
+      expect((await meetingRecordingStore.recoverChunks(record)).size).toBe(0);
     });
   });
 
@@ -141,6 +169,7 @@ describe("Meeting Recording and Screen Sharing Features", () => {
             isOpen={true}
             onClose={vi.fn()}
             meeting={mockEndedMeeting}
+            currentUserId={1}
           />
         </ConfirmProvider>
       );
@@ -149,17 +178,14 @@ describe("Meeting Recording and Screen Sharing Features", () => {
         expect(screen.getByText("Sprint Review Session")).toBeInTheDocument();
         expect(screen.getByText("Admin")).toBeInTheDocument();
         expect(
-          screen.queryByTestId("recording-video-player") || screen.queryByTestId("play-sample-recording-btn")
+          screen.queryByTestId("recording-video-player") || screen.queryByTestId("recording-unavailable")
         ).toBeInTheDocument();
       });
     });
 
     it("renders video player when local recording exists", async () => {
       const dummyBlob = new Blob(["mock video data"], { type: "video/webm" });
-      await meetingRecordingStore.saveRecording(234, dummyBlob, {
-        title: "Sprint Review Session",
-        durationSeconds: 120,
-      });
+      await meetingRecordingStore.save(localRecord(dummyBlob));
 
       // Mock URL.createObjectURL
       const createObjectURLMock = vi.fn().mockReturnValue("blob:http://localhost/mock-video");
@@ -173,6 +199,7 @@ describe("Meeting Recording and Screen Sharing Features", () => {
             isOpen={true}
             onClose={vi.fn()}
             meeting={mockEndedMeeting}
+            currentUserId={1}
           />
         </ConfirmProvider>
       );
@@ -190,6 +217,7 @@ describe("Meeting Recording and Screen Sharing Features", () => {
             isOpen={true}
             onClose={vi.fn()}
             meeting={{ ...mockEndedMeeting, recordingFileId: 999 }}
+            currentUserId={1}
           />
         </ConfirmProvider>
       );
@@ -220,6 +248,7 @@ describe("Meeting Recording and Screen Sharing Features", () => {
             isOpen={true}
             onClose={vi.fn()}
             meeting={{ ...mockEndedMeeting, recordingFileId: 777, recordingStatus: "COMPLETED" }}
+            currentUserId={1}
           />
         </ConfirmProvider>
       );
@@ -248,13 +277,14 @@ describe("Meeting Recording and Screen Sharing Features", () => {
             isOpen={true}
             onClose={vi.fn()}
             meeting={{ ...mockEndedMeeting, egressId: "EG_BACKUP_99", recordingStatus: "FAILED", backupStorageUsed: true }}
+            currentUserId={1}
           />
         </ConfirmProvider>
       );
 
       await waitFor(() => {
         expect(screen.getByTestId("recording-backup-storage-alert")).toBeInTheDocument();
-        expect(screen.getByText(/kho dự phòng LiveKit/i)).toBeInTheDocument();
+        expect(screen.getByText(/kho lưu trữ dự phòng.*LiveKit/i)).toBeInTheDocument();
         expect(screen.getByText(/EG_BACKUP_99/)).toBeInTheDocument();
       });
     });
@@ -275,6 +305,7 @@ describe("Meeting Recording and Screen Sharing Features", () => {
             isOpen={true}
             onClose={vi.fn()}
             meeting={{ ...mockEndedMeeting, egressId: "EG_PROC_1", recordingStatus: "PROCESSING" }}
+            currentUserId={1}
           />
         </ConfirmProvider>
       );
@@ -303,6 +334,7 @@ describe("Meeting Recording and Screen Sharing Features", () => {
             isOpen={true}
             onClose={vi.fn()}
             meeting={{ ...mockEndedMeeting, recordingStatus: "FAILED" }}
+            currentUserId={1}
           />
         </ConfirmProvider>
       );
@@ -319,11 +351,7 @@ describe("Meeting Recording and Screen Sharing Features", () => {
 
     it("plays local IndexedDB fallback recording even when server recordingStatus is FAILED", async () => {
       const fallbackBlob = new Blob(["local-fallback-webm-bytes"], { type: "video/webm" });
-      await meetingRecordingStore.saveRecording(234, fallbackBlob, {
-        title: "Sprint Review Session",
-        projectId: 4,
-        durationSeconds: 90,
-      });
+      await meetingRecordingStore.save(localRecord(fallbackBlob));
 
       vi.mocked(meetingService.getRecordingPlaybackUrl).mockResolvedValueOnce({
         url: null,
@@ -341,6 +369,7 @@ describe("Meeting Recording and Screen Sharing Features", () => {
             isOpen={true}
             onClose={vi.fn()}
             meeting={{ ...mockEndedMeeting, recordingStatus: "FAILED" }}
+            currentUserId={1}
           />
         </ConfirmProvider>
       );
@@ -380,13 +409,69 @@ describe("Meeting Recording and Screen Sharing Features", () => {
       await waitFor(() => {
         expect(screen.getAllByText("Sprint Review Session").length).toBeGreaterThanOrEqual(1);
         expect(
-          screen.queryByTestId("recording-video-player") || screen.queryByTestId("play-sample-recording-btn")
+          screen.queryByTestId("recording-video-player") || screen.queryByTestId("recording-unavailable")
         ).toBeInTheDocument();
       });
     });
   });
 
   describe("LiveMeetingRoom Toolbar & Custom Confirm", () => {
+    const arrangeLiveRoom = () => vi.mocked(meetingService.joinMeeting).mockResolvedValue({
+      token: "isolated-sdk-fixture-edges", livekitUrl: "wss://livekit.invalid", roomName: "fixture",
+      identity: "user_1", participantName: "Admin", isHost: true,
+      meeting: { ...mockEndedMeeting, status: "ACTIVE", recordingStatus: "IDLE" },
+    });
+    const liveRoom = (onEndMeeting = vi.fn()) => render(<ConfirmProvider>
+      <LiveMeetingRoom projectId={4} meetingId={234} currentUserId={1} onLeave={vi.fn()} onEndMeeting={onEndMeeting} />
+    </ConfirmProvider>);
+
+    it("does not confirm attendance or show live controls after an SDK connection failure", async () => {
+      arrangeLiveRoom();
+      vi.spyOn(Room.prototype, "connect").mockRejectedValueOnce(new Error("connection refused"));
+      liveRoom();
+      expect(await screen.findByTestId("meeting-connection-error")).toBeInTheDocument();
+      expect(meetingService.confirmAttendance).not.toHaveBeenCalled();
+      expect(screen.queryByTestId("toggle-recording-btn")).not.toBeInTheDocument();
+    });
+
+    it("reconfirms the connected participant SID after reconnect", async () => {
+      arrangeLiveRoom();
+      const events = vi.spyOn(Room.prototype, "on");
+      liveRoom();
+      await screen.findByTestId("toggle-recording-btn");
+      expect(meetingService.confirmAttendance).toHaveBeenCalledWith(4, 234, "PA_fixture");
+      const reconnect = events.mock.calls.find(([event]) => event === RoomEvent.Reconnected)?.[1] as (() => void);
+      await act(async () => { reconnect(); });
+      await waitFor(() => expect(meetingService.confirmAttendance).toHaveBeenCalledTimes(2));
+    });
+
+    it.each([401, 403])("never requests browser capture when Egress rejects with %s", async (status) => {
+      arrangeLiveRoom();
+      const display = vi.fn();
+      Object.defineProperty(navigator, "mediaDevices", { configurable: true, writable: true, value: { getDisplayMedia: display } });
+      vi.mocked(meetingService.startRecording).mockRejectedValueOnce({ response: { status } });
+      liveRoom();
+      fireEvent.click(await screen.findByTestId("toggle-recording-btn"));
+      await waitFor(() => expect(meetingService.startRecording).toHaveBeenCalledOnce());
+      expect(display).not.toHaveBeenCalled();
+    });
+
+    it("honors ENDING while keeping a rejected end request in the room", async () => {
+      arrangeLiveRoom();
+      vi.mocked(meetingService.endMeeting).mockRejectedValueOnce(new Error("closure unavailable"));
+      const onEnd = vi.fn();
+      liveRoom(onEnd);
+      fireEvent.click(await screen.findByTestId("end-meeting-btn"));
+      fireEvent.click(await screen.findByTestId("confirm-action-btn"));
+      await waitFor(() => expect(meetingService.endMeeting).toHaveBeenCalledOnce());
+      expect(onEnd).not.toHaveBeenCalled();
+      expect(screen.getByTestId("toggle-recording-btn")).toBeInTheDocument();
+      vi.mocked(meetingService.endMeeting).mockResolvedValueOnce({ ...mockEndedMeeting, status: "ENDING" });
+      fireEvent.click(screen.getByTestId("end-meeting-btn"));
+      fireEvent.click(await screen.findByTestId("confirm-action-btn"));
+      await waitFor(() => expect(onEnd).toHaveBeenCalledOnce());
+    });
+
     it("renders Screen Share and Recording buttons and uses Custom Confirm for End Meeting", async () => {
       Object.defineProperty(navigator, "mediaDevices", {
         writable: true,
@@ -402,13 +487,13 @@ describe("Meeting Recording and Screen Sharing Features", () => {
       });
 
       vi.mocked(meetingService.joinMeeting).mockResolvedValue({
-        token: "mock-token",
-        livekitUrl: "wss://mock.livekit.cloud",
+        token: "isolated-sdk-fixture-recording",
+        livekitUrl: "wss://livekit.invalid",
         roomName: "tp-proj-4-m-234",
         identity: "user_1",
         participantName: "Admin",
         isHost: true,
-        meeting: mockEndedMeeting,
+        meeting: { ...mockEndedMeeting, status: "ACTIVE" },
       });
 
       render(
@@ -453,8 +538,8 @@ describe("Meeting Recording and Screen Sharing Features", () => {
       });
 
       vi.mocked(meetingService.joinMeeting).mockResolvedValue({
-        token: "mock-token",
-        livekitUrl: "wss://mock.livekit.cloud",
+        token: "isolated-sdk-fixture-recording",
+        livekitUrl: "wss://livekit.invalid",
         roomName: "tp-proj-4-m-234",
         identity: "user_1",
         participantName: "Admin",
@@ -498,7 +583,8 @@ describe("Meeting Recording and Screen Sharing Features", () => {
           }),
           getDisplayMedia: vi.fn().mockResolvedValue({
             getTracks: () => [{ stop: stopTrack }],
-            getVideoTracks: () => [{ onended: null, stop: stopTrack }],
+            getVideoTracks: () => [{ kind: "video", readyState: "live", addEventListener: vi.fn(), removeEventListener: vi.fn(), stop: stopTrack }],
+            getAudioTracks: () => [{ kind: "audio", readyState: "live", stop: stopTrack }],
           }),
         },
       });
@@ -518,12 +604,12 @@ describe("Meeting Recording and Screen Sharing Features", () => {
           this.onstop?.();
         }
       }
-      (globalThis as any).MediaRecorder = MockMediaRecorder;
+      vi.stubGlobal("MediaRecorder", MockMediaRecorder);
 
       vi.mocked(meetingService.startRecording).mockRejectedValueOnce(new Error("LiveKit Egress unavailable"));
       vi.mocked(meetingService.joinMeeting).mockResolvedValue({
-        token: "mock-token",
-        livekitUrl: "wss://mock.livekit.cloud",
+        token: "isolated-sdk-fixture-recording",
+        livekitUrl: "wss://livekit.invalid",
         roomName: "tp-proj-4-m-234",
         identity: "user_1",
         participantName: "Admin",
@@ -574,8 +660,8 @@ describe("Meeting Recording and Screen Sharing Features", () => {
       });
 
       vi.mocked(meetingService.joinMeeting).mockResolvedValue({
-        token: "mock-token",
-        livekitUrl: "wss://mock.livekit.cloud",
+        token: "isolated-sdk-fixture-recording",
+        livekitUrl: "wss://livekit.invalid",
         roomName: "tp-proj-4-m-234",
         identity: "user_2",
         participantName: "Member",
@@ -614,8 +700,8 @@ describe("Meeting Recording and Screen Sharing Features", () => {
         response: { status: 409, data: { message: "Recording already in progress" } },
       });
       vi.mocked(meetingService.joinMeeting).mockResolvedValue({
-        token: "mock-token",
-        livekitUrl: "wss://mock.livekit.cloud",
+        token: "isolated-sdk-fixture-recording",
+        livekitUrl: "wss://livekit.invalid",
         roomName: "tp-proj-4-m-234",
         identity: "user_1",
         participantName: "Admin",
@@ -654,7 +740,8 @@ describe("Meeting Recording and Screen Sharing Features", () => {
           }),
           getDisplayMedia: vi.fn().mockResolvedValue({
             getTracks: () => [{ stop: stopTrack }],
-            getVideoTracks: () => [{ addEventListener: vi.fn(), removeEventListener: vi.fn(), stop: stopTrack }],
+            getVideoTracks: () => [{ kind: "video", readyState: "live", addEventListener: vi.fn(), removeEventListener: vi.fn(), stop: stopTrack }],
+            getAudioTracks: () => [{ kind: "audio", readyState: "live", stop: stopTrack }],
           }),
         },
       });
@@ -677,7 +764,7 @@ describe("Meeting Recording and Screen Sharing Features", () => {
           }, 30);
         }
       }
-      (globalThis as any).MediaRecorder = AsyncMockMediaRecorder;
+      vi.stubGlobal("MediaRecorder", AsyncMockMediaRecorder);
 
       let resolveUpload!: (v: any) => void;
       const uploadPromise = new Promise<any>((res) => {
@@ -687,8 +774,8 @@ describe("Meeting Recording and Screen Sharing Features", () => {
       vi.mocked(meetingService.uploadFallbackRecordingToB2).mockReturnValueOnce(uploadPromise);
       vi.mocked(meetingService.leaveMeeting).mockResolvedValueOnce(undefined);
       vi.mocked(meetingService.joinMeeting).mockResolvedValue({
-        token: "mock-token",
-        livekitUrl: "wss://mock.livekit.cloud",
+        token: "isolated-sdk-fixture-recording",
+        livekitUrl: "wss://livekit.invalid",
         roomName: "tp-proj-4-m-234",
         identity: "user_1",
         participantName: "Admin",

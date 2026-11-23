@@ -2,6 +2,21 @@ const ACCESS_TOKEN_KEY = "taskpilot_access_token";
 const REFRESH_TOKEN_KEY = "taskpilot_refresh_token";
 const LAST_PROJECT_ID_KEY = "taskpilot_last_project_id";
 const USER_THEME_KEY = "taskpilot_user_theme_preference";
+const AI_PENDING_REQUEST_PREFIX = "ai.pending.request.";
+
+const SESSION_SCOPED_KEYS = [
+  "userRole",
+  "navContext",
+  "lastAdminPath",
+  "lastWorkspacePath",
+  "user",
+  "auth_token",
+] as const;
+
+export const AUTH_STORAGE_KEYS = {
+  ACCESS_TOKEN: ACCESS_TOKEN_KEY,
+  REFRESH_TOKEN: REFRESH_TOKEN_KEY,
+} as const;
 
 export const themeStorage = {
   getUserTheme(): string | null {
@@ -36,10 +51,35 @@ export const authStorage = {
     localStorage.removeItem(REFRESH_TOKEN_KEY);
   },
 
+  setTokens(accessToken: string, refreshToken: string): void {
+    if (!accessToken || !refreshToken) {
+      throw new Error("Both access token and refresh token are required.");
+    }
+    localStorage.setItem(ACCESS_TOKEN_KEY, accessToken);
+    localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
+  },
+
+  clearSessionCaches(): void {
+    localStorage.removeItem(LAST_PROJECT_ID_KEY);
+    for (const key of SESSION_SCOPED_KEYS) {
+      localStorage.removeItem(key);
+    }
+    const keysToRemove: string[] = [];
+    for (let i = 0; i < localStorage.length; i += 1) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith(AI_PENDING_REQUEST_PREFIX)) {
+        keysToRemove.push(key);
+      }
+    }
+    for (const key of keysToRemove) {
+      localStorage.removeItem(key);
+    }
+  },
+
   clear(): void {
     localStorage.removeItem(ACCESS_TOKEN_KEY);
     localStorage.removeItem(REFRESH_TOKEN_KEY);
-    localStorage.removeItem(LAST_PROJECT_ID_KEY);
+    authStorage.clearSessionCaches();
   },
 };
 

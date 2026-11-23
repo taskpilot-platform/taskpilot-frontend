@@ -14,9 +14,10 @@ export interface ProjectSummary {
   projectName: string;
   totalMembers: number;
   totalTasks: number;
-  completedTasks: number;
+  todoTasks: number;
   inProgressTasks: number;
-  pendingTasks: number;
+  reviewTasks: number;
+  doneTasks: number;
   completionRate: number;
 }
 
@@ -28,6 +29,8 @@ export interface MyProject {
   myRole: MemberRole;
   startDate: string | null;
   endDate: string | null;
+  timezoneId: string;
+  timezoneProvenance?: string;
   joinedAt: string;
 }
 
@@ -40,6 +43,8 @@ export interface Project {
   workflowMode: WorkflowMode;
   startDate: string | null;
   endDate: string | null;
+  timezoneId: string;
+  timezoneProvenance?: string;
   createdAt: string;
 }
 
@@ -59,6 +64,7 @@ export interface CreateProjectRequest {
   heuristicMode?: HeuristicMode;
   startDate?: string;
   endDate?: string;
+  timezoneId?: string;
 }
 
 export interface UpdateProjectRequest {
@@ -69,10 +75,42 @@ export interface UpdateProjectRequest {
   workflowMode?: WorkflowMode;
   startDate?: string;
   endDate?: string;
+  timezoneId?: string;
 }
 
 export interface JoinProjectRequest {
   projectCode: string;
+}
+
+export interface ProjectInvitation {
+  id: number;
+  projectId: number;
+  inviteeEmail: string;
+  invitedByUserId: number;
+  status: "PENDING" | "ACCEPTED" | "EXPIRED" | "REVOKED";
+  issuedAt: string;
+  expiresAt: string;
+  consumedAt: string | null;
+  revokedAt: string | null;
+  revocationReason: string | null;
+}
+
+export interface CreateProjectInvitationRequest {
+  email: string;
+}
+
+export interface CreateProjectInvitationResponse {
+  id: number;
+  projectId: number;
+  inviteeEmail: string;
+  issuedAt: string;
+  expiresAt: string;
+  inviteToken: string;
+  inviteUrl: string;
+}
+
+export interface AcceptProjectInvitationRequest {
+  token: string;
 }
 
 export interface PageResult<T> {
@@ -83,4 +121,14 @@ export interface PageResult<T> {
   size: number;
   first: boolean;
   last: boolean;
+}
+
+export interface ProjectDeletionAuditDto {
+  projectId: number;
+  projectName: string;
+  deletedByUserId: number;
+  requestId: string;
+  deletedCounts: Record<string, number>;
+  enqueuedCleanupJobCount: number;
+  deletedAt: string;
 }

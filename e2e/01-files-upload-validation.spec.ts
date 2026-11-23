@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./helpers/isolated-test";
 import { setupWorkspaceMocks, DEFAULT_MOCK_USER } from "./helpers/mock-setup";
 
 test.describe("Suite 1: Project File Storage - Upload & Validation (TC001 - TC025)", () => {
@@ -306,7 +306,7 @@ test.describe("Suite 1: Project File Storage - Upload & Validation (TC001 - TC02
   // TC024: Verify file upload error toast on network failure
   test("TC024: Shows error alert when upload API returns 400 bad request", async ({ page }) => {
     // Override upload route to return 400 error
-    await page.route("**/api/v1/projects/100/files**", async (route) => {
+    await page.route("**/v1/projects/100/files**", async (route) => {
       if (route.request().method() === "POST") {
         await route.fulfill({
           status: 400,

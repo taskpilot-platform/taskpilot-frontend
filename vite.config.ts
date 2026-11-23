@@ -12,6 +12,9 @@ export default defineConfig(({ mode }) => {
     resolve: {
       alias: {
         "@": path.resolve(__dirname, "./src"),
+        ...(mode === "isolated-e2e" && {
+          "livekit-client": path.resolve(__dirname, "./e2e/helpers/livekit-sdk-stub.ts"),
+        }),
       },
     },
     test: {
@@ -20,7 +23,7 @@ export default defineConfig(({ mode }) => {
       setupFiles: "./src/test/setup.ts",
       pool: "threads",
       fileParallelism: false,
-      exclude: ["**/node_modules/**", "**/dist/**", "**/e2e/**"],
+      exclude: ["**/node_modules/**", "**/dist/**", "**/e2e/**", "**/e2e-live/**"],
     },
     server: {
       host: true,

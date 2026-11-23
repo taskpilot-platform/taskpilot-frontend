@@ -96,10 +96,10 @@ export function AssignmentRequestForm({
 
     const invalid = rows.find((row) => {
       const difficulty = Number(row.difficulty);
-      return !row.skills || !Number.isInteger(difficulty) || difficulty < 1 || difficulty > 10;
+      return row.difficulty !== "" && (!Number.isInteger(difficulty) || difficulty < 1 || difficulty > 10);
     });
     if (invalid) {
-      toast.error("Moi task can co skills va do kho tu 1 den 10.");
+      toast.error("Độ khó phải là số nguyên từ 1 đến 10.");
       return;
     }
 
@@ -108,12 +108,12 @@ export function AssignmentRequestForm({
       : "Project ID: infer from each task if needed";
     const modeLine =
       draft.mode === "assign"
-        ? "Mode: recommend suitable assignees and assign each task to the top candidate immediately."
+        ? "Mode: recommend a suitable assignee and prepare each assignment for confirmation."
         : "Mode: recommend suitable assignees only; do not assign yet.";
     const taskLines = rows
       .map(
         (row) =>
-          `- Task ${row.taskId}: requiredSkills="${row.skills}", difficulty=${row.difficulty}`,
+          `- Task ${row.taskId}: requiredSkills=${row.skills ? JSON.stringify(row.skills) : "use saved requirements if available"}, difficulty=${row.difficulty || "use saved difficulty if available"}`,
       )
       .join("\n");
 
@@ -122,7 +122,10 @@ export function AssignmentRequestForm({
       projectLine,
       modeLine,
       "Use real TaskPilot tools and process every task below.",
-      "If mode asks assignment, call recommendAndAssignTask for each task.",
+      draft.mode === "assign"
+        ? "Call recommendAndAssignTask for each task and show its confirmation."
+        : "Call recommendTaskAssignmentCandidates for each task.",
+      "Leave missing requirements unspecified so the tool can use neutral skill fit.",
       "Tasks:",
       taskLines,
     ].join("\n");
@@ -139,7 +142,7 @@ export function AssignmentRequestForm({
         <div className="min-w-0 flex-1">
           <div className="text-sm font-semibold text-foreground">Bổ sung thông tin task</div>
           <div className="text-xs leading-relaxed text-foreground/70">
-            AI đang cần thêm dữ liệu cho bước này. Điền các trường còn thiếu rồi gửi lại vào cuộc hội thoại.
+            Nhập mã công việc. Kỹ năng yêu cầu và độ khó có thể để trống.
           </div>
         </div>
       </div>

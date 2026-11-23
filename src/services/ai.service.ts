@@ -1,4 +1,4 @@
-import { api, http } from "@/lib/http";
+import { api, createRequestId, http } from "@/lib/http";
 import type { ChatStreamStatus } from "@/types/chat-stream";
 import type { PaginatedResponse } from "@/types/api";
 
@@ -56,6 +56,47 @@ export const aiService = {
       )
       .then((r) => r.data),
 
+  confirmAction: (sessionId: number, actionId: string, payloadHash: string): Promise<unknown> =>
+    api.post<unknown>(`/v1/ai/sessions/${sessionId}/actions/${encodeURIComponent(actionId)}/confirm`, {
+      payloadHash, idempotencyKey: `ui-action-${actionId}`,
+    }).then((r) => r.data),
+
+  cancelAction: (sessionId: number, actionId: string): Promise<void> =>
+    api.post<void>(`/v1/ai/sessions/${sessionId}/actions/${encodeURIComponent(actionId)}/cancel`).then(() => undefined),
+
   warmupSession: (sessionId: number): Promise<void> =>
     api.post<void>(`/v1/ai/sessions/${sessionId}/warmup`).then(() => undefined),
+
+  recommendAssignment: (payload: {
+    projectId: number;
+    taskId?: number;
+    requiredSkills?: string[];
+    taskDifficulty?: string;
+    taskTitle?: string;
+  }): Promise<import("@/components/ai/aiChatTypes").RecommendationView> =>
+    api.post<import("@/components/ai/aiChatTypes").RecommendationView>("/v1/ai/auto-assign", payload).then((r) => r.data),
+
+  recordRecommendationDecision: (
+    snapshotId: string,
+    payload: import("@/components/ai/aiChatTypes").RecommendationDecisionRequest,
+    idempotencyKey?: string,
+  ): Promise<import("@/components/ai/aiChatTypes").RecommendationDecisionResponse> => {
+    const key = idempotencyKey ?? createRequestId();
+    return api
+      .post<import("@/components/ai/aiChatTypes").RecommendationDecisionResponse>(
+        `/v1/ai/recommendations/${encodeURIComponent(snapshotId)}/decisions`,
+        payload,
+        { headers: { "Idempotency-Key": key } },
+      )
+      .then((r) => r.data);
+  },
+
+  getRecommendationDecision: (
+    snapshotId: string,
+  ): Promise<import("@/components/ai/aiChatTypes").RecommendationDecisionResponse> =>
+    api
+      .get<import("@/components/ai/aiChatTypes").RecommendationDecisionResponse>(
+        `/v1/ai/recommendations/${encodeURIComponent(snapshotId)}/decision`,
+      )
+      .then((r) => r.data),
 };

@@ -1,4 +1,5 @@
-import { ListChecks, Check, X } from "lucide-react";
+import { AiActionButtons } from "./AiActionButtons";
+import { ListChecks } from "lucide-react";
 import type { PendingActionConfirmation } from "./aiChatTypes";
 
 export const PRIORITY_CONFIG: Record<string, { label: string; cls: string }> = {
@@ -103,25 +104,7 @@ export function CreateTaskConfirmCard({
         </div>
       )}
 
-      {/* Action buttons */}
-      <div className="grid grid-cols-2 border-t border-border/40">
-        <button
-          type="button"
-          onClick={() => onConfirmAction(confirmation)}
-          className="flex items-center justify-center gap-2 py-3 text-sm font-bold text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 border-r border-border/40 transition-all duration-150 active:scale-[0.97]"
-        >
-          <Check className="h-4 w-4" />
-          Phê duyệt
-        </button>
-        <button
-          type="button"
-          onClick={() => onCancelAction(confirmation.actionId)}
-          className="flex items-center justify-center gap-2 py-3 text-sm font-bold text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 transition-all duration-150 active:scale-[0.97]"
-        >
-          <X className="h-4 w-4" />
-          Từ chối
-        </button>
-      </div>
+      <AiActionButtons key={confirmation.actionId} confirmation={confirmation} onConfirm={onConfirmAction} onCancel={onCancelAction} />
     </div>
   );
 }

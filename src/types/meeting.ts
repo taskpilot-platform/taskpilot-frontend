@@ -1,4 +1,4 @@
-export type MeetingStatus = "ACTIVE" | "SCHEDULED" | "ENDED";
+export type MeetingStatus = "ACTIVE" | "SCHEDULED" | "ENDING" | "ENDED";
 export type MeetingRole = "HOST" | "PARTICIPANT";
 export type MeetingRecordingStatus =
   | "IDLE"
@@ -20,6 +20,7 @@ export interface ProjectMeetingDto {
   status: MeetingStatus;
   recordingEnabled: boolean;
   recordingFileId?: number | null;
+  completedRecordingFileId?: number | null;
   egressId?: string | null;
   recordingStatus?: MeetingRecordingStatus | null;
   recordingError?: string | null;
@@ -52,20 +53,26 @@ export interface MeetingRecordingPlaybackResponse {
 export interface PresignRecordingUploadRequest {
   contentType: string;
   fileName?: string;
+  clientRecordingId?: string;
 }
 
 export interface PresignRecordingUploadResponse {
-  uploadUrl: string;
-  uploadToken: string;
+  uploadUrl?: string | null;
+  uploadToken?: string | null;
   contentType: string;
   fileName: string;
   maxFileSizeBytes: number;
-  expiresAt: string;
+  expiresAt?: string | null;
+  alreadyCompleted?: boolean;
+  existingFileId?: number | null;
 }
 
 export interface CompleteRecordingUploadRequest {
   uploadToken: string;
   durationSeconds?: number;
+  origin?: "BROWSER" | "IMPORT";
+  coverage?: string;
+  clientRecordingId?: string;
 }
 
 export interface CreateMeetingRequest {
@@ -84,6 +91,18 @@ export interface MeetingTokenResponse {
   participantName: string;
   isHost: boolean;
   meeting: ProjectMeetingDto;
+}
+
+export interface MeetingRecordingDto {
+  id: string;
+  state: "REQUESTED" | "CAPTURING" | "FINALIZING" | "UPLOADING" | "READY" | "FAILED" | "INTERRUPTED";
+  version: number;
+  fileId?: number | null;
+  durationMs?: number | null;
+  mimeType?: string | null;
+  createdAt: string;
+  origin: "BROWSER" | "IMPORT" | "CLOUD_EGRESS";
+  coverage: string;
 }
 
 export interface MeetingParticipantDto {

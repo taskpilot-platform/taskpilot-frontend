@@ -30,7 +30,6 @@ export function DynamicFormRenderer({
   labelsByProject,
   onProjectSelected,
   onSubmit,
-  associatedConfirmations = [],
 }: {
   formKey: string;
   spec: DynamicFormSpec;
@@ -59,11 +58,7 @@ export function DynamicFormRenderer({
       .join("\n");
 
     const promptParts: string[] = [];
-    if (associatedConfirmations && associatedConfirmations.length > 0) {
-      associatedConfirmations.forEach((c) => {
-        promptParts.push(`CONFIRM_ACTION ${c.actionId} xác nhận đồng ý thực hiện`);
-      });
-    }
+    promptParts.push("Form edits require a new write preview. They do not approve any previous action.");
 
     promptParts.push(
       "Structured form response",

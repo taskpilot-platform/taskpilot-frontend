@@ -1,6 +1,5 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./helpers/isolated-test";
 import { setupWorkspaceMocks, DEFAULT_MOCK_USER } from "./helpers/mock-setup";
-import * as path from "path";
 
 const REPORT_FILES = [
   {
@@ -138,11 +137,6 @@ const REPORT_MESSAGES = [
   },
 ];
 
-const TARGET_DIRS = [
-  "/home/dptn/projects/taskpilot/taskpilot/docs/implementation/collab/assets",
-  "/home/dptn/projects/taskpilot/report/src/assets/collab",
-  "/home/dptn/.gemini/antigravity-cli/brain/688d2ad8-0333-4407-b817-c25a8631f9d6/assets/collab",
-];
 
 const REPORT_MEETINGS = [
   {
@@ -179,11 +173,8 @@ const REPORT_MEETINGS = [
   },
 ];
 
-async function saveScreenshot(page: any, filename: string) {
-  for (const dir of TARGET_DIRS) {
-    const fullPath = path.join(dir, filename);
-    await page.screenshot({ path: fullPath, fullPage: false });
-  }
+async function saveScreenshot(page: import("@playwright/test").Page, filename: string) {
+  await page.screenshot({ path: test.info().outputPath(filename), fullPage: false });
 }
 
 test.describe("Capture UAT Report Screenshots", () => {
@@ -224,7 +215,7 @@ test.describe("Capture UAT Report Screenshots", () => {
     await setupWorkspaceMocks(page, { initialFiles: REPORT_FILES, initialMessages: REPORT_MESSAGES });
     await page.goto("/projects/100/chat");
     await expect(page.getByText("Project Chat Room")).toBeVisible();
-    await expect(page.getByText(/Connected|Reconnecting/i)).toBeVisible();
+    await expect(page.getByText(/^(Connected|Connecting\.\.\.)$/)).toBeVisible();
     await saveScreenshot(page, "05_project_chat_room_desktop.png");
 
     // 6. Chat Tab - File attachment card detail
@@ -233,7 +224,7 @@ test.describe("Capture UAT Report Screenshots", () => {
     await saveScreenshot(page, "06_project_chat_file_attachment.png");
 
     // 7. Chat Tab - Input focus & typing state
-    const chatInput = page.getByPlaceholder("Type a message...");
+    const chatInput = page.getByPlaceholder("Type a message... (Press Enter to send)", { exact: true });
     await chatInput.fill("Đã cập nhật tài liệu báo cáo định kỳ và sẵn sàng demo!");
     await saveScreenshot(page, "07_project_chat_composer_active.png");
 

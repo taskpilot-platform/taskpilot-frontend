@@ -21,6 +21,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { meetingService } from "@/services/meeting.service";
+import { meetingRecordingStore } from "@/services/meetingRecordingStore";
 import { LiveMeetingRoom } from "./LiveMeetingRoom";
 import { MeetingRecordingModal } from "./MeetingRecordingModal";
 import type { CreateMeetingRequest, ProjectMeetingDto } from "@/types/meeting";
@@ -46,6 +47,29 @@ export function ProjectMeetingsTab({
   const [isLoading, setIsLoading] = useState(true);
   const [filter, setFilter] = useState<"ALL" | "ACTIVE" | "ENDED">("ALL");
   const [selectedRecordingMeeting, setSelectedRecordingMeeting] = useState<ProjectMeetingDto | null>(null);
+  const [activeRecoveryMeetingIds, setActiveRecoveryMeetingIds] = useState<Set<number>>(new Set());
+
+  const refreshActiveRecoveryScopes = async (list: ProjectMeetingDto[]) => {
+    if (!currentUserId || typeof meetingRecordingStore.list !== "function") {
+      setActiveRecoveryMeetingIds(new Set());
+      return;
+    }
+    const activeIds = list.filter((m) => m.status === "ACTIVE").map((m) => m.id);
+    if (activeIds.length === 0) {
+      setActiveRecoveryMeetingIds(new Set());
+      return;
+    }
+    const found = new Set<number>();
+    await Promise.all(
+      activeIds.map(async (mid) => {
+        const local = await meetingRecordingStore
+          .list({ userId: currentUserId, projectId, meetingId: mid })
+          .catch(() => []);
+        if (local.length > 0) found.add(mid);
+      })
+    );
+    setActiveRecoveryMeetingIds(found);
+  };
 
   // Active room view state
   const [joinedMeetingId, setJoinedMeetingId] = useState<number | null>(initialJoinMeetingId || null);
@@ -64,6 +88,7 @@ export function ProjectMeetingsTab({
       setMeetings(data);
       const active = data.find((m: ProjectMeetingDto) => m.status === "ACTIVE") || null;
       setActiveMeeting(active);
+      void refreshActiveRecoveryScopes(data);
     } catch (err: any) {
       console.warn("Failed to load meetings", err);
       toast.error(t("meetings.load_error", { defaultValue: "Không thể tải danh sách cuộc họp" }));
@@ -162,7 +187,7 @@ export function ProjectMeetingsTab({
 
   const filteredMeetings = meetings.filter((m) => {
     if (filter === "ACTIVE") return m.status === "ACTIVE";
-    if (filter === "ENDED") return m.status === "ENDED";
+    if (filter === "ENDED") return m.status === "ENDED" || m.status === "ENDING";
     return true;
   });
 
@@ -420,7 +445,7 @@ export function ProjectMeetingsTab({
                           {t("meetings.status_active", { defaultValue: "Đang diễn ra" })}
                         </>
                       ) : (
-                        t("meetings.ended", { defaultValue: "Đã kết thúc" })
+                        m.status === "ENDING" ? t("meetings.meeting_closing", { defaultValue: "Đang chờ máy chủ đóng phòng họp." }) : t("meetings.ended", { defaultValue: "Đã kết thúc" })
                       )}
                     </Badge>
 
@@ -483,14 +508,28 @@ export function ProjectMeetingsTab({
 
                 <div className="p-4 pt-0 mt-auto">
                   {isActive ? (
-                    <Button
-                      className="w-full bg-emerald-600 hover:bg-emerald-500 text-white gap-2 font-medium"
-                      onClick={() => setJoinedMeetingId(m.id)}
-                      data-testid={`join-meeting-btn-${m.id}`}
-                    >
-                      <Video className="w-4 h-4" />
-                      {t("meetings.join_room", { defaultValue: "Tham gia phòng họp" })}
-                    </Button>
+                    <div className="space-y-1.5">
+                      <Button
+                        className="w-full bg-emerald-600 hover:bg-emerald-500 text-white gap-2 font-medium"
+                        onClick={() => setJoinedMeetingId(m.id)}
+                        data-testid={`join-meeting-btn-${m.id}`}
+                      >
+                        <Video className="w-4 h-4" />
+                        {t("meetings.join_room", { defaultValue: "Tham gia phòng họp" })}
+                      </Button>
+                      {(m.isHost || Boolean(m.recordingFileId) || activeRecoveryMeetingIds.has(m.id)) && (
+                        <Button
+                          variant="outline"
+                          className="w-full gap-2 text-xs font-medium border-border hover:bg-accent text-foreground"
+                          onClick={() => setSelectedRecordingMeeting(m)}
+                          aria-label={t("meetings.active_recordings_recovery", { defaultValue: "Bản ghi & Khôi phục" })}
+                          data-testid={`active-meeting-recordings-btn-${m.id}`}
+                        >
+                          <History className="w-3.5 h-3.5 text-emerald-500" />
+                          <span>{t("meetings.active_recordings_recovery", { defaultValue: "Bản ghi & Khôi phục" })}</span>
+                        </Button>
+                      )}
+                    </div>
                   ) : (
                     <div className="space-y-1.5">
                       <Button
@@ -523,6 +562,7 @@ export function ProjectMeetingsTab({
         isOpen={Boolean(selectedRecordingMeeting)}
         onClose={() => setSelectedRecordingMeeting(null)}
         meeting={selectedRecordingMeeting}
+        currentUserId={currentUserId}
         onMeetingUpdated={(updated) => {
           setSelectedRecordingMeeting(updated);
           setMeetings((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));

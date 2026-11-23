@@ -1,4 +1,7 @@
+import { isCustomChatDemoEnabled } from "@/lib/features";
 import type { ProjectChatMessage } from "@/types/collab";
+
+export const CUSTOM_CHAT_SCHEMA_VERSION = 2;
 
 export interface CustomGroupMember {
   id: number;
@@ -15,81 +18,65 @@ export interface CustomGroupChat {
   avatarUrl?: string;
   createdAt: string;
   createdBy: number;
+  ownerUserId: number;
+  schemaVersion: number;
+  isLocalDemo?: boolean;
   members: CustomGroupMember[];
   lastMessage?: string;
   lastMessageAt?: string;
   unreadCount?: number;
 }
 
-const STORAGE_KEY_GROUPS = "taskpilot_custom_group_chats";
-const STORAGE_KEY_MESSAGES_PREFIX = "taskpilot_custom_chat_msg_";
+export interface CustomGroupDemoMessage extends ProjectChatMessage {
+  ownerUserId?: number;
+  schemaVersion?: number;
+}
+
+const SCOPED_GROUPS_KEY_PREFIX = "taskpilot_custom_group_chats_v2_u_";
+const SCOPED_MESSAGES_KEY_PREFIX = "taskpilot_custom_chat_msg_v2_u_";
+
+function normalizeUserId(userId?: number | null): number | null {
+  if (typeof userId !== "number" || !Number.isSafeInteger(userId) || userId <= 0) {
+    return null;
+  }
+  return userId;
+}
+
+function getScopedGroupsKey(userId: number): string {
+  return `${SCOPED_GROUPS_KEY_PREFIX}${userId}`;
+}
+
+function getScopedMessagesKey(userId: number, groupId: string): string {
+  return `${SCOPED_MESSAGES_KEY_PREFIX}${userId}_g_${groupId}`;
+}
 
 export const customChatStorage = {
   getGroups: (currentUserId?: number | null): CustomGroupChat[] => {
+    if (!isCustomChatDemoEnabled()) {
+      return [];
+    }
+    const uid = normalizeUserId(currentUserId);
+    if (!uid) {
+      return [];
+    }
+
     try {
-      const raw = localStorage.getItem(STORAGE_KEY_GROUPS);
+      const raw = localStorage.getItem(getScopedGroupsKey(uid));
       if (!raw) {
-        // Provide 2 realistic seed groups for MS Teams collaboration
-        const seedGroups: CustomGroupChat[] = [
-          {
-            id: "grp-dev-leads",
-            name: "Team Kỹ Thuật Core",
-            description: "Thảo luận kiến trúc hệ thống, đồng bộ tiến độ Microservices & LiveKit",
-            createdAt: new Date(Date.now() - 86400000 * 2).toISOString(),
-            createdBy: currentUserId || 1,
-            members: [
-              {
-                id: currentUserId || 1,
-                name: "Bạn (Tôi)",
-                email: "me@taskpilot.local",
-                role: "OWNER",
-              },
-              {
-                id: 991,
-                name: "Alex Rivera",
-                email: "alex.rivera@taskpilot.local",
-                role: "ADMIN",
-              },
-              {
-                id: 992,
-                name: "Minh Tran",
-                email: "minh.tran@taskpilot.local",
-                role: "MEMBER",
-              },
-            ],
-            lastMessage: "Kiến trúc LiveKit SFU đã hoàn tất tích hợp sang STOMP.",
-            lastMessageAt: new Date(Date.now() - 3600000).toISOString(),
-            unreadCount: 0,
-          },
-          {
-            id: "grp-product-board",
-            name: "Ban Điều Hành & Product",
-            description: "Trao đổi chiến lược sản phẩm, Roadmap Sprint và phản hồi người dùng",
-            createdAt: new Date(Date.now() - 86400000 * 5).toISOString(),
-            createdBy: 991,
-            members: [
-              {
-                id: currentUserId || 1,
-                name: "Bạn (Tôi)",
-                email: "me@taskpilot.local",
-                role: "MEMBER",
-              },
-              {
-                id: 993,
-                name: "Sarah Chen",
-                email: "sarah.chen@taskpilot.local",
-                role: "OWNER",
-              },
-            ],
-            lastMessage: "Kế hoạch ra mắt phiên bản v2.0 được phê duyệt.",
-            lastMessageAt: new Date(Date.now() - 7200000).toISOString(),
-            unreadCount: 1,
-          },
-        ];
-        localStorage.setItem(STORAGE_KEY_GROUPS, JSON.stringify(seedGroups));
-        return seedGroups;
+        return [];
       }
-      return JSON.parse(raw) as CustomGroupChat[];
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) {
+        return [];
+      }
+      return parsed.filter(
+        (item): item is CustomGroupChat =>
+          Boolean(item) &&
+          typeof item.id === "string" &&
+          typeof item.name === "string" &&
+          item.schemaVersion === CUSTOM_CHAT_SCHEMA_VERSION &&
+          item.ownerUserId === uid,
+      );
     } catch {
       return [];
     }
@@ -99,66 +86,111 @@ export const customChatStorage = {
     name: string,
     description: string,
     members: CustomGroupMember[],
-    createdBy: number
+    createdBy?: number | null,
   ): CustomGroupChat => {
-    const existing = customChatStorage.getGroups(createdBy);
+    if (!isCustomChatDemoEnabled()) {
+      throw new Error("Custom group chat demo is disabled.");
+    }
+    const uid = normalizeUserId(createdBy);
+    if (!uid) {
+      throw new Error("Authenticated user ID is required for local demo groups.");
+    }
+
+    const existing = customChatStorage.getGroups(uid);
+    const nowIso = new Date().toISOString();
     const newGroup: CustomGroupChat = {
-      id: `grp-${Date.now()}`,
+      id: `grp-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       name: name.trim(),
       description: description.trim(),
-      createdAt: new Date().toISOString(),
-      createdBy,
+      createdAt: nowIso,
+      createdBy: uid,
+      ownerUserId: uid,
+      schemaVersion: CUSTOM_CHAT_SCHEMA_VERSION,
+      isLocalDemo: true,
       members,
-      lastMessage: "Nhóm trò chuyện đã được tạo",
-      lastMessageAt: new Date().toISOString(),
+      lastMessage: "Local demo group created",
+      lastMessageAt: nowIso,
       unreadCount: 0,
     };
     const updated = [newGroup, ...existing];
-    localStorage.setItem(STORAGE_KEY_GROUPS, JSON.stringify(updated));
+    localStorage.setItem(getScopedGroupsKey(uid), JSON.stringify(updated));
 
-    // Save initial system message
-    const welcomeMsg: ProjectChatMessage = {
+    const welcomeMsg: CustomGroupDemoMessage = {
       id: Date.now(),
       projectId: -1,
-      senderId: createdBy,
-      senderName: "Hệ thống",
-      content: `🎉 Nhóm "${newGroup.name}" đã được tạo. Hãy bắt đầu cuộc trò chuyện!`,
+      senderId: uid,
+      senderName: "Local Demo",
+      content: `Local demo group "${newGroup.name}" created. Messages stay in this browser only and are not sent over STOMP.`,
       messageType: "SYSTEM",
-      createdAt: new Date().toISOString(),
+      createdAt: nowIso,
+      ownerUserId: uid,
+      schemaVersion: CUSTOM_CHAT_SCHEMA_VERSION,
     };
-    customChatStorage.saveMessages(newGroup.id, [welcomeMsg]);
+    customChatStorage.saveMessages(newGroup.id, [welcomeMsg], uid);
 
     return newGroup;
   },
 
-  getMessages: (groupId: string): ProjectChatMessage[] => {
+  getMessages: (
+    groupId: string,
+    currentUserId?: number | null,
+  ): CustomGroupDemoMessage[] => {
+    if (!isCustomChatDemoEnabled()) {
+      return [];
+    }
+    const uid = normalizeUserId(currentUserId);
+    if (!uid || !groupId) {
+      return [];
+    }
+
+    const ownsGroup = customChatStorage.getGroups(uid).some((g) => g.id === groupId);
+    if (!ownsGroup) {
+      return [];
+    }
+
     try {
-      const raw = localStorage.getItem(`${STORAGE_KEY_MESSAGES_PREFIX}${groupId}`);
+      const raw = localStorage.getItem(getScopedMessagesKey(uid, groupId));
       if (!raw) {
-        // Return default greeting message
-        return [
-          {
-            id: 1,
-            projectId: -1,
-            senderId: 991,
-            senderName: "Alex Rivera",
-            content: "Chào mọi người! Nhóm đã được kết nối theo mô hình MS Teams.",
-            messageType: "TEXT",
-            createdAt: new Date(Date.now() - 3600000).toISOString(),
-          },
-        ];
+        return [];
       }
-      return JSON.parse(raw) as ProjectChatMessage[];
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) {
+        return [];
+      }
+      return parsed.filter(
+        (msg): msg is CustomGroupDemoMessage =>
+          Boolean(msg) &&
+          typeof msg.content === "string" &&
+          msg.schemaVersion === CUSTOM_CHAT_SCHEMA_VERSION &&
+          msg.ownerUserId === uid,
+      );
     } catch {
       return [];
     }
   },
 
-  saveMessages: (groupId: string, messages: ProjectChatMessage[]) => {
+  saveMessages: (
+    groupId: string,
+    messages: ProjectChatMessage[],
+    currentUserId?: number | null,
+  ) => {
+    if (!isCustomChatDemoEnabled()) {
+      return;
+    }
+    const uid = normalizeUserId(currentUserId);
+    if (!uid || !groupId) {
+      return;
+    }
+
     try {
+      const scopedMessages: CustomGroupDemoMessage[] = messages.map((msg) => ({
+        ...msg,
+        ownerUserId: uid,
+        schemaVersion: CUSTOM_CHAT_SCHEMA_VERSION,
+      }));
       localStorage.setItem(
-        `${STORAGE_KEY_MESSAGES_PREFIX}${groupId}`,
-        JSON.stringify(messages)
+        getScopedMessagesKey(uid, groupId),
+        JSON.stringify(scopedMessages),
       );
     } catch {
       // ignore storage quota issues
@@ -168,33 +200,44 @@ export const customChatStorage = {
   sendMessage: (
     groupId: string,
     content: string,
-    senderId: number,
+    senderId: number | null | undefined,
     senderName: string,
-    senderAvatarUrl?: string
-  ): ProjectChatMessage => {
-    const current = customChatStorage.getMessages(groupId);
-    const newMsg: ProjectChatMessage = {
+    senderAvatarUrl?: string,
+  ): CustomGroupDemoMessage => {
+    if (!isCustomChatDemoEnabled()) {
+      throw new Error("Custom group chat demo is disabled.");
+    }
+    const uid = normalizeUserId(senderId);
+    if (!uid) {
+      throw new Error("Authenticated user ID is required for local demo messages.");
+    }
+
+    const groups = customChatStorage.getGroups(uid);
+    const groupIdx = groups.findIndex((g) => g.id === groupId);
+    if (groupIdx === -1) {
+      throw new Error("Custom group not found for current user.");
+    }
+
+    const current = customChatStorage.getMessages(groupId, uid);
+    const newMsg: CustomGroupDemoMessage = {
       id: Date.now(),
       projectId: -1,
-      senderId,
+      senderId: uid,
       senderName,
       senderAvatarUrl,
       content,
       messageType: "TEXT",
       createdAt: new Date().toISOString(),
+      ownerUserId: uid,
+      schemaVersion: CUSTOM_CHAT_SCHEMA_VERSION,
     };
     const updated = [...current, newMsg];
-    customChatStorage.saveMessages(groupId, updated);
+    customChatStorage.saveMessages(groupId, updated, uid);
 
-    // Update group last message
     try {
-      const groups = customChatStorage.getGroups(senderId);
-      const groupIdx = groups.findIndex((g) => g.id === groupId);
-      if (groupIdx !== -1) {
-        groups[groupIdx].lastMessage = content;
-        groups[groupIdx].lastMessageAt = newMsg.createdAt;
-        localStorage.setItem(STORAGE_KEY_GROUPS, JSON.stringify(groups));
-      }
+      groups[groupIdx].lastMessage = content;
+      groups[groupIdx].lastMessageAt = newMsg.createdAt;
+      localStorage.setItem(getScopedGroupsKey(uid), JSON.stringify(groups));
     } catch {
       // ignore
     }

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import {
   MessageSquare,
@@ -19,6 +19,8 @@ import { useAuthStore } from "@/stores/auth.store";
 import { profileService } from "@/services/profile.service";
 import { getApiErrorMessage } from "@/lib/http";
 import { saveBlob } from "@/lib/download";
+import { authStorage } from "@/lib/storage";
+import type { RealtimeAccessLossReason } from "@/lib/realtime-access";
 import type { ProjectChatMessage } from "@/types/collab";
 
 interface ProjectChatTabProps {
@@ -44,7 +46,12 @@ export const ProjectChatTab: React.FC<ProjectChatTabProps> = ({
   const [isConnected, setIsConnected] = useState(false);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  const [accessRevoked, setAccessRevoked] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const activeProjectIdRef = useRef(projectId);
+  activeProjectIdRef.current = projectId;
+  const projectEpochRef = useRef(0);
+  const requestSeqRef = useRef(0);
 
   useEffect(() => {
     if (propUserId) {
@@ -68,71 +75,175 @@ export const ProjectChatTab: React.FC<ProjectChatTabProps> = ({
     messagesEndRef.current?.scrollIntoView?.({ behavior });
   };
 
-  // Fetch initial history
-  useEffect(() => {
-    let mounted = true;
-    const fetchHistory = async () => {
+  const fetchHistory = useCallback(
+    async (isCancelled?: () => boolean) => {
+      const targetProjectId = projectId;
+      const targetEpoch = projectEpochRef.current;
+      const seq = ++requestSeqRef.current;
+      const isStale = () =>
+        Boolean(isCancelled?.()) ||
+        activeProjectIdRef.current !== targetProjectId ||
+        projectEpochRef.current !== targetEpoch ||
+        requestSeqRef.current !== seq;
+
       setIsLoadingHistory(true);
       setError(null);
       try {
-        const res = await projectChatService.getMessages(projectId, 0, 50);
-        if (mounted && res.data?.content) {
+        const res = await projectChatService.getMessages(targetProjectId, 0, 50);
+        if (isStale()) {
+          return;
+        }
+        if (res.data?.content) {
           // Reverse because history is returned in desc order
           setMessages([...res.data.content].reverse());
-          setTimeout(() => scrollToBottom("auto"), 100);
+          setAccessRevoked(false);
+          setTimeout(() => {
+            if (!isStale()) {
+              scrollToBottom("auto");
+            }
+          }, 100);
         }
       } catch (err: unknown) {
-        if (mounted) {
-          const msg = err instanceof Error ? err.message : "Failed to load chat history";
+        if (isStale()) {
+          return;
+        }
+        const status = (err as { response?: { status?: number } })?.response?.status;
+        if (status === 403 || status === 404) {
+          setMessages([]);
+          setInputValue("");
+          setAccessRevoked(true);
+          setError(t("chat.access_revoked", { defaultValue: "Bạn không còn quyền truy cập phòng trò chuyện dự án này." }));
+        } else {
+          const msg = getApiErrorMessage(err) || "Failed to load chat history";
           setError(msg);
         }
       } finally {
-        if (mounted) {
+        if (!isStale()) {
           setIsLoadingHistory(false);
         }
       }
-    };
+    },
+    [projectId, t],
+  );
 
-    void fetchHistory();
+  // Fetch initial history and reset transient project state on project switch
+  useEffect(() => {
+    let cancelled = false;
+    projectEpochRef.current += 1;
+    requestSeqRef.current += 1;
+    setMessages([]);
+    setInputValue("");
+    setError(null);
+    setIsConnected(false);
+    setIsSending(false);
+    setAccessRevoked(false);
+    void fetchHistory(() => cancelled);
     return () => {
-      mounted = false;
+      cancelled = true;
+      projectEpochRef.current += 1;
     };
-  }, [projectId]);
+  }, [fetchHistory]);
 
   // Connect WebSocket STOMP
   useEffect(() => {
+    if (!token || accessRevoked) {
+      setIsConnected(false);
+      return;
+    }
+
+    let disposed = false;
+    const targetProjectId = projectId;
+    const targetEpoch = projectEpochRef.current;
+
     const stompClient = projectChatService.createStompClient(
-      projectId,
+      targetProjectId,
       token,
       (incomingMessage) => {
+        if (
+          disposed ||
+          activeProjectIdRef.current !== targetProjectId ||
+          projectEpochRef.current !== targetEpoch
+        ) {
+          return;
+        }
         setMessages((prev) => {
           // Avoid duplicate messages if already present
           if (prev.some((m) => m.id === incomingMessage.id)) return prev;
           return [...prev, incomingMessage];
         });
-        setTimeout(() => scrollToBottom("smooth"), 50);
+        setTimeout(() => {
+          if (!disposed && activeProjectIdRef.current === targetProjectId) {
+            scrollToBottom("smooth");
+          }
+        }, 50);
       },
-      (connected) => {
+      (connected, reason?: RealtimeAccessLossReason) => {
+        if (
+          disposed ||
+          activeProjectIdRef.current !== targetProjectId ||
+          projectEpochRef.current !== targetEpoch
+        ) {
+          return;
+        }
         setIsConnected(connected);
-      }
+        if (!connected && reason === "PROJECT_ACCESS_REVOKED") {
+          // Invalidate already-authorized HTTP writes/history still in flight, not just the socket.
+          projectEpochRef.current += 1;
+          requestSeqRef.current += 1;
+          setIsLoadingHistory(false);
+          setMessages([]);
+          setInputValue("");
+          setAccessRevoked(true);
+          setError(t("chat.access_revoked", { defaultValue: "Bạn không còn quyền truy cập phòng trò chuyện dự án này." }));
+        } else if (!connected && (reason === "SESSION_REVOKED" || reason === "AUTH_EXPIRED")) {
+          if (reason === "SESSION_REVOKED") projectEpochRef.current += 1;
+          requestSeqRef.current += 1;
+          setIsLoadingHistory(false);
+          setMessages([]);
+          setInputValue("");
+        } else if (connected) {
+          setError(null);
+        }
+      },
+      {
+        getToken: () => authStorage.getAccessToken() ?? useAuthStore.getState().accessToken,
+        onReconnect: () => {
+          if (
+            !disposed &&
+            activeProjectIdRef.current === targetProjectId &&
+            projectEpochRef.current === targetEpoch
+          ) {
+            void fetchHistory(() => disposed);
+          }
+        },
+      },
     );
 
     return () => {
+      disposed = true;
       void stompClient.deactivate();
     };
-  }, [projectId, token]);
+  }, [projectId, token, accessRevoked, fetchHistory, t]);
 
   const handleSendMessage = async (e?: React.FormEvent) => {
     e?.preventDefault();
     const content = inputValue.trim();
-    if (!content || isSending || isArchived) return;
+    if (!content || isSending || isArchived || accessRevoked) return;
 
+    const targetProjectId = projectId;
+    const targetEpoch = projectEpochRef.current;
     setIsSending(true);
     try {
-      const res = await projectChatService.sendMessage(projectId, {
+      const res = await projectChatService.sendMessage(targetProjectId, {
         content,
         messageType: "TEXT",
       });
+      if (
+        activeProjectIdRef.current !== targetProjectId ||
+        projectEpochRef.current !== targetEpoch
+      ) {
+        return;
+      }
       if (res.data) {
         // If not already received via WebSocket, append
         setMessages((prev) => {
@@ -143,10 +254,21 @@ export const ProjectChatTab: React.FC<ProjectChatTabProps> = ({
         setTimeout(() => scrollToBottom("smooth"), 50);
       }
     } catch (err: unknown) {
+      if (
+        activeProjectIdRef.current !== targetProjectId ||
+        projectEpochRef.current !== targetEpoch
+      ) {
+        return;
+      }
       const msg = getApiErrorMessage(err) || "Failed to send message";
       setError(msg);
     } finally {
-      setIsSending(false);
+      if (
+        activeProjectIdRef.current === targetProjectId &&
+        projectEpochRef.current === targetEpoch
+      ) {
+        setIsSending(false);
+      }
     }
   };
 
@@ -265,10 +387,19 @@ export const ProjectChatTab: React.FC<ProjectChatTabProps> = ({
                           <button
                             type="button"
                             onClick={() => {
+                              const targetProjectId = projectId;
+                              const targetEpoch = projectEpochRef.current;
                               void projectFilesService
-                                .downloadFileBlob(projectId, msg.fileId!)
+                                .downloadFileBlob(targetProjectId, msg.fileId!)
                                 .then((blob) => saveBlob(blob, msg.fileName!))
-                                .catch((err: unknown) => setError(getApiErrorMessage(err) || "Download failed"));
+                                .catch((err: unknown) => {
+                                  if (
+                                    activeProjectIdRef.current === targetProjectId &&
+                                    projectEpochRef.current === targetEpoch
+                                  ) {
+                                    setError(getApiErrorMessage(err) || "Download failed");
+                                  }
+                                });
                             }}
                             className="underline truncate hover:opacity-80 cursor-pointer bg-transparent border-0 p-0 text-inherit"
                           >
@@ -292,12 +423,12 @@ export const ProjectChatTab: React.FC<ProjectChatTabProps> = ({
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
               placeholder={isArchived ? t("chat.input_archived", { defaultValue: "Dự án đã lưu trữ, chỉ đọc" }) : t("chat.input_placeholder", { defaultValue: "Nhập tin nhắn... (Nhấn Enter để gửi)" })}
-              disabled={isArchived || isSending}
+              disabled={isArchived || isSending || accessRevoked}
               className="flex-1 bg-muted/20 border-muted"
             />
             <Button
               type="submit"
-              disabled={!inputValue.trim() || isSending || isArchived}
+              disabled={!inputValue.trim() || isSending || isArchived || accessRevoked}
               className="gap-1.5 shrink-0"
             >
               {isSending ? (

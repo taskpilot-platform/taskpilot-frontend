@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { PasswordField } from "@/components/auth/PasswordField";
 import { getApiErrorMessage } from "@/lib/http";
 import { useAuthStore } from "@/stores/auth.store";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -14,6 +14,8 @@ import { useTranslation } from "react-i18next";
 export default function LoginPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const location = useLocation();
+  const redirectTarget = (location.state as { from?: string } | null)?.from || "/dashboard";
   const login = useAuthStore((state) => state.login);
   const isLoading = useAuthStore((state) => state.isLoading);
   const [email, setEmail] = useState("");
@@ -30,9 +32,30 @@ export default function LoginPage() {
     e.preventDefault();
     if (!isFormValid) return;
     try {
-      await login({ email, password });
+      const outcome = await login({ email, password });
+      if (outcome.outcome === "RESTORE_REQUIRED" && outcome.restoreTicket) {
+        navigate("/restore-account", {
+          replace: true,
+          state: {
+            ticket: outcome.restoreTicket,
+            email: outcome.email ?? email,
+            provider: outcome.provider ?? "local",
+          },
+        });
+        return;
+      }
+      if (outcome.outcome === "EMAIL_VERIFICATION_REQUIRED") {
+        toast.info(
+          outcome.message ||
+            t("auth.p2.verify_required_toast", {
+              defaultValue: "Please verify your email address before signing in.",
+            }),
+        );
+        navigate(`/verify-email?email=${encodeURIComponent(email)}`, { replace: true });
+        return;
+      }
       toast.success(t("auth.login_success", { defaultValue: "Logged in successfully" }));
-      navigate("/dashboard");
+      navigate(redirectTarget, { replace: true });
     } catch (error) {
       toast.error(getApiErrorMessage(error));
     }

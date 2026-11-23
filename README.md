@@ -1,5 +1,9 @@
 # React + TypeScript + Vite
 
+## TaskPilot remediation
+
+The frontend and backend use a shared remediation plan and handoff status. Open `docs/development/remediation/PLAN.md` and `STATUS.md` in the matching TaskPilot backend checkout. Use the backend and frontend `fix/full-remediation` branches together when reviewing P1–P8.
+
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
 Currently, two official plugins are available:

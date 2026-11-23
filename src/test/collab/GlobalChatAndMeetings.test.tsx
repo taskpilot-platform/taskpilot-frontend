@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import GlobalChatPage from "@/pages/GlobalChatPage";
@@ -8,6 +8,8 @@ import { projectService } from "@/services/project.service";
 import { profileService } from "@/services/profile.service";
 import { meetingService } from "@/services/meeting.service";
 import { projectChatService } from "@/services/project-chat.service";
+
+vi.mock("livekit-client", () => import("../../../e2e/helpers/livekit-sdk-stub"));
 
 const MOCK_PROJECTS = [
   {
@@ -102,6 +104,10 @@ describe("Global Chat & Meetings Components", () => {
     ]);
   });
 
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   describe("GlobalChatPage", () => {
     it("renders project channels list and switches between channels", async () => {
       render(
@@ -149,8 +155,8 @@ describe("Global Chat & Meetings Components", () => {
       fireEvent.click(screen.getByTestId("tab-chat-btn"));
     });
 
-    it("opens Create Group Chat dialog on button click", async () => {
-      render(
+    it("hides custom group creation by default and opens demo modal only when dev demo flag is enabled", async () => {
+      const { unmount } = render(
         <MemoryRouter initialEntries={["/chat"]}>
           <GlobalChatPage />
         </MemoryRouter>
@@ -160,12 +166,27 @@ describe("Global Chat & Meetings Components", () => {
         expect(screen.getByTestId("global-chat-page")).toBeInTheDocument();
       });
 
-      const openCreateBtn = screen.getByTestId("btn-open-create-group");
-      fireEvent.click(openCreateBtn);
+      expect(screen.queryByTestId("btn-open-create-group")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("create-group-chat-modal")).not.toBeInTheDocument();
+      unmount();
+
+      vi.stubEnv("VITE_ENABLE_CUSTOM_CHAT_DEMO", "true");
+      render(
+        <MemoryRouter initialEntries={["/chat"]}>
+          <GlobalChatPage />
+        </MemoryRouter>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId("btn-open-create-group")).toBeInTheDocument();
+      });
+
+      fireEvent.click(screen.getByTestId("btn-open-create-group"));
 
       await waitFor(() => {
         expect(screen.getByTestId("create-group-chat-modal")).toBeInTheDocument();
         expect(screen.getByTestId("input-group-name")).toBeInTheDocument();
+        expect(screen.getByTestId("create-group-demo-notice")).toBeInTheDocument();
       });
     });
   });
@@ -189,7 +210,20 @@ describe("Global Chat & Meetings Components", () => {
   });
 
   describe("LiveMeetingRoom UI & Theme Check", () => {
-    it("renders room without pitch-black background and contains media controls", () => {
+    it("renders media controls after a connected room is acknowledged", async () => {
+      const meeting = (await meetingService.getMeetings(100))[0];
+      vi.spyOn(meetingService, "joinMeeting").mockResolvedValue({
+        token: "isolated-sdk-fixture-501",
+        livekitUrl: "wss://livekit.invalid",
+        roomName: meeting.roomName,
+        identity: "user_1",
+        participantName: "Alex Rivera",
+        isHost: true,
+        meeting,
+      });
+      vi.spyOn(meetingService, "confirmAttendance").mockResolvedValue({
+        status: 200, message: "Attendance verified", data: null,
+      });
       // Mock navigator.mediaDevices
       Object.defineProperty(navigator, "mediaDevices", {
         writable: true,
@@ -210,7 +244,8 @@ describe("Global Chat & Meetings Components", () => {
         />
       );
 
-      const room = screen.getByTestId("live-meeting-room");
+      const room = await screen.findByTestId("live-meeting-room");
+      expect(meetingService.confirmAttendance).toHaveBeenCalledWith(100, 501, "PA_fixture");
       expect(room).toBeInTheDocument();
 
       // Must not use pitch-black bg-slate-950

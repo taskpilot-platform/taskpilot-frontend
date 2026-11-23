@@ -2,18 +2,20 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "react-toastify";
 import { useTranslation } from "react-i18next";
-import { getApiErrorMessage } from "@/lib/http";
+import { createRequestId, getApiErrorMessage } from "@/lib/http";
+import { hasObservedTaskVersion, isTaskVersionConflictError } from "@/lib/projectTaskDate";
 import { taskService } from "@/services/task.service";
 import { projectService } from "@/services/project.service";
 import { profileService } from "@/services/profile.service";
-import type { TaskDetailDto, TaskPriority, TaskStatus } from "@/types/task";
+import type { TaskDetailDto } from "@/types/task";
 import type { ProjectMember } from "@/types/project";
 
 import { TaskHeader } from "@/components/tasks/TaskHeader";
 import { TaskTitleSection } from "@/components/tasks/TaskTitleSection";
 import { TaskDescriptionSection } from "@/components/tasks/TaskDescriptionSection";
 import { SubtaskTreeSection } from "@/components/tasks/SubtaskTreeSection";
-import { TaskMetadataSidebar } from "@/components/tasks/TaskMetadataSidebar";
+import { TaskMetadataSidebar, type TaskSidebarPatchPayload } from "@/components/tasks/TaskMetadataSidebar";
+import { TaskWorkflowPanel } from "@/components/tasks/TaskWorkflowPanel";
 import { ActivityTimeline } from "@/components/tasks/ActivityTimeline";
 import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -28,6 +30,7 @@ export default function TaskDetailPage() {
   const [taskDetail, setTaskDetail] = useState<TaskDetailDto | null>(null);
   const [projectMembers, setProjectMembers] = useState<ProjectMember[]>([]);
   const [myUserId, setMyUserId] = useState<number | null>(null);
+  const [projectTimezoneId, setProjectTimezoneId] = useState<string | undefined>(undefined);
   const [isReadOnly, setIsReadOnly] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -67,6 +70,7 @@ export default function TaskDetailPage() {
         setTaskDetail(taskRes.data);
         setProjectMembers(membersRes.data);
         setMyUserId(profileRes.data?.id);
+        setProjectTimezoneId(projectRes.data.timezoneId);
         setIsReadOnly(projectRes.data.status === "ARCHIVED");
       } catch (error) {
         toast.error(getApiErrorMessage(error));
@@ -110,45 +114,78 @@ export default function TaskDetailPage() {
     };
   }, [currentProjectId, currentTaskId, reloadTaskDetail]);
 
-  const onUpdateTask = async (payload: { title?: string; description?: string; assigneeId?: number; status?: TaskStatus; priority?: TaskPriority; startDate?: string; dueDate?: string; labelIds?: number[]; requiredSkillIds?: number[] }) => {
+  const onUpdateTask = async (payload: TaskSidebarPatchPayload) => {
     if (!taskDetail) return;
+    if (!hasObservedTaskVersion(taskDetail.task.version)) {
+      toast.error(
+        t("tasks.missing_version_error", {
+          defaultValue: "Task version is missing or stale. Refreshing latest task details.",
+        }),
+      );
+      await reloadTaskDetail();
+      return;
+    }
     try {
-      await taskService.updateTask(taskDetail.task.id, payload);
+      await taskService.patchTask(taskDetail.task.id, {
+        ...payload,
+        expectedTaskVersion: taskDetail.task.version,
+        requestId: createRequestId(),
+      });
       toast.success("Task updated successfully");
       await reloadTaskDetail();
     } catch (error) {
       toast.error(getApiErrorMessage(error));
+      if (isTaskVersionConflictError(error)) {
+        await reloadTaskDetail();
+      }
       throw error;
     }
   };
 
   const onDeleteTask = async () => {
     if (!taskDetail) return;
+    if (!hasObservedTaskVersion(taskDetail.task.version)) {
+      toast.error(
+        t("tasks.missing_version_error", {
+          defaultValue: "Task version is missing or stale. Refreshing latest task details.",
+        }),
+      );
+      await reloadTaskDetail();
+      return;
+    }
     const isConfirm = await confirm({
       title: t("tasks.delete_title", { defaultValue: "Xóa công việc" }),
       message: t("tasks.delete_confirm", { defaultValue: "Are you sure you want to delete this task? This will also delete all subtasks." }),
       variant: "destructive",
     });
     if (!isConfirm) return;
-    
+
     try {
-      await taskService.deleteTask(taskDetail.task.id);
+      await taskService.deleteTask(taskDetail.task.id, taskDetail.task.version, createRequestId());
       toast.success("Task deleted successfully");
       navigate(`/projects/${currentProjectId}/board`);
     } catch (error) {
       toast.error(getApiErrorMessage(error));
+      if (isTaskVersionConflictError(error)) {
+        await reloadTaskDetail();
+      }
     }
   };
 
   const onCreateSubtask = async (title: string) => {
     if (!taskDetail) return;
     try {
-      await taskService.createTask({
-        projectId: currentProjectId,
-        parentId: taskDetail.task.id,
-        title,
-        position: 0,
-      });
+      const requestId = createRequestId();
+      await taskService.createTask(
+        {
+          projectId: currentProjectId,
+          parentId: taskDetail.task.id,
+          title,
+          position: 0,
+          requestId,
+        },
+        requestId,
+      );
       toast.success("Subtask created");
       const res = await taskService.getTaskById(taskDetail.task.id);
       setTaskDetail(res.data);
@@ -197,7 +234,7 @@ export default function TaskDetailPage() {
   }
 
   const { task, reporter, subtasks } = taskDetail;
-  
+
   const myMemberInfo = projectMembers.find(m => m.userId === myUserId);
   const isManager = myMemberInfo?.role === "MANAGER";
 
@@ -209,31 +246,38 @@ export default function TaskDetailPage() {
           Back to Project
         </Button>
 
-        <TaskHeader 
-          taskId={task.id} 
-          status={task.status} 
-          reporterName={reporter?.fullName || `User ${task.reporterId}`} 
-          onDelete={onDeleteTask} 
+        <TaskHeader
+          taskId={task.id}
+          status={task.status}
+          reporterName={reporter?.fullName || `User ${task.reporterId}`}
+          onDelete={onDeleteTask}
           hideFullPageBtn={true}
         />
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-10 mt-6">
           {/* Main Content Area (70%) */}
           <div className="lg:col-span-2 space-y-6">
-            <TaskTitleSection 
-              title={task.title} 
-              onSave={async (val) => onUpdateTask({ title: val })} 
+            <TaskTitleSection
+              title={task.title}
+              onSave={async (val) => onUpdateTask({ title: val })}
             />
 
-            <TaskDescriptionSection 
-              description={task.description || ""} 
-              onSave={async (val) => onUpdateTask({ description: val })} 
+            <TaskDescriptionSection
+              description={task.description || ""}
+              onSave={async (val) => onUpdateTask({ description: val })}
             />
 
-            <SubtaskTreeSection 
-              subtasks={subtasks} 
-              onOpenTask={onOpenTaskDetail} 
-              onCreateSubtask={onCreateSubtask} 
+            <TaskWorkflowPanel
+              task={task}
+              projectTimezoneId={projectTimezoneId || task.projectTimezoneId}
+              isReadOnly={isReadOnly}
+              onWorkflowChanged={reloadTaskDetail}
+            />
+
+            <SubtaskTreeSection
+              subtasks={subtasks}
+              onOpenTask={onOpenTaskDetail}
+              onCreateSubtask={onCreateSubtask}
             />
 
             <ActivityTimeline
@@ -251,8 +295,9 @@ export default function TaskDetailPage() {
 
           {/* Sidebar Area (30%) */}
           <div className="space-y-6">
-            <TaskMetadataSidebar 
+            <TaskMetadataSidebar
               projectId={task.projectId}
+              projectTimezoneId={projectTimezoneId || task.projectTimezoneId}
               assigneeId={task.assigneeId}
               status={task.status}
               priority={task.priority}

@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./helpers/isolated-test";
 import { setupWorkspaceMocks, DEFAULT_MOCK_USER } from "./helpers/mock-setup";
 
 const SAMPLE_PROJECTS = [
@@ -66,7 +66,7 @@ const SAMPLE_MEETINGS = [
 test.describe("Global Navigation: Chat & Video Meetings Tabs", () => {
   test.beforeEach(async ({ page }) => {
     await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
-    await setupWorkspaceMocks(page, {
+    await setupWorkspaceMocks(page, { language: "vi",
       initialMessages: SAMPLE_CHAT_MESSAGES,
       initialMeetings: SAMPLE_MEETINGS,
     });

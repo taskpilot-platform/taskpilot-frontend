@@ -2,6 +2,7 @@ export type ToolAccess = "read" | "write";
 
 export type PendingActionConfirmation = {
   actionId: string;
+  payloadHash?: string;
   toolName?: string;
   summary?: string;
   arguments?: Record<string, unknown>;
@@ -83,8 +84,33 @@ export type ChatComposerProps = {
   stopTooltip: string;
 };
 
-export type MetricDataStatus = "MEASURED" | "INSUFFICIENT_DATA" | "UNVERIFIED" | "DEFAULT";
+export type MetricDataStatus = "MEASURED" | "INSUFFICIENT_DATA" | "UNVERIFIED" | "DEFAULT" | "MISSING_REQUIREMENTS";
 export type RecommendationDifferentiationStatus = "DIFFERENTIATED" | "INSUFFICIENT_TO_DIFFERENTIATE" | "UNKNOWN";
+export type RecommendationDecisionType = "ACCEPT" | "OVERRIDE" | "REJECT";
+export type RecordedRecommendationDecisionType = "ACCEPTED" | "OVERRIDDEN" | "REJECTED" | "CANCELED" | "EXPIRED";
+
+export interface RecommendationDecisionRequest {
+  decisionType: RecommendationDecisionType;
+  selectedCandidateId?: number;
+  taskId?: number;
+  expectedTaskVersion?: number;
+  requestId?: string;
+  reasonCode?: string;
+  note?: string;
+}
+
+export interface RecommendationDecisionResponse {
+  decisionId: string;
+  snapshotId: string;
+  projectId: number;
+  taskId: number | null;
+  decisionType: RecordedRecommendationDecisionType;
+  selectedCandidateId: number | null;
+  recommendedCandidateId: number | null;
+  taskVersion: number | null;
+  assignmentVersion: number | null;
+  createdAt: string;
+}
 
 export type RecommendedCandidateView = {
   rank: number;
@@ -92,16 +118,24 @@ export type RecommendedCandidateView = {
   displayName: string;
   presentationFitValue?: number | null;
   fitStatus: MetricDataStatus;
+  fitSource?: "DECLARED_PROFILE";
   storedWorkloadValue?: number | null;
   workloadStatus: MetricDataStatus;
   workloadUnit?: string | null;
   workloadScope?: string | null;
   workloadMeasuredAt?: string | null;
   performanceStatus: MetricDataStatus;
+  performanceSampleCount?: number | null;
+  performanceWindowLimit?: number | null;
+  observedQualityMean?: number | null;
+  evidenceWeight?: number | null;
   memberStatus?: string | null;
 };
 
 export type RecommendationView = {
+  snapshotId?: string | null;
+  taskId?: number | null;
+  taskVersion?: number | null;
   projectId?: number;
   requiredSkills?: string[];
   candidates: RecommendedCandidateView[];
@@ -110,4 +144,5 @@ export type RecommendationView = {
   scoringModelVersion?: string;
   heuristicMode?: string;
   aiExplanation?: string | null;
+  recordedDecision?: RecommendationDecisionResponse | null;
 };

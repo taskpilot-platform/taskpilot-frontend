@@ -315,7 +315,7 @@ export function CombinedConfirmAndPlanCard({
         </Button>
         <Button type="button" size="sm" onClick={() => void onSubmitPlan()}>
           <Check className="h-4 w-4" />
-          Tiến hành theo plan
+          Gửi thông tin để xem trước
         </Button>
       </div>
     </div>

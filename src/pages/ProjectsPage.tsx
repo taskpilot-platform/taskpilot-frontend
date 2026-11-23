@@ -190,14 +190,21 @@ export default function ProjectsPage() {
   const handleJoinProject = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
-    if (!joinCode.trim()) {
-      toast.error(t("projects.join_error_empty"));
+    const rawInput = joinCode.trim();
+    if (!rawInput) {
+      toast.error(
+        t("projects.p2.invite_token_required", {
+          defaultValue: "Please paste a valid project invitation token or link.",
+        }),
+      );
       return;
     }
+    const tokenMatch = rawInput.match(/[?&]token=([^&]+)/);
+    const token = tokenMatch ? decodeURIComponent(tokenMatch[1]) : rawInput;
 
     setIsMutating(true);
     try {
-      await projectService.joinProject({ projectCode: joinCode.trim() });
+      await projectService.acceptInvitation({ token });
       toast.success(t("projects.join_success"));
       setJoinCode("");
       setMode("list");
@@ -329,7 +336,7 @@ export default function ProjectsPage() {
                         >
                           <TableCell>
                             <div className="font-semibold text-foreground group-hover:text-primary transition-colors">{project.name}</div>
-                            <div className="text-xs font-mono text-muted-foreground mt-0.5">PRJ-{project.id}</div>
+                            <div className="text-xs font-mono text-muted-foreground mt-0.5">#{project.id}</div>
                           </TableCell>
                           <TableCell>
                             <Badge variant={project.myRole === "MANAGER" ? "default" : "secondary"} className="text-xs font-mono font-medium border-border/70">
@@ -482,24 +489,34 @@ export default function ProjectsPage() {
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2 text-base">
                       <Search className="h-4 w-4" />
-                      {t("projects.join_title")}
+                      {t("projects.p2.accept_invite_title", { defaultValue: "Accept Private Invitation" })}
                     </CardTitle>
+                    <CardDescription>
+                      {t("projects.p2.accept_invite_desc", {
+                        defaultValue:
+                          "Public PRJ-ID join codes have been retired. Paste the private invitation token or URL sent by a project manager.",
+                      })}
+                    </CardDescription>
                   </CardHeader>
                   <CardContent>
                     <form className="space-y-3" onSubmit={handleJoinProject}>
                       <div className="space-y-1.5">
-                        <Label htmlFor="joinCode">{t("projects.join_code")}</Label>
+                        <Label htmlFor="joinCode">
+                          {t("projects.p2.invite_token_label", { defaultValue: "Invitation Token or Link" })}
+                        </Label>
                         <Input
                           id="joinCode"
                           value={joinCode}
                           onChange={(event) => setJoinCode(event.target.value)}
-                          placeholder={t("projects.join_code_placeholder")}
+                          placeholder={t("projects.p2.invite_token_placeholder", {
+                            defaultValue: "Paste invitation link or token",
+                          })}
                           required
                         />
                       </div>
                       <Button type="submit" className="w-full gap-2" disabled={isMutating}>
                         <Search className="h-4 w-4" />
-                        {t("projects.join_btn")}
+                        {t("projects.p2.invite_accept_btn", { defaultValue: "Accept Invitation" })}
                       </Button>
                     </form>
                   </CardContent>
@@ -632,9 +649,10 @@ export default function ProjectsPage() {
                     {[
                       { l: t("projects.member_count"), v: projectSummary?.totalMembers ?? 0 },
                       { l: t("projects.task_count"), v: projectSummary?.totalTasks ?? 0 },
-                      { l: t("projects.task_done"), v: projectSummary?.completedTasks ?? 0 },
+                      { l: t("projects.task_done"), v: projectSummary?.doneTasks ?? 0 },
+                      { l: t("projects.task_review", { defaultValue: "Review" }), v: projectSummary?.reviewTasks ?? 0 },
                       { l: t("projects.task_wip"), v: projectSummary?.inProgressTasks ?? 0 },
-                      { l: t("projects.task_todo"), v: projectSummary?.pendingTasks ?? 0 },
+                      { l: t("projects.task_todo"), v: projectSummary?.todoTasks ?? 0 },
                       { l: t("projects.progress"), v: `${Number(projectSummary?.completionRate ?? 0).toFixed(1)}%` },
                     ].map((s) => (
                       <div key={s.l} className="flex items-center justify-between">

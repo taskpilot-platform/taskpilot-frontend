@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useState, useRef } from "react";
 import type { FormEvent } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
+import axios from "axios";
 import {
   Eye,
   EyeOff,
   KeyRound,
   Link2,
   Loader2,
+  Mail,
   Save,
   ShieldAlert,
   UserCircle2,
@@ -22,28 +24,50 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { getApiErrorMessage } from "@/lib/http";
+import { validatePassword } from "@/lib/password-policy";
+import { authService, getOAuthAuthorizeUrl } from "@/services/auth.service";
 import { profileService } from "@/services/profile.service";
 import { useAuthStore } from "@/stores/auth.store";
 import type { UserProfile } from "@/types/user";
 import { UserAvatar } from "@/components/ui/user-avatar";
 
 type ProfileTab = "profile" | "security";
+const ALL_OAUTH_PROVIDERS = ["google", "github"] as const;
+const ALLOWED_AVATAR_MIMES = new Set(["image/png", "image/jpeg", "image/webp"]);
+
+interface ProfileLocationState {
+  reauthTicket?: string;
+  reauthProvider?: string;
+}
 
 export default function ProfilePage() {
   const { t } = useTranslation();
   const confirm = useConfirm();
-  const [activeTab, setActiveTab] = useState<ProfileTab>("profile");
+  const location = useLocation();
+  const locationState = (location.state as ProfileLocationState | null) ?? null;
+  const [activeTab, setActiveTab] = useState<ProfileTab>(
+    locationState?.reauthTicket ? "security" : "profile",
+  );
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [isSavingAvailability, setIsSavingAvailability] = useState(false);
   const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [isRequestingSetup, setIsRequestingSetup] = useState(false);
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+  const [isLinkingProvider, setIsLinkingProvider] = useState<string | null>(null);
+  const [linkPassword, setLinkPassword] = useState("");
+  const [deactivateConfirm, setDeactivateConfirm] = useState("");
+  const [deactivatePassword, setDeactivatePassword] = useState("");
+  const [blockingProjectIds, setBlockingProjectIds] = useState<number[]>([]);
+  const [reauthTicket, setReauthTicket] = useState<string | null>(locationState?.reauthTicket ?? null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [fullName, setFullName] = useState("");
   const [avatarUrl, setAvatarUrl] = useState("");
+  const [availability, setAvailability] = useState<"AVAILABLE" | "BUSY" | "OOO">("AVAILABLE");
   const [oldPassword, setOldPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -61,15 +85,24 @@ export default function ProfilePage() {
 
   const hasPassword = profile?.hasPassword ?? true;
 
+  const newPasswordErr = newPassword ? validatePassword(newPassword) : null;
   const isOldPasswordInvalid = hasPassword && touchedOldPassword && !oldPassword;
-  const isNewPasswordInvalid = touchedNewPassword && (!newPassword || newPassword.length < 8);
+  const isNewPasswordInvalid = touchedNewPassword && (!newPassword || newPasswordErr !== null);
   const isConfirmInvalid = touchedConfirmPassword && confirmPassword.length > 0 && newPassword !== confirmPassword;
-  const isPasswordFormValid = (hasPassword ? Boolean(oldPassword) : true) && newPassword.length >= 8 && newPassword === confirmPassword;
+  const isPasswordFormValid =
+    hasPassword && Boolean(oldPassword) && Boolean(newPassword) && newPasswordErr === null && newPassword === confirmPassword;
 
   const navigate = useNavigate();
   const logout = useAuthStore((state) => state.logout);
 
-  const statusLabel = useMemo(() => profile?.status || "UNKNOWN", [profile?.status]);
+  const statusLabel = useMemo(
+    () => profile?.availability || profile?.status || "UNKNOWN",
+    [profile?.availability, profile?.status],
+  );
+  const accountStateLabel = useMemo(
+    () => profile?.accountState || "ACTIVE",
+    [profile?.accountState],
+  );
 
   const loadProfile = async () => {
     setIsLoading(true);
@@ -78,6 +111,10 @@ export default function ProfilePage() {
       setProfile(response.data);
       setFullName(response.data.fullName || "");
       setAvatarUrl(response.data.avatarUrl || "");
+      const avail = response.data.availability || response.data.status;
+      if (avail === "AVAILABLE" || avail === "BUSY" || avail === "OOO") {
+        setAvailability(avail);
+      }
     } catch (error) {
       toast.error(getApiErrorMessage(error));
     } finally {
@@ -114,11 +151,17 @@ export default function ProfilePage() {
     const file = event.target.files?.[0];
     if (!file) return;
     if (file.size > 1_000_000) {
-      toast.error("File size exceeds 1MB limit");
+      toast.error(
+        t("profile.p2.avatar_size_error", { defaultValue: "File size exceeds 1MB limit" }),
+      );
       return;
     }
-    if (!file.type.startsWith("image/")) {
-      toast.error("Only images are allowed");
+    if (!ALLOWED_AVATAR_MIMES.has(file.type.toLowerCase())) {
+      toast.error(
+        t("profile.p2.avatar_type_error", {
+          defaultValue: "Only PNG, JPEG, or WebP images are allowed",
+        }),
+      );
       return;
     }
 
@@ -127,7 +170,9 @@ export default function ProfilePage() {
       const response = await profileService.uploadAvatar(file);
       setProfile(response.data);
       setAvatarUrl(response.data.avatarUrl || "");
-      toast.success("Avatar uploaded successfully");
+      toast.success(
+        t("profile.p2.avatar_uploaded", { defaultValue: "Avatar uploaded successfully" }),
+      );
       window.dispatchEvent(new Event('profileUpdated'));
     } catch (error) {
       toast.error(getApiErrorMessage(error));
@@ -139,6 +184,79 @@ export default function ProfilePage() {
     }
   };
 
+  const handleAvailabilityChange = async (nextAvailability: "AVAILABLE" | "BUSY" | "OOO") => {
+    setIsSavingAvailability(true);
+    try {
+      const response = await profileService.updateAvailability({ availability: nextAvailability });
+      setProfile(response.data);
+      setAvailability(nextAvailability);
+      toast.success(
+        t("profile.p2.availability_updated", { defaultValue: "Work availability updated." }),
+      );
+    } catch (error) {
+      toast.error(getApiErrorMessage(error));
+    } finally {
+      setIsSavingAvailability(false);
+    }
+  };
+
+  const handleRequestPasswordSetup = async () => {
+    setIsRequestingSetup(true);
+    try {
+      await authService.requestPasswordSetup();
+      toast.success(
+        t("profile.p2.password_setup_sent", {
+          defaultValue: "Verification email sent! Follow the link in your inbox to set a password.",
+        }),
+      );
+    } catch (error) {
+      toast.error(getApiErrorMessage(error));
+    } finally {
+      setIsRequestingSetup(false);
+    }
+  };
+
+  const handleBeginReauth = async (provider: string) => {
+    setIsLinkingProvider(provider);
+    try {
+      const res = await profileService.beginProviderReauth(provider);
+      window.location.href = getOAuthAuthorizeUrl(provider, {
+        purpose: "reauth",
+        linkToken: res.data.linkToken,
+      });
+    } catch (error) {
+      toast.error(getApiErrorMessage(error));
+      setIsLinkingProvider(null);
+    }
+  };
+
+  const handleBeginLinkProvider = async (provider: string) => {
+    if (hasPassword && !linkPassword && !reauthTicket) {
+      toast.error(
+        t("profile.p2.link_proof_required", {
+          defaultValue: "Enter your current password or complete social re-authentication to link a provider.",
+        }),
+      );
+      return;
+    }
+    setIsLinkingProvider(provider);
+    try {
+      const res = await profileService.beginProviderLink({
+        provider,
+        currentPassword: hasPassword ? linkPassword : undefined,
+        reauthTicket: reauthTicket ?? undefined,
+      });
+      setReauthTicket(null);
+      window.location.href = getOAuthAuthorizeUrl(provider, {
+        purpose: "link",
+        linkToken: res.data.linkToken,
+      });
+    } catch (error) {
+      toast.error(getApiErrorMessage(error));
+      setIsLinkingProvider(null);
+    }
+  };
+
   const handleChangePassword = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
@@ -147,7 +265,7 @@ export default function ProfilePage() {
     setIsChangingPassword(true);
     try {
       await profileService.changePassword({
-        oldPassword: hasPassword ? oldPassword : undefined,
+        oldPassword,
         newPassword,
       });
 
@@ -157,7 +275,7 @@ export default function ProfilePage() {
       setTouchedOldPassword(false);
       setTouchedNewPassword(false);
       setTouchedConfirmPassword(false);
-      toast.success(hasPassword ? t("profile.change_pw_btn") : t("profile.set_pw_btn"));
+      toast.success(t("profile.change_pw_btn"));
       void loadProfile();
     } catch (error) {
       toast.error(getApiErrorMessage(error));
@@ -167,25 +285,54 @@ export default function ProfilePage() {
   };
 
   const handleDeleteAccount = async () => {
+    if (deactivateConfirm.trim().toUpperCase() !== "DEACTIVATE") {
+      toast.error(
+        t("profile.p2.deactivate_phrase_required", {
+          defaultValue: 'Type "DEACTIVATE" to confirm account deactivation.',
+        }),
+      );
+      return;
+    }
+    if (hasPassword && !deactivatePassword && !reauthTicket) {
+      toast.error(
+        t("profile.p2.deactivate_proof_required", {
+          defaultValue: "Enter your current password or verify with a linked social provider.",
+        }),
+      );
+      return;
+    }
     const shouldDelete = await confirm({
-      title: t("profile.delete_title", { defaultValue: "Xóa tài khoản" }),
-      message: t("profile.delete_confirm", { defaultValue: "Are you sure you want to permanently delete your account? This action cannot be undone." }),
+      title: t("profile.p2.self_deactivate_title", { defaultValue: "Self-Deactivate Account" }),
+      message: t("profile.p2.self_deactivate_confirm", {
+        defaultValue:
+          "Your sessions will be revoked. You can reactivate later via confirmation, unless you are the sole active manager of an active project.",
+      }),
       variant: "destructive",
     });
     if (!shouldDelete) {
       return;
     }
 
+    setBlockingProjectIds([]);
     setIsDeletingAccount(true);
     try {
-      await profileService.deleteMe();
+      await profileService.selfDeactivate({
+        confirmation: "DEACTIVATE",
+        currentPassword: hasPassword ? deactivatePassword : undefined,
+        reauthTicket: reauthTicket ?? undefined,
+      });
       toast.success(t("admin.deactivate_success"));
       await logout();
       navigate("/login", { replace: true });
     } catch (error) {
+      if (axios.isAxiosError(error)) {
+        const data = error.response?.data as { data?: { blockingProjectIds?: number[] } } | undefined;
+        const blockers = data?.data?.blockingProjectIds;
+        if (Array.isArray(blockers) && blockers.length > 0) {
+          setBlockingProjectIds(blockers);
+        }
+      }
       toast.error(getApiErrorMessage(error));
-      await logout();
-      navigate("/login", { replace: true });
     } finally {
       setIsDeletingAccount(false);
     }
@@ -271,6 +418,31 @@ export default function ProfilePage() {
                   <p className="text-muted-foreground">{t("profile.status")}</p>
                   <p className="font-medium">{statusLabel}</p>
                 </div>
+                <div>
+                  <p className="text-muted-foreground">
+                    {t("profile.p2.account_state", { defaultValue: "Account Lifecycle" })}
+                  </p>
+                  <p className="font-medium">{accountStateLabel}</p>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="availability-select">
+                    {t("profile.p2.availability_label", { defaultValue: "Work Availability" })}
+                  </Label>
+                  <select
+                    id="availability-select"
+                    value={availability}
+                    disabled={isSavingAvailability}
+                    onChange={(e) => {
+                      const next = e.target.value as "AVAILABLE" | "BUSY" | "OOO";
+                      void handleAvailabilityChange(next);
+                    }}
+                    className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  >
+                    <option value="AVAILABLE">AVAILABLE</option>
+                    <option value="BUSY">BUSY</option>
+                    <option value="OOO">OOO</option>
+                  </select>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -300,6 +472,17 @@ export default function ProfilePage() {
 
                 <div className="space-y-2">
                   <Label htmlFor="avatarUrl">{t("profile.avatar_url")}</Label>
+                  {profile?.avatarRejected && (
+                    <div
+                      role="alert"
+                      className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-800 dark:text-amber-300"
+                    >
+                      {t("profile.p2.avatar_rejected_notice", {
+                        defaultValue:
+                          "Your previous avatar URL is blocked by the security policy and has been cleared. Upload a PNG, JPEG, or WebP image (up to 1 MB) or save a permitted provider URL.",
+                      })}
+                    </div>
+                  )}
                   <div className="flex gap-2">
                     <Input
                       id="avatarUrl"
@@ -312,7 +495,7 @@ export default function ProfilePage() {
                       type="file" 
                       ref={fileInputRef} 
                       className="hidden" 
-                      accept="image/*" 
+                      accept="image/png,image/jpeg,image/webp" 
                       onChange={handleFileChange} 
                     />
                     <Button 
@@ -340,37 +523,68 @@ export default function ProfilePage() {
           <Card className="lg:col-span-2">
             <CardHeader>
               <CardTitle>{hasPassword ? t("profile.change_pw_title") : t("profile.set_pw_title")}</CardTitle>
-              <CardDescription>{hasPassword ? t("profile.change_pw_desc") : t("profile.set_pw_desc")}</CardDescription>
+              <CardDescription>
+                {hasPassword
+                  ? t("profile.change_pw_desc")
+                  : t("profile.p2.set_pw_email_desc", {
+                      defaultValue:
+                        "Your account currently signs in via social login. Request a verified setup email to create your initial local password.",
+                    })}
+              </CardDescription>
             </CardHeader>
             <CardContent>
-              <form className="space-y-4" onSubmit={handleChangePassword}>
-                {hasPassword && (
-                  <div className="space-y-2">
-                    <Label htmlFor="oldPassword">{t("profile.old_pw")}</Label>
-                    <div className="relative">
-                      <Input
-                        id="oldPassword"
-                        type={showOldPassword ? "text" : "password"}
-                        value={oldPassword}
-                        onChange={(event) => setOldPassword(event.target.value)}
-                        onBlur={() => setTouchedOldPassword(true)}
-                        className={`pr-10 ${isOldPasswordInvalid ? 'border-destructive focus-visible:ring-destructive' : ''}`}
-                        required
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowOldPassword((prev) => !prev)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                        aria-label={showOldPassword ? "Ẩn mật khẩu hiện tại" : "Hiện mật khẩu hiện tại"}
-                      >
-                        {showOldPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                      </button>
-                    </div>
-                    {isOldPasswordInvalid && (
-                      <p className="text-[0.8rem] font-medium text-destructive">{t("profile.old_pw_invalid")}</p>
+              {!hasPassword ? (
+                <div className="space-y-4">
+                  <p className="text-sm text-muted-foreground">
+                    {t("profile.p2.set_pw_email_note", {
+                      defaultValue:
+                        "A single-use 15-minute setup link will be sent to your verified email address ({{email}}).",
+                      email: profile?.email ?? "",
+                    })}
+                  </p>
+                  <Button
+                    type="button"
+                    className="gap-2"
+                    disabled={isRequestingSetup}
+                    onClick={handleRequestPasswordSetup}
+                  >
+                    {isRequestingSetup ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Mail className="h-4 w-4" />
                     )}
+                    {t("profile.p2.send_pw_setup_btn", {
+                      defaultValue: "Send Password Setup Email",
+                    })}
+                  </Button>
+                </div>
+              ) : (
+              <form className="space-y-4" onSubmit={handleChangePassword}>
+                <div className="space-y-2">
+                  <Label htmlFor="oldPassword">{t("profile.old_pw")}</Label>
+                  <div className="relative">
+                    <Input
+                      id="oldPassword"
+                      type={showOldPassword ? "text" : "password"}
+                      value={oldPassword}
+                      onChange={(event) => setOldPassword(event.target.value)}
+                      onBlur={() => setTouchedOldPassword(true)}
+                      className={`pr-10 ${isOldPasswordInvalid ? 'border-destructive focus-visible:ring-destructive' : ''}`}
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowOldPassword((prev) => !prev)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                      aria-label={showOldPassword ? "Ẩn mật khẩu hiện tại" : "Hiện mật khẩu hiện tại"}
+                    >
+                      {showOldPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
                   </div>
-                )}
+                  {isOldPasswordInvalid && (
+                    <p className="text-[0.8rem] font-medium text-destructive">{t("profile.old_pw_invalid")}</p>
+                  )}
+                </div>
 
                 <div className="space-y-2">
                   <Label htmlFor="newPassword">{t("profile.new_pw")}</Label>
@@ -394,7 +608,13 @@ export default function ProfilePage() {
                     </button>
                   </div>
                   {isNewPasswordInvalid && (
-                    <p className="text-[0.8rem] font-medium text-destructive">{t("profile.new_pw_invalid")}</p>
+                    <p className="text-[0.8rem] font-medium text-destructive">
+                      {newPasswordErr === "too_long_bytes"
+                        ? t("auth.p2.password_max_bytes", {
+                            defaultValue: "Password exceeds maximum 72 UTF-8 bytes.",
+                          })
+                        : t("profile.new_pw_invalid")}
+                    </p>
                   )}
                 </div>
 
@@ -426,9 +646,10 @@ export default function ProfilePage() {
 
                 <Button type="submit" className="gap-2" disabled={isChangingPassword || !isPasswordFormValid}>
                   {isChangingPassword ? <Loader2 className="h-4 w-4 animate-spin" /> : <KeyRound className="h-4 w-4" />}
-                  {isChangingPassword ? t("auth.reset_btn_loading") : (hasPassword ? t("profile.change_pw_btn") : t("profile.set_pw_btn"))}
+                  {isChangingPassword ? t("auth.reset_btn_loading") : t("profile.change_pw_btn")}
                 </Button>
               </form>
+              )}
             </CardContent>
           </Card>
 
@@ -484,15 +705,73 @@ export default function ProfilePage() {
                               {isGoogle ? t("profile.linked_provider_google") : isGithub ? t("profile.linked_provider_github") : provider}
                             </span>
                           </div>
-                          <span className="inline-flex items-center rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-600 dark:text-emerald-400">
-                            Connected
-                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className="inline-flex items-center rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                              Connected
+                            </span>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              disabled={isLinkingProvider !== null}
+                              onClick={() => void handleBeginReauth(provider)}
+                            >
+                              {t("profile.p2.reauth_btn", { defaultValue: "Re-auth" })}
+                            </Button>
+                          </div>
                         </div>
                       );
                     })}
                   </div>
                 ) : (
                   <p className="text-xs text-muted-foreground">{t("profile.linked_accounts_empty")}</p>
+                )}
+
+                {reauthTicket && (
+                  <div className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-700 dark:text-emerald-300">
+                    {t("profile.p2.reauth_ticket_ready", {
+                      defaultValue: "Fresh social verification ready (valid 5 min) for linking or deactivation.",
+                    })}
+                  </div>
+                )}
+
+                {ALL_OAUTH_PROVIDERS.some(
+                  (p) => !(profile?.linkedProviders ?? []).map((x) => x.toLowerCase()).includes(p),
+                ) && (
+                  <div className="space-y-2 border-t pt-3">
+                    {hasPassword && !reauthTicket && (
+                      <Input
+                        type="password"
+                        placeholder={t("profile.p2.link_password_placeholder", {
+                          defaultValue: "Current password to authorize linking",
+                        })}
+                        value={linkPassword}
+                        onChange={(e) => setLinkPassword(e.target.value)}
+                      />
+                    )}
+                    <div className="flex flex-wrap gap-2">
+                      {ALL_OAUTH_PROVIDERS.filter(
+                        (p) => !(profile?.linkedProviders ?? []).map((x) => x.toLowerCase()).includes(p),
+                      ).map((provider) => (
+                        <Button
+                          key={provider}
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={isLinkingProvider !== null}
+                          onClick={() => void handleBeginLinkProvider(provider)}
+                        >
+                          {isLinkingProvider === provider && (
+                            <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                          )}
+                          {t("profile.p2.connect_provider", {
+                            defaultValue: "Connect {{provider}}",
+                            provider: provider.charAt(0).toUpperCase() + provider.slice(1),
+                          })}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
                 )}
               </CardContent>
             </Card>
@@ -501,13 +780,42 @@ export default function ProfilePage() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-destructive">
                   <ShieldAlert className="h-5 w-5" />
-                  {t("profile.danger_zone")}
+                  {t("profile.p2.self_deactivate_title", { defaultValue: "Self-Deactivate Account" })}
                 </CardTitle>
                 <CardDescription>
-                  {t("profile.danger_desc")}
+                  {t("profile.p2.self_deactivate_desc", {
+                    defaultValue:
+                      "Revokes all active sessions and marks your account self-deactivated while reserving your identity.",
+                  })}
                 </CardDescription>
               </CardHeader>
-              <CardContent>
+              <CardContent className="space-y-3">
+                {blockingProjectIds.length > 0 && (
+                  <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-xs text-destructive">
+                    {t("profile.p2.sole_manager_blocked", {
+                      defaultValue:
+                        "Cannot deactivate while sole active manager of projects: {{ids}}",
+                      ids: blockingProjectIds.map((id) => `#${id}`).join(", "),
+                    })}
+                  </div>
+                )}
+                <Input
+                  placeholder={t("profile.p2.deactivate_phrase_placeholder", {
+                    defaultValue: 'Type "DEACTIVATE"',
+                  })}
+                  value={deactivateConfirm}
+                  onChange={(e) => setDeactivateConfirm(e.target.value)}
+                />
+                {hasPassword && !reauthTicket && (
+                  <Input
+                    type="password"
+                    placeholder={t("profile.p2.deactivate_password_placeholder", {
+                      defaultValue: "Current password",
+                    })}
+                    value={deactivatePassword}
+                    onChange={(e) => setDeactivatePassword(e.target.value)}
+                  />
+                )}
                 <Button
                   type="button"
                   variant="destructive"
@@ -515,7 +823,11 @@ export default function ProfilePage() {
                   onClick={handleDeleteAccount}
                   disabled={isDeletingAccount}
                 >
-                  {isDeletingAccount ? t("profile.deleting_account_btn") : t("profile.delete_account_btn")}
+                  {isDeletingAccount
+                    ? t("profile.deleting_account_btn")
+                    : t("profile.p2.self_deactivate_btn", {
+                        defaultValue: "Self-Deactivate Account",
+                      })}
                 </Button>
               </CardContent>
             </Card>

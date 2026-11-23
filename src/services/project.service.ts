@@ -1,10 +1,15 @@
-import { api } from "@/lib/http";
+import { api, createRequestId } from "@/lib/http";
 import type {
+  AcceptProjectInvitationRequest,
+  CreateProjectInvitationRequest,
+  CreateProjectInvitationResponse,
   CreateProjectRequest,
   JoinProjectRequest,
   MyProject,
   PageResult,
   Project,
+  ProjectDeletionAuditDto,
+  ProjectInvitation,
   ProjectMember,
   ProjectSummary,
   UpdateProjectRequest,
@@ -25,6 +30,14 @@ export const projectService = {
     api.put<Project>(`/v1/projects/${projectId}`, payload),
   joinProject: (payload: JoinProjectRequest) =>
     api.post<ProjectMember>("/v1/projects/join", payload),
+  listInvitations: (projectId: number) =>
+    api.get<ProjectInvitation[]>(`/v1/projects/${projectId}/invitations`),
+  createInvitation: (projectId: number, payload: CreateProjectInvitationRequest) =>
+    api.post<CreateProjectInvitationResponse>(`/v1/projects/${projectId}/invitations`, payload),
+  revokeInvitation: (projectId: number, invitationId: number) =>
+    api.del<null>(`/v1/projects/${projectId}/invitations/${invitationId}`),
+  acceptInvitation: (payload: AcceptProjectInvitationRequest) =>
+    api.post<ProjectMember>("/v1/projects/invitations/accept", payload),
   leaveProject: (projectId: number) =>
     api.del<null>(`/v1/projects/${projectId}/leave`),
   getProjectSummary: (projectId: number) =>
@@ -39,6 +52,12 @@ export const projectService = {
     api.post<null>(`/v1/projects/${projectId}/archive`),
   restoreProject: (projectId: number) =>
     api.post<null>(`/v1/projects/${projectId}/restore`),
-  deleteProject: (projectId: number) =>
-    api.del<null>(`/v1/projects/${projectId}`),
+  deleteProject: (projectId: number, confirmationText: string, requestId?: string) => {
+    const resolvedRequestId = requestId ?? createRequestId();
+    return api.del<ProjectDeletionAuditDto>(
+      `/v1/projects/${projectId}`,
+      { confirmationText, requestId: resolvedRequestId },
+      { headers: { "Idempotency-Key": resolvedRequestId } },
+    );
+  },
 };

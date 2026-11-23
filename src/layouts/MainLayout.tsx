@@ -5,37 +5,57 @@ import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import logo from "@/assets/logo.svg";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { getApiErrorMessage } from "@/lib/http";
+import {
+  API_BASE_URL,
+  clearSessionState,
+  getApiErrorMessage,
+  refreshSessionSingleFlight,
+} from "@/lib/http";
+import {
+  classifySseHttpStatus,
+  parseRealtimeAccessLostEvent,
+  TerminalRealtimeError,
+} from "@/lib/realtime-access";
 import { useAuthStore } from "@/stores/auth.store";
 import { UserAvatar } from "@/components/ui/user-avatar";
-import type { UserProfile } from "@/types/user";
 import type { NotificationItem } from "@/types/notification";
-import { LayoutDashboard, ShieldCheck, UserRound, LogOut, FolderKanban, Users, Code, Settings, Menu, ChevronLeft, Bot, Bell, MessageSquare, MessagesSquare, Video, CalendarDays } from "lucide-react";
+import { LayoutDashboard, ShieldCheck, UserRound, LogOut, FolderKanban, Users, Code, Settings, Menu, ChevronLeft, Bot, Bell, MessageSquare, MessagesSquare, Video, CalendarDays, BarChart3 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { toast } from "react-toastify";
-import { profileService } from "@/services/profile.service";
 import { notificationService } from "@/services/notification.service";
 import { authStorage, projectStorage, themeStorage } from "@/lib/storage";
-import { oneSignalLogin } from "@/lib/onesignal";
+import { registerRealtimeCleanup } from "@/lib/realtime";
 import { NavContextSwitcher, type NavigationContext } from "@/components/navigation/NavContextSwitcher";
 import { useTheme } from "next-themes";
 
 const NOTIFICATION_BLINK_MS = 3000;
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL?.trim() || "";
 type NotificationUnreadListener = (count: number) => void;
 
 let notificationStreamController: AbortController | null = null;
 let notificationStreamToken: string | null = null;
 let notificationStreamConsumers = 0;
+let notificationStreamGeneration = 0;
+let notificationReconnectTimer: number | null = null;
 const notificationUnreadListeners = new Set<NotificationUnreadListener>();
 
+const clearNotificationReconnectTimer = () => {
+  if (notificationReconnectTimer !== null) {
+    window.clearTimeout(notificationReconnectTimer);
+    notificationReconnectTimer = null;
+  }
+};
+
 const stopNotificationStream = () => {
+  notificationStreamGeneration += 1;
+  clearNotificationReconnectTimer();
   if (notificationStreamController && !notificationStreamController.signal.aborted) {
     notificationStreamController.abort();
   }
   notificationStreamController = null;
   notificationStreamToken = null;
 };
+
+registerRealtimeCleanup(stopNotificationStream);
 
 const parseNotificationUnreadCount = (raw: string): number | null => {
   try {
@@ -53,7 +73,7 @@ const notifyUnreadListeners = (count: number) => {
   });
 };
 
-const startNotificationStream = (token: string) => {
+const startNotificationStream = (token: string, attempt: number = 0) => {
   const hasActiveStream =
     notificationStreamController !== null &&
     !notificationStreamController.signal.aborted &&
@@ -65,9 +85,17 @@ const startNotificationStream = (token: string) => {
 
   stopNotificationStream();
 
+  const capturedGeneration = notificationStreamGeneration;
   const controller = new AbortController();
   notificationStreamController = controller;
   notificationStreamToken = token;
+
+  const isStale = () =>
+    capturedGeneration !== notificationStreamGeneration ||
+    controller.signal.aborted ||
+    notificationStreamConsumers === 0;
+
+  let terminalLoss: TerminalRealtimeError | null = null;
 
   void fetchEventSource(`${API_BASE_URL}/v1/notifications/my/stream`, {
     signal: controller.signal,
@@ -77,14 +105,30 @@ const startNotificationStream = (token: string) => {
       Accept: "text/event-stream",
     },
     async onopen(response) {
+      if (isStale()) {
+        controller.abort();
+        return;
+      }
       if (response.status === 401) {
         stopNotificationStream();
-        authStorage.clear();
-        window.location.href = "/login";
-        throw new Error("Unauthorized");
+        terminalLoss = new TerminalRealtimeError("AUTH_EXPIRED", "Unauthorized");
+        const refreshed = await refreshSessionSingleFlight({ redirectOnFailure: true });
+        if (
+          refreshed?.accessToken &&
+          notificationStreamConsumers > 0 &&
+          capturedGeneration + 1 === notificationStreamGeneration
+        ) {
+          startNotificationStream(refreshed.accessToken, 0);
+        }
+        throw terminalLoss;
       }
 
       if (!response.ok) {
+        const reason = classifySseHttpStatus(response.status);
+        if (reason !== "NETWORK") {
+          terminalLoss = new TerminalRealtimeError(reason, `HTTP ${response.status}`);
+          throw terminalLoss;
+        }
         throw new Error(`HTTP ${response.status}`);
       }
 
@@ -94,6 +138,29 @@ const startNotificationStream = (token: string) => {
       }
     },
     onmessage(event) {
+      if (isStale()) {
+        return;
+      }
+      if (event.event === "realtime.access_lost") {
+        const reason = parseRealtimeAccessLostEvent(event.data) ?? "SESSION_REVOKED";
+        terminalLoss = new TerminalRealtimeError(reason, reason);
+        stopNotificationStream();
+        if (reason === "SESSION_REVOKED") {
+          clearSessionState({ redirectToLogin: true });
+        } else if (reason === "AUTH_EXPIRED") {
+          void refreshSessionSingleFlight({ redirectOnFailure: true }).then((refreshed) => {
+            if (
+              refreshed?.accessToken &&
+              notificationStreamConsumers > 0 &&
+              capturedGeneration + 1 === notificationStreamGeneration
+            ) {
+              startNotificationStream(refreshed.accessToken, 0);
+            }
+          });
+        }
+        return;
+      }
+
       if (event.event === "notification.unread-count") {
         const nextCount = parseNotificationUnreadCount(event.data);
         if (nextCount !== null) {
@@ -117,12 +184,30 @@ const startNotificationStream = (token: string) => {
       }
     },
     onerror(error) {
+      // Throw to prevent fetchEventSource from retrying with a stale Authorization header.
       throw error;
     },
   }).catch((error) => {
     const isAbortError = error instanceof DOMException && error.name === "AbortError";
-    if (!controller.signal.aborted && !isAbortError) {
+    if (isStale() || terminalLoss || error instanceof TerminalRealtimeError) {
+      return;
+    }
+    if (!isAbortError) {
       console.error("Notification stream disconnected", error);
+    }
+    if (attempt < 6) {
+      const delayMs = Math.min(15_000, 1000 * 2 ** attempt);
+      clearNotificationReconnectTimer();
+      notificationReconnectTimer = window.setTimeout(() => {
+        notificationReconnectTimer = null;
+        if (capturedGeneration !== notificationStreamGeneration || notificationStreamConsumers === 0) {
+          return;
+        }
+        const latestToken = authStorage.getAccessToken();
+        if (latestToken) {
+          startNotificationStream(latestToken, attempt + 1);
+        }
+      }, delayMs);
     }
   });
 };
@@ -143,7 +228,11 @@ const attachNotificationUnreadListener = (listener: NotificationUnreadListener) 
 export default function MainLayout() {
   const logout = useAuthStore((state) => state.logout);
   const isLoading = useAuthStore((state) => state.isLoading);
+  const isHydrating = useAuthStore((state) => state.isHydrating);
   const accessToken = useAuthStore((state) => state.accessToken);
+  const userRole = useAuthStore((state) => state.role);
+  const profile = useAuthStore((state) => state.user);
+  const refreshProfile = useAuthStore((state) => state.refreshProfile);
   const navigate = useNavigate();
   const location = useLocation();
   const { t, i18n } = useTranslation();
@@ -159,11 +248,12 @@ export default function MainLayout() {
 
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
-  const [userRole, setUserRole] = useState<string | null>(localStorage.getItem("userRole"));
-  const [profile, setProfile] = useState<UserProfile | null>(null);
   const [unreadCount, setUnreadCount] = useState(0);
   const [isNotificationBlinking, setIsNotificationBlinking] = useState(false);
   const [navContext, setNavContext] = useState<NavigationContext>(() => {
+    if (userRole !== "ADMIN") {
+      return "WORKSPACE";
+    }
     const saved = localStorage.getItem("navContext") as NavigationContext | null;
     if (saved === "ADMIN_SYSTEM" || saved === "WORKSPACE") {
       return saved;
@@ -171,7 +261,13 @@ export default function MainLayout() {
     return location.pathname.startsWith("/admin") ? "ADMIN_SYSTEM" : "WORKSPACE";
   });
 
+  const effectiveNavContext: NavigationContext =
+    userRole === "ADMIN" ? navContext : "WORKSPACE";
+
   useEffect(() => {
+    if (userRole !== "ADMIN") {
+      return;
+    }
     if (location.pathname.startsWith("/admin")) {
       setNavContext("ADMIN_SYSTEM");
       localStorage.setItem("navContext", "ADMIN_SYSTEM");
@@ -185,9 +281,12 @@ export default function MainLayout() {
         localStorage.setItem("lastWorkspacePath", location.pathname);
       }
     }
-  }, [location.pathname]);
+  }, [location.pathname, userRole]);
 
   const handleContextChange = (nextCtx: NavigationContext) => {
+    if (nextCtx === "ADMIN_SYSTEM" && userRole !== "ADMIN") {
+      return;
+    }
     setNavContext(nextCtx);
     localStorage.setItem("navContext", nextCtx);
 
@@ -201,24 +300,15 @@ export default function MainLayout() {
   };
 
   useEffect(() => {
-    const fetchProfile = () => {
-      profileService.getMe()
-        .then(res => {
-          setProfile(res.data);
-          setUserRole(res.data.role);
-          localStorage.setItem("userRole", res.data.role);
-          void oneSignalLogin(res.data.id);
-        })
-        .catch(() => {
-          setUserRole("USER");
-          localStorage.removeItem("userRole");
-        });
+    if (!profile && !isHydrating) {
+      void refreshProfile();
+    }
+    const handleProfileUpdated = () => {
+      void refreshProfile();
     };
-    
-    fetchProfile();
-    window.addEventListener('profileUpdated', fetchProfile);
-    return () => window.removeEventListener('profileUpdated', fetchProfile);
-  }, []);
+    window.addEventListener("profileUpdated", handleProfileUpdated);
+    return () => window.removeEventListener("profileUpdated", handleProfileUpdated);
+  }, [profile, isHydrating, refreshProfile]);
 
   const currentPathRef = useRef(location.pathname);
   useEffect(() => {
@@ -318,7 +408,7 @@ export default function MainLayout() {
 
               {/* Context Switcher for Multi-Role users */}
               <NavContextSwitcher
-                currentContext={navContext}
+                currentContext={effectiveNavContext}
                 onContextChange={(ctx) => {
                   handleContextChange(ctx);
                   setIsMobileNavOpen(false);
@@ -339,7 +429,7 @@ export default function MainLayout() {
                   <span>{i18n.language === "vi" ? "Tiếng Việt" : "English"}</span>
                 </Button>
 
-                {navContext === "ADMIN_SYSTEM" ? (
+                {effectiveNavContext === "ADMIN_SYSTEM" ? (
                   <>
                     <div className="px-2 py-1">
                       <p className="text-[11px] font-semibold tracking-wider uppercase text-muted-foreground">
@@ -357,6 +447,10 @@ export default function MainLayout() {
                     <NavLink to="/admin/settings" onClick={() => setIsMobileNavOpen(false)} className={({isActive}) => `flex items-center gap-2 rounded-md px-3 py-2 transition-colors ${isActive ? "bg-accent font-medium text-primary" : "hover:bg-accent"}`} title={t("admin.system_settings.title", { defaultValue: "Cấu hình AI & Hệ thống" })} data-testid="nav-admin-settings-mobile">
                       <Settings className="h-4 w-4 shrink-0" />
                       <span className="truncate">{t("admin.system_settings.title", { defaultValue: "Cấu hình AI & Hệ thống" })}</span>
+                    </NavLink>
+                    <NavLink to="/admin/adaptive" onClick={() => setIsMobileNavOpen(false)} className={({isActive}) => `flex items-center gap-2 rounded-md px-3 py-2 transition-colors ${isActive ? "bg-accent font-medium text-primary" : "hover:bg-accent"}`} title={t("admin.adaptive.nav", { defaultValue: "Adaptive Quality" })} data-testid="nav-admin-adaptive-mobile">
+                      <BarChart3 className="h-4 w-4 shrink-0" />
+                      <span className="truncate">{t("admin.adaptive.nav", { defaultValue: "Adaptive Quality" })}</span>
                     </NavLink>
                   </>
                 ) : (
@@ -489,7 +583,7 @@ export default function MainLayout() {
 
         {/* Context Switcher for Multi-Role users */}
         <NavContextSwitcher
-          currentContext={navContext}
+          currentContext={effectiveNavContext}
           onContextChange={handleContextChange}
           isCollapsed={isCollapsed}
           userRole={userRole}
@@ -506,7 +600,7 @@ export default function MainLayout() {
             </Button>
           )}
 
-          {navContext === "ADMIN_SYSTEM" ? (
+          {effectiveNavContext === "ADMIN_SYSTEM" ? (
             <>
               {!isCollapsed && (
                 <div className="px-2 py-1 mb-1">
@@ -553,6 +647,19 @@ export default function MainLayout() {
               >
                 <Settings className="h-4 w-4 shrink-0" />
                 {!isCollapsed && <span className="truncate">{t("admin.system_settings.title", { defaultValue: "Cấu hình AI & Hệ thống" })}</span>}
+              </NavLink>
+              <NavLink
+                to="/admin/adaptive"
+                className={({ isActive }) =>
+                  `flex items-center gap-2 rounded-md ${isCollapsed ? 'justify-center px-0' : 'px-3'} py-2 transition-colors ${
+                    isActive ? "bg-accent font-medium text-primary" : "hover:bg-accent"
+                  }`
+                }
+                title={t("admin.adaptive.nav", { defaultValue: "Adaptive Quality" })}
+                data-testid="nav-admin-adaptive"
+              >
+                <BarChart3 className="h-4 w-4 shrink-0" />
+                {!isCollapsed && <span className="truncate">{t("admin.adaptive.nav", { defaultValue: "Adaptive Quality" })}</span>}
               </NavLink>
             </>
           ) : (

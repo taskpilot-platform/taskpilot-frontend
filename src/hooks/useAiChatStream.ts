@@ -1,46 +1,31 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { toast } from "react-toastify";
 import { fetchEventSource } from "@microsoft/fetch-event-source";
-import { getApiErrorMessage } from "@/lib/http";
+import { API_BASE_URL, getApiErrorMessage, refreshSessionSingleFlight } from "@/lib/http";
+import { registerRealtimeCleanup } from "@/lib/realtime";
 import { aiService, type ChatSession, type ChatMessage } from "@/services/ai.service";
 import type { ChatStreamPhase } from "@/types/chat-stream";
 import type {
   ToolEvent,
   PendingActionConfirmation,
-  ConfirmedTaskMutation,
 } from "@/components/ai/aiChatTypes";
 import {
+  dedupeConfirmations,
   dedupeToolEvents,
+  discardPartialStreamResponse,
   extractThinkPayload,
+  hasVisibleAssistantText,
+  mergeMissingConfirmationMessage,
   mutationFromConfirmation,
   notifyTaskMutation,
+  parseConfirmationResult,
+  resolveStreamErrorMessage,
 } from "@/components/ai/aiChatHelpers";
 
 export const MAX_PROMPT_CHARS = 4000;
 const STREAM_STATUS_NULL_RETRY_LIMIT = 3;
 const STREAM_STATUS_ERROR_RETRY_LIMIT = 3;
 const AI_STREAM_ERROR_TOAST_ID = "ai-stream-error-toast";
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080/api";
-
-const WRITE_TOOL_NAMES = new Set([
-  "createTask",
-  "updateTask",
-  "deleteTask",
-  "assignTask",
-  "recommendAndAssignTask",
-  "createProject",
-  "updateProject",
-  "deleteProject",
-  "createSprint",
-  "updateSprint",
-  "deleteSprint",
-  "addComment",
-  "updateComment",
-  "deleteComment",
-  "sendChannelAnnouncement",
-  "scheduleMeeting",
-  "createTasksFromMeetingActionItems",
-]);
 
 interface UseAiChatStreamOptions {
   activeSession: ChatSession | null;
@@ -96,14 +81,21 @@ export function useAiChatStream({
   const lastTypewriterPaintRef = useRef(0);
   const streamCompletedRef = useRef(false);
   const isFinalizingRef = useRef(false);
-  const pendingConfirmedMutationRef = useRef<ConfirmedTaskMutation | null>(null);
 
   activeSessionIdRef.current = activeSession?.id ?? null;
 
   useEffect(() => {
     isMountedRef.current = true;
+    const unregisterRealtime = registerRealtimeCleanup(() => {
+      stopPolling();
+      if (activeStreamControllerRef.current) {
+        activeStreamControllerRef.current.abort();
+        activeStreamControllerRef.current = null;
+      }
+    });
     return () => {
       isMountedRef.current = false;
+      unregisterRealtime();
       stopPolling();
       if (typewriterTimerRef.current) {
         window.cancelAnimationFrame(typewriterTimerRef.current);
@@ -170,18 +162,6 @@ export function useAiChatStream({
     isFinalizingRef.current = false;
   };
 
-  const handleConfirmedMutationFinalized = () => {
-    const confirmedMutation = pendingConfirmedMutationRef.current;
-    if (!confirmedMutation) return;
-    pendingConfirmedMutationRef.current = null;
-    if (confirmedMutation.toolName && WRITE_TOOL_NAMES.has(confirmedMutation.toolName)) {
-      toast.success("Thao tác đã được thực hiện thành công.");
-    }
-    if (confirmedMutation.taskId) {
-      notifyTaskMutation(confirmedMutation);
-    }
-  };
-
   const finalizeSessionStream = async (targetSession: ChatSession) => {
     if (!isMountedRef.current) return;
     if (isFinalizingRef.current) return;
@@ -197,7 +177,6 @@ export function useAiChatStream({
     isStreamingRef.current = false;
     streamingSessionIdRef.current = null;
     await loadMessages(targetSession.id, true);
-    handleConfirmedMutationFinalized();
     resetStreamingUi();
     loadSessions();
   };
@@ -282,17 +261,34 @@ export function useAiChatStream({
             await loadMessagesRef.current(sessionId, true);
             await loadSessionsRef.current();
           }
-          handleConfirmedMutationFinalized();
-          return;
+                return;
         }
 
         if (status.phase === "FAILED") {
+          const pendingConfirmations = dedupeConfirmations(
+            toolEventsRef.current
+              .map((event) => event.confirmation ?? parseConfirmationResult(event.result))
+              .filter((c): c is PendingActionConfirmation => Boolean(c)),
+          );
+          const hasVisibleResult =
+            hasVisibleAssistantText(currentStreamMsgRef.current) ||
+            hasVisibleAssistantText(targetStreamTextRef.current);
           clearPendingRequest(sessionId);
           stopPolling();
           resetStreamingUi();
-          const hasVisibleResult = targetStreamTextRef.current.trim().length > 0 || currentStreamMsgRef.current.trim().length > 0;
-          if (!hasVisibleResult && activeSessionIdRef.current === sessionId) {
-            toast.error(status.errorMessage || t("copilot.error_ai_connection"), { toastId: AI_STREAM_ERROR_TOAST_ID });
+          if (pendingConfirmations.length > 0 && activeSessionIdRef.current === sessionId) {
+            try {
+              await loadMessagesRef.current(sessionId, true);
+              await loadSessionsRef.current();
+            } catch (reloadErr) {
+              console.error("Failed to reload messages after FAILED stream status:", reloadErr);
+            }
+            const note = t("copilot.status.COPILOT_CONFIRMATION_EXPLANATION_INCOMPLETE");
+            setMessages((prev) => mergeMissingConfirmationMessage(prev, pendingConfirmations, note));
+          }
+          if ((!hasVisibleResult || pendingConfirmations.length > 0) && activeSessionIdRef.current === sessionId) {
+            const resolvedMessage = resolveStreamErrorMessage(status.errorMessage, t);
+            toast.error(resolvedMessage || t("copilot.error_ai_connection"), { toastId: AI_STREAM_ERROR_TOAST_ID });
           }
         }
       } catch {
@@ -391,6 +387,24 @@ export function useAiChatStream({
     startStatusPolling(targetSession.id, clientMessageId);
     let responseBuffer = "";
     let streamErrorMessage: string | null = null;
+    let receivedModelEvent = false;
+
+    const resetPartialAnswerBuffer = () => {
+      const kept = discardPartialStreamResponse(responseBuffer);
+      if (kept === responseBuffer && !currentStreamMsgRef.current) {
+        return;
+      }
+      responseBuffer = kept;
+      if (typewriterTimerRef.current) {
+        window.cancelAnimationFrame(typewriterTimerRef.current);
+        typewriterTimerRef.current = null;
+      }
+      targetStreamTextRef.current = kept;
+      lastTypewriterPaintRef.current = 0;
+      if (isMountedRef.current) {
+        setCurrentStreamMsg(kept);
+      }
+    };
 
     try {
       await fetchEventSource(`${API_BASE_URL}/v1/ai/sessions/${targetSession.id}/stream`, {
@@ -404,6 +418,10 @@ export function useAiChatStream({
         openWhenHidden: true,
         body: JSON.stringify({ message: messageText, clientMessageId }),
         async onopen(response) {
+          if (response.status === 401) {
+            await refreshSessionSingleFlight({ redirectOnFailure: true });
+            throw new Error("Unauthorized");
+          }
           if (!response.ok) {
             throw new Error(`HTTP ${response.status}`);
           }
@@ -413,6 +431,10 @@ export function useAiChatStream({
           }
         },
         onmessage(ev) {
+          if (ev.event === "reset_stream") {
+            resetPartialAnswerBuffer();
+            return;
+          }
           if (ev.event === "token") {
             let tokenChunk = ev.data;
             try {
@@ -422,6 +444,13 @@ export function useAiChatStream({
               }
             } catch {
               // Plain-text token chunk fallback
+            }
+            if (
+              /^\s*<\/\s*(?:d?think|thought)\s*>/i.test(tokenChunk) &&
+              !extractThinkPayload(responseBuffer).hasUnclosedThink
+            ) {
+              tokenChunk = tokenChunk.replace(/^\s*<\/\s*(?:d?think|thought)\s*>\s*/i, "");
+              if (!tokenChunk) return;
             }
             responseBuffer += tokenChunk;
             if (isMountedRef.current) {
@@ -438,6 +467,10 @@ export function useAiChatStream({
               startTypewriter(targetSession!);
             }
           } else if (ev.event === "model") {
+            if (receivedModelEvent) {
+              resetPartialAnswerBuffer();
+            }
+            receivedModelEvent = true;
             if (ev.data && isMountedRef.current) {
               setStreamModel(ev.data);
             }
@@ -469,21 +502,15 @@ export function useAiChatStream({
                   result: parsed.result,
                   confirmation: parsed.confirmation,
                 };
-                setToolEvents((prev) => {
-                  const updated = dedupeToolEvents([...prev, toolEvent]);
-                  toolEventsRef.current = updated;
-                  return updated;
-                });
+                const updated = dedupeToolEvents([...toolEventsRef.current, toolEvent]);
+                toolEventsRef.current = updated;
+                setToolEvents(updated);
               }
             } catch {
               // Ignore malformed tool event
             }
           } else if (ev.event === "error") {
-            streamErrorMessage = ev.data || "SSE server error";
-            const hasResult = responseBuffer.trim().length > 0 || streamCompletedRef.current;
-            if (!hasResult && isMountedRef.current) {
-              toast.error(streamErrorMessage, { toastId: AI_STREAM_ERROR_TOAST_ID });
-            }
+            streamErrorMessage = resolveStreamErrorMessage(ev.data, t) || "SSE server error";
             throw new Error(streamErrorMessage);
           }
         },
@@ -507,19 +534,33 @@ export function useAiChatStream({
 
       loadSessions();
     } catch (err) {
+      const pendingConfirmations = dedupeConfirmations(
+        toolEventsRef.current
+          .map((event) => event.confirmation ?? parseConfirmationResult(event.result))
+          .filter((c): c is PendingActionConfirmation => Boolean(c)),
+      );
+      const hasResult = hasVisibleAssistantText(responseBuffer) || streamCompletedRef.current;
       clearPendingRequest(targetSession.id);
       stopPolling();
-      const hasResult = responseBuffer.trim().length > 0 || streamCompletedRef.current;
-      if (hasResult && isMountedRef.current && activeSessionIdRef.current === targetSession.id) {
-        await loadMessages(targetSession.id, true);
-        await loadSessions();
-      }
       if (isMountedRef.current) {
         resetStreamingUi();
       }
+      if ((hasResult || pendingConfirmations.length > 0) && isMountedRef.current && activeSessionIdRef.current === targetSession.id) {
+        try {
+          await loadMessages(targetSession.id, true);
+          await loadSessions();
+        } catch (reloadErr) {
+          console.error("Failed to reload messages after stream error:", reloadErr);
+        }
+      }
+      if (pendingConfirmations.length > 0 && isMountedRef.current && activeSessionIdRef.current === targetSession.id) {
+        const note = t("copilot.status.COPILOT_CONFIRMATION_EXPLANATION_INCOMPLETE");
+        setMessages((prev) => mergeMissingConfirmationMessage(prev, pendingConfirmations, note));
+      }
       const isAbort = err instanceof DOMException && err.name === "AbortError";
-      if (!isAbort && !hasResult && isMountedRef.current) {
-        toast.error(streamErrorMessage || getApiErrorMessage(err) || t("copilot.error_ai_connection"), {
+      if (!isAbort && (Boolean(streamErrorMessage) || !hasResult || pendingConfirmations.length > 0) && isMountedRef.current) {
+        const fallbackErrMsg = resolveStreamErrorMessage(getApiErrorMessage(err), t);
+        toast.error(streamErrorMessage || fallbackErrMsg || t("copilot.error_ai_connection"), {
           toastId: AI_STREAM_ERROR_TOAST_ID,
         });
       }
@@ -553,13 +594,22 @@ export function useAiChatStream({
     }
   }, [activeSession, loadMessages, loadSessions]);
 
-  const confirmPendingAction = (confirmation: PendingActionConfirmation) => {
-    pendingConfirmedMutationRef.current = mutationFromConfirmation(confirmation);
-    void sendMessage(`CONFIRM_ACTION ${confirmation.actionId} xác nhận đồng ý thực hiện`);
+  const confirmPendingAction = async (confirmation: PendingActionConfirmation) => {
+    const sessionId = activeSessionIdRef.current;
+    if (!sessionId || !confirmation.payloadHash) {
+      throw new Error("Bản xem trước không còn hợp lệ. Hãy yêu cầu AI tạo lại.");
+    }
+    await aiService.confirmAction(sessionId, confirmation.actionId, confirmation.payloadHash);
+    // Only the authenticated HTTP result establishes that the mutation committed.
+    const mutation = mutationFromConfirmation(confirmation);
+    if (mutation.taskId || mutation.projectId) notifyTaskMutation(mutation);
+    toast.success("Thao tác đã được thực hiện thành công.");
   };
 
-  const cancelPendingAction = (actionId: string) => {
-    void sendMessage(`CANCEL_ACTION ${actionId} hủy từ chối thao tác`);
+  const cancelPendingAction = async (actionId: string) => {
+    const sessionId = activeSessionIdRef.current;
+    if (!sessionId) throw new Error("Phiên trò chuyện không còn tồn tại.");
+    await aiService.cancelAction(sessionId, actionId);
   };
 
   const getLastPrompt = useCallback(() => lastPromptRef.current, []);

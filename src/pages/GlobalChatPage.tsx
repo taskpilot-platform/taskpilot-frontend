@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSearchParams, useParams, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import {
@@ -32,6 +32,8 @@ import { ProjectMeetingsTab } from "@/components/meetings/ProjectMeetingsTab";
 import { projectService } from "@/services/project.service";
 import { profileService } from "@/services/profile.service";
 import { projectStorage } from "@/lib/storage";
+import { isCustomChatDemoEnabled } from "@/lib/features";
+import { useAuthStore } from "@/stores/auth.store";
 import {
   customChatStorage,
   type CustomGroupChat,
@@ -48,6 +50,15 @@ export default function GlobalChatPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { projectId: routeProjectId } = useParams<{ projectId?: string }>();
   const navigate = useNavigate();
+  const customChatEnabled = isCustomChatDemoEnabled();
+
+  const accessToken = useAuthStore((state) => state.accessToken);
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const authUserId = useAuthStore((state) => state.user?.id ?? null);
+  const hadAuthSessionRef = useRef(
+    Boolean(accessToken || isAuthenticated || authUserId),
+  );
+  const loadSeqRef = useRef(0);
 
   // User state
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -71,25 +82,70 @@ export default function GlobalChatPage() {
   const [isCreateGroupOpen, setIsCreateGroupOpen] = useState(false);
   const [isMembersModalOpen, setIsMembersModalOpen] = useState(false);
 
-  // 1. Fetch User Profile, Projects & Custom Groups
+  const sessionKey = authUserId
+    ? `u:${authUserId}`
+    : accessToken
+      ? "tok"
+      : "anon";
+
+  // Clear transient state immediately on logout/session termination
+  useEffect(() => {
+    if (accessToken || isAuthenticated || authUserId) {
+      hadAuthSessionRef.current = true;
+      return;
+    }
+    if (hadAuthSessionRef.current) {
+      hadAuthSessionRef.current = false;
+      loadSeqRef.current += 1;
+      setProfile(null);
+      setCurrentUserId(null);
+      setProjects([]);
+      setCustomGroups([]);
+      setActiveType("PROJECT");
+      setSelectedProjectId(null);
+      setSelectedGroupId(null);
+      setSearchQuery("");
+      setIsCreateGroupOpen(false);
+      setIsMembersModalOpen(false);
+      setIsMobileChannelListOpen(false);
+      setIsLoading(false);
+    }
+  }, [accessToken, isAuthenticated, authUserId]);
+
+  // 1. Fetch User Profile, Projects & (only if demo enabled) scoped Custom Groups
   useEffect(() => {
     let isMounted = true;
+    const seq = ++loadSeqRef.current;
 
     async function loadData() {
       setIsLoading(true);
+      if (seq > 1) {
+        setProfile(null);
+        setCurrentUserId(null);
+        setProjects([]);
+        setCustomGroups([]);
+        setSelectedProjectId(null);
+        setSelectedGroupId(null);
+        setIsCreateGroupOpen(false);
+        setIsMembersModalOpen(false);
+      }
+
       try {
         const [profileRes, projectsRes] = await Promise.all([
           profileService.getMe().catch(() => null),
           projectService.getMyProjects(0, 50).catch(() => ({ data: { content: [] } })),
         ]);
 
-        if (!isMounted) return;
+        if (!isMounted || seq !== loadSeqRef.current) return;
 
         let uId: number | null = null;
         if (profileRes?.data?.id) {
           uId = profileRes.data.id;
           setCurrentUserId(uId);
           setProfile(profileRes.data);
+        } else {
+          setCurrentUserId(null);
+          setProfile(null);
         }
 
         const projectList: MyProject[] =
@@ -99,36 +155,13 @@ export default function GlobalChatPage() {
 
         setProjects(projectList);
 
-        // Load custom group chats
-        const groups = customChatStorage.getGroups(uId);
-        setCustomGroups(groups);
-
-        // Determine initially selected conversation
-        const queryProject = searchParams.get("project") || routeProjectId;
-        const queryGroup = searchParams.get("group");
-
-        if (queryGroup && groups.some((g) => g.id === queryGroup)) {
-          setActiveType("GROUP");
-          setSelectedGroupId(queryGroup);
+        if (customChatEnabled && uId) {
+          setCustomGroups(customChatStorage.getGroups(uId));
         } else {
-          const storedId = projectStorage.getLastProjectId();
-          const initialId = queryProject
-            ? parseInt(queryProject, 10)
-            : storedId || projectList[0]?.id || null;
-
-          if (initialId && projectList.some((p) => p.id === initialId)) {
-            setActiveType("PROJECT");
-            setSelectedProjectId(initialId);
-          } else if (projectList.length > 0) {
-            setActiveType("PROJECT");
-            setSelectedProjectId(projectList[0].id);
-          } else if (groups.length > 0) {
-            setActiveType("GROUP");
-            setSelectedGroupId(groups[0].id);
-          }
+          setCustomGroups([]);
         }
       } finally {
-        if (isMounted) {
+        if (isMounted && seq === loadSeqRef.current) {
           setIsLoading(false);
         }
       }
@@ -139,29 +172,112 @@ export default function GlobalChatPage() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [customChatEnabled, sessionKey]);
+
+  // 2. Synchronize selection from route params & query params on the mounted page
+  useEffect(() => {
+    if (isLoading) return;
+
+    const queryGroup = customChatEnabled ? searchParams.get("group") : null;
+    if (
+      customChatEnabled &&
+      queryGroup &&
+      customGroups.some((g) => g.id === queryGroup)
+    ) {
+      setActiveType("GROUP");
+      setSelectedGroupId(queryGroup);
+      setSelectedProjectId(null);
+      setIsMobileChannelListOpen(false);
+      return;
+    }
+
+    const queryProject = routeProjectId || searchParams.get("project");
+    const parsedQueryId = queryProject ? Number.parseInt(queryProject, 10) : NaN;
+
+    if (
+      Number.isFinite(parsedQueryId) &&
+      projects.some((p) => p.id === parsedQueryId)
+    ) {
+      setActiveType("PROJECT");
+      setSelectedProjectId(parsedQueryId);
+      setSelectedGroupId(null);
+      projectStorage.setLastProjectId(parsedQueryId);
+      setIsMobileChannelListOpen(false);
+      return;
+    }
+
+    const storedId = projectStorage.getLastProjectId();
+    if (storedId && projects.some((p) => p.id === storedId)) {
+      setActiveType("PROJECT");
+      setSelectedProjectId(storedId);
+      setSelectedGroupId(null);
+      return;
+    }
+
+    if (projects.length > 0) {
+      setActiveType("PROJECT");
+      setSelectedProjectId(projects[0].id);
+      setSelectedGroupId(null);
+      return;
+    }
+
+    if (customChatEnabled && customGroups.length > 0) {
+      setActiveType("GROUP");
+      setSelectedGroupId(customGroups[0].id);
+      setSelectedProjectId(null);
+      return;
+    }
+
+    setActiveType("PROJECT");
+    setSelectedProjectId(null);
+    setSelectedGroupId(null);
+  }, [
+    isLoading,
+    routeProjectId,
+    searchParams,
+    projects,
+    customGroups,
+    customChatEnabled,
+  ]);
 
   // Sync selection
   const handleSelectProject = (id: number) => {
     setActiveType("PROJECT");
     setSelectedProjectId(id);
+    setSelectedGroupId(null);
     projectStorage.setLastProjectId(id);
-    setSearchParams({ project: String(id) }, { replace: true });
     setIsMobileChannelListOpen(false);
+    if (routeProjectId) {
+      navigate(`/chat/${id}`);
+    } else {
+      setSearchParams({ project: String(id) });
+    }
   };
 
   const handleSelectGroup = (id: string) => {
+    if (!customChatEnabled) return;
     setActiveType("GROUP");
     setSelectedGroupId(id);
-    setSearchParams({ group: id }, { replace: true });
+    setSelectedProjectId(null);
     setIsMobileChannelListOpen(false);
+    if (routeProjectId) {
+      navigate(`/chat?group=${encodeURIComponent(id)}`);
+    } else {
+      setSearchParams({ group: id });
+    }
   };
 
   const handleGroupCreated = (newGroup: CustomGroupChat) => {
+    if (!customChatEnabled) return;
     setCustomGroups((prev) => [newGroup, ...prev]);
     setActiveType("GROUP");
     setSelectedGroupId(newGroup.id);
-    setSearchParams({ group: newGroup.id }, { replace: true });
+    setSelectedProjectId(null);
+    if (routeProjectId) {
+      navigate(`/chat?group=${encodeURIComponent(newGroup.id)}`);
+    } else {
+      setSearchParams({ group: newGroup.id });
+    }
   };
 
   // Selected entities
@@ -171,7 +287,7 @@ export default function GlobalChatPage() {
       : null;
 
   const selectedGroup =
-    activeType === "GROUP"
+    customChatEnabled && activeType === "GROUP"
       ? customGroups.find((g) => g.id === selectedGroupId) || null
       : null;
 
@@ -180,9 +296,11 @@ export default function GlobalChatPage() {
     p.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const filteredGroups = customGroups.filter((g) =>
-    g.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredGroups = customChatEnabled
+    ? customGroups.filter((g) =>
+        g.name.toLowerCase().includes(searchQuery.toLowerCase())
+      )
+    : [];
 
   if (isLoading) {
     return (
@@ -209,7 +327,7 @@ export default function GlobalChatPage() {
     );
   }
 
-  if (projects.length === 0 && customGroups.length === 0) {
+  if (projects.length === 0 && (!customChatEnabled || customGroups.length === 0)) {
     return (
       <div className="p-3 sm:p-6 md:p-8 max-w-7xl mx-auto w-full flex flex-col flex-1 min-h-[500px]" data-testid="global-chat-empty">
         <div className="flex flex-col flex-1 items-center justify-center p-8 text-center rounded-2xl border border-border/80 bg-card/75 backdrop-blur-md shadow-sm">
@@ -220,19 +338,34 @@ export default function GlobalChatPage() {
             {t("chat.no_channels_title", { defaultValue: "Chưa có kênh trò chuyện nào" })}
           </h2>
           <p className="max-w-md text-sm text-muted-foreground mb-6">
-            {t("chat.no_channels_desc", { defaultValue: "Bạn có thể tạo nhóm chat riêng hoặc tham gia dự án để bắt đầu trao đổi." })}
+            {t("chat.no_channels_desc", {
+              defaultValue: "Bạn cần tham gia hoặc tạo một dự án để bắt đầu trò chuyện thời gian thực với đồng nghiệp.",
+            })}
           </p>
           <div className="flex items-center gap-3">
-            <Button onClick={() => setIsCreateGroupOpen(true)} className="gap-2">
-              <Plus className="h-4 w-4" />
-              <span>{t("chat.new_group_btn", { defaultValue: "Tạo nhóm mới" })}</span>
-            </Button>
+            {customChatEnabled && currentUserId && (
+              <Button onClick={() => setIsCreateGroupOpen(true)} className="gap-2" data-testid="btn-open-create-group">
+                <Plus className="h-4 w-4" />
+                <span>{t("chat.new_group_btn", { defaultValue: "Tạo nhóm mới" })}</span>
+              </Button>
+            )}
             <Button variant="outline" onClick={() => navigate("/projects")} className="gap-2">
               <FolderKanban className="h-4 w-4" />
               <span>{t("chat.go_to_projects", { defaultValue: "Đi đến trang Dự án" })}</span>
             </Button>
           </div>
         </div>
+
+        {customChatEnabled && (
+          <CreateGroupChatModal
+            isOpen={isCreateGroupOpen}
+            onClose={() => setIsCreateGroupOpen(false)}
+            onCreated={handleGroupCreated}
+            currentUserId={currentUserId}
+            currentUserName={profile?.fullName || "Tôi"}
+            currentUserEmail={profile?.email || ""}
+          />
+        )}
       </div>
     );
   }
@@ -252,24 +385,36 @@ export default function GlobalChatPage() {
                 <span className="text-sm font-semibold text-foreground">
                   {t("chat.title", { defaultValue: "Kênh Trò Chuyện & Hội Thoại" })}
                 </span>
-                <Badge variant="outline" className="hidden sm:inline-flex border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[10px] px-1.5 py-0">
-                  {t("chat.badge", { defaultValue: "Real-time STOMP" })}
-                </Badge>
+                {activeType === "GROUP" && customChatEnabled ? (
+                  <Badge
+                    variant="outline"
+                    className="hidden sm:inline-flex border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300 text-[10px] px-1.5 py-0"
+                    data-testid="chat-demo-mode-badge"
+                  >
+                    {t("chat.demo_badge", { defaultValue: "Demo cục bộ" })}
+                  </Badge>
+                ) : (
+                  <Badge variant="outline" className="hidden sm:inline-flex border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[10px] px-1.5 py-0">
+                    {t("chat.badge", { defaultValue: "Real-time STOMP" })}
+                  </Badge>
+                )}
               </div>
             </div>
           </div>
 
-          {/* Action Header: Create Group & Filter */}
+          {/* Action Header: Create Group (demo-only) & Filter */}
           <div className="flex items-center gap-2">
-            <Button
-              size="sm"
-              onClick={() => setIsCreateGroupOpen(true)}
-              className="h-8 text-xs gap-1.5 font-medium shadow-xs"
-              data-testid="btn-open-create-group"
-            >
-              <Plus className="h-3.5 w-3.5" />
-              <span>{t("chat.new_group_btn", { defaultValue: "Tạo nhóm mới" })}</span>
-            </Button>
+            {customChatEnabled && currentUserId && (
+              <Button
+                size="sm"
+                onClick={() => setIsCreateGroupOpen(true)}
+                className="h-8 text-xs gap-1.5 font-medium shadow-xs"
+                data-testid="btn-open-create-group"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                <span>{t("chat.new_group_btn", { defaultValue: "Tạo nhóm mới" })}</span>
+              </Button>
+            )}
 
             {/* Mobile drawer toggle */}
             <Button
@@ -280,7 +425,7 @@ export default function GlobalChatPage() {
               data-testid="toggle-mobile-channel-list-btn"
             >
               <Hash className="h-3.5 w-3.5 text-primary" />
-              <span>{projects.length + customGroups.length}</span>
+              <span>{projects.length + (customChatEnabled ? customGroups.length : 0)}</span>
             </Button>
           </div>
         </div>
@@ -299,7 +444,11 @@ export default function GlobalChatPage() {
               <div className="relative">
                 <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
                 <Input
-                  placeholder={t("chat.search_placeholder", { defaultValue: "Tìm kiếm kênh, nhóm..." })}
+                  placeholder={
+                    customChatEnabled
+                      ? t("chat.search_placeholder", { defaultValue: "Tìm kiếm kênh, nhóm..." })
+                      : t("chat.search_channels_placeholder", { defaultValue: "Tìm kiếm kênh dự án..." })
+                  }
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-8 text-xs h-8 bg-background border-border/70"
@@ -307,48 +456,50 @@ export default function GlobalChatPage() {
                 />
               </div>
 
-              {/* Segmented Filter Buttons */}
-              <div className="flex rounded-lg bg-muted/50 p-0.5 text-[11px] font-medium border border-border/40">
-                <button
-                  type="button"
-                  onClick={() => setFilterType("ALL")}
-                  className={`flex-1 py-1 rounded-md transition-colors text-center ${
-                    filterType === "ALL"
-                      ? "bg-background text-foreground shadow-xs font-semibold"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  {t("chat.filter_all", { defaultValue: "Tất cả" })}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setFilterType("CHANNELS")}
-                  className={`flex-1 py-1 rounded-md transition-colors text-center ${
-                    filterType === "CHANNELS"
-                      ? "bg-background text-foreground shadow-xs font-semibold"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  {t("chat.filter_channels", { defaultValue: "Kênh" })}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setFilterType("GROUPS")}
-                  className={`flex-1 py-1 rounded-md transition-colors text-center ${
-                    filterType === "GROUPS"
-                      ? "bg-background text-foreground shadow-xs font-semibold"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  {t("chat.filter_groups", { defaultValue: "Nhóm" })}
-                </button>
-              </div>
+              {/* Segmented Filter Buttons (only when local demo groups are enabled) */}
+              {customChatEnabled && (
+                <div className="flex rounded-lg bg-muted/50 p-0.5 text-[11px] font-medium border border-border/40">
+                  <button
+                    type="button"
+                    onClick={() => setFilterType("ALL")}
+                    className={`flex-1 py-1 rounded-md transition-colors text-center ${
+                      filterType === "ALL"
+                        ? "bg-background text-foreground shadow-xs font-semibold"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {t("chat.filter_all", { defaultValue: "Tất cả" })}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFilterType("CHANNELS")}
+                    className={`flex-1 py-1 rounded-md transition-colors text-center ${
+                      filterType === "CHANNELS"
+                        ? "bg-background text-foreground shadow-xs font-semibold"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {t("chat.filter_channels", { defaultValue: "Kênh" })}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFilterType("GROUPS")}
+                    className={`flex-1 py-1 rounded-md transition-colors text-center ${
+                      filterType === "GROUPS"
+                        ? "bg-background text-foreground shadow-xs font-semibold"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {t("chat.filter_groups", { defaultValue: "Nhóm" })}
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* Conversation Items List */}
             <div className="flex-1 overflow-y-auto p-2 space-y-3">
-              {/* SECTION 1: NHÓM TRÒ CHUYỆN (CUSTOM GROUP CHATS) */}
-              {(filterType === "ALL" || filterType === "GROUPS") && (
+              {/* SECTION 1: NHÓM TRÒ CHUYỆN (CUSTOM GROUP CHATS - DEMO ONLY) */}
+              {customChatEnabled && (filterType === "ALL" || filterType === "GROUPS") && (
                 <div className="space-y-1">
                   <div className="px-2 py-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center justify-between">
                     <span className="flex items-center gap-1.5">
@@ -410,7 +561,7 @@ export default function GlobalChatPage() {
               )}
 
               {/* SECTION 2: KÊNH DỰ ÁN (PROJECT CHANNELS) */}
-              {(filterType === "ALL" || filterType === "CHANNELS") && (
+              {(!customChatEnabled || filterType === "ALL" || filterType === "CHANNELS") && (
                 <div className="space-y-1">
                   <div className="px-2 py-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center justify-between">
                     <span className="flex items-center gap-1.5">
@@ -516,10 +667,16 @@ export default function GlobalChatPage() {
                             : `${selectedGroup?.members.length} ${t("chat.members_count", { count: selectedGroup?.members.length || 0 })}`}
                         </span>
                         <span>•</span>
-                        <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-medium">
-                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                          {t("chat.connected", { defaultValue: "Đã kết nối" })}
-                        </span>
+                        {activeType === "GROUP" && customChatEnabled ? (
+                          <span className="flex items-center gap-1 text-amber-700 dark:text-amber-300 font-medium">
+                            {t("chat.demo_badge", { defaultValue: "Demo cục bộ" })}
+                          </span>
+                        ) : (
+                          <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-medium">
+                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                            {t("chat.badge", { defaultValue: "Real-time STOMP" })}
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -628,6 +785,7 @@ export default function GlobalChatPage() {
                     <div className="flex-1 flex flex-col h-full min-h-0 overflow-hidden">
                       {activeType === "PROJECT" && selectedProject && (
                         <ProjectChatTab
+                          key={`project-chat-${selectedProject.id}`}
                           projectId={selectedProject.id}
                           isArchived={selectedProject.status === "ARCHIVED"}
                           currentUserId={currentUserId}
@@ -635,7 +793,7 @@ export default function GlobalChatPage() {
                           embedded={true}
                         />
                       )}
-                      {activeType === "GROUP" && selectedGroup && (
+                      {customChatEnabled && activeType === "GROUP" && selectedGroup && (
                         <CustomGroupChatView
                           group={selectedGroup}
                           currentUserId={currentUserId}
@@ -650,6 +808,7 @@ export default function GlobalChatPage() {
                     <div className="flex-1 p-4 overflow-y-auto">
                       {activeType === "PROJECT" && selectedProject ? (
                         <ProjectFilesTab
+                          key={`project-files-${selectedProject.id}`}
                           projectId={selectedProject.id}
                           isManager={selectedProject.myRole === "MANAGER"}
                           currentUserId={currentUserId}
@@ -674,6 +833,7 @@ export default function GlobalChatPage() {
                     <div className="flex-1 p-4 overflow-y-auto">
                       {activeType === "PROJECT" && selectedProject ? (
                         <ProjectMeetingsTab
+                          key={`project-meetings-${selectedProject.id}`}
                           projectId={selectedProject.id}
                           isArchived={selectedProject.status === "ARCHIVED"}
                           currentUserId={currentUserId}
@@ -701,21 +861,26 @@ export default function GlobalChatPage() {
               </div>
             ) : (
               <div className="flex flex-1 items-center justify-center p-8 text-center text-muted-foreground">
-                {t("chat.select_channel_prompt", { defaultValue: "Vui lòng chọn một kênh dự án hoặc nhóm trò chuyện để bắt đầu." })}
+                {t("chat.select_channel_prompt", {
+                  defaultValue: "Chọn một kênh từ danh sách bên trái để bắt đầu trò chuyện.",
+                })}
               </div>
             )}
           </div>
         </div>
       </div>
 
-      {/* 3. Modal Tạo Nhóm Chat Mới (MS Teams Custom Group Chat) */}
-      <CreateGroupChatModal
-        isOpen={isCreateGroupOpen}
-        onClose={() => setIsCreateGroupOpen(false)}
-        onCreated={handleGroupCreated}
-        currentUserId={currentUserId}
-        currentUserName={profile?.fullName || "Tôi"}
-      />
+      {/* 3. Modal Tạo Nhóm Chat Mới (Demo-Only Custom Group Chat) */}
+      {customChatEnabled && (
+        <CreateGroupChatModal
+          isOpen={isCreateGroupOpen}
+          onClose={() => setIsCreateGroupOpen(false)}
+          onCreated={handleGroupCreated}
+          currentUserId={currentUserId}
+          currentUserName={profile?.fullName || "Tôi"}
+          currentUserEmail={profile?.email || ""}
+        />
+      )}
 
       {/* 4. Modal Danh Sách Thành Viên (Members Drawer / Dialog) */}
       <Dialog open={isMembersModalOpen} onOpenChange={setIsMembersModalOpen}>

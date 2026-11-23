@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { isCustomChatDemoEnabled } from "@/lib/features";
 import {
   customChatStorage,
   type CustomGroupChat,
@@ -29,6 +30,13 @@ export const CustomGroupChatView: React.FC<CustomGroupChatViewProps> = ({
   currentUserName = "Tôi",
 }) => {
   const { t } = useTranslation();
+  const demoEnabled = isCustomChatDemoEnabled();
+  const validUserId =
+    typeof currentUserId === "number" &&
+    Number.isSafeInteger(currentUserId) &&
+    currentUserId > 0
+      ? currentUserId
+      : null;
   const [messages, setMessages] = useState<ProjectChatMessage[]>([]);
   const [inputValue, setInputValue] = useState("");
   const [isSending, setIsSending] = useState(false);
@@ -39,10 +47,20 @@ export const CustomGroupChatView: React.FC<CustomGroupChatViewProps> = ({
   };
 
   useEffect(() => {
-    const list = customChatStorage.getMessages(group.id);
+    if (!demoEnabled || !validUserId) {
+      setMessages([]);
+      setInputValue("");
+      return;
+    }
+    const list = customChatStorage.getMessages(group.id, validUserId);
     setMessages(list);
+    setInputValue("");
     setTimeout(() => scrollToBottom("auto"), 50);
-  }, [group.id]);
+  }, [demoEnabled, group.id, validUserId]);
+
+  if (!demoEnabled || !validUserId) {
+    return null;
+  }
 
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();
@@ -53,7 +71,7 @@ export const CustomGroupChatView: React.FC<CustomGroupChatViewProps> = ({
       const newMsg = customChatStorage.sendMessage(
         group.id,
         inputValue.trim(),
-        currentUserId || 1,
+        validUserId,
         currentUserName
       );
       setMessages((prev) => [...prev, newMsg]);
@@ -66,6 +84,19 @@ export const CustomGroupChatView: React.FC<CustomGroupChatViewProps> = ({
 
   return (
     <div className="flex-1 flex flex-col h-full overflow-hidden bg-background/50" data-testid="custom-group-chat-view">
+      <div
+        className="px-4 py-2 border-b border-amber-500/30 bg-amber-500/10 text-amber-800 dark:text-amber-300 text-xs flex items-center justify-between gap-2 shrink-0"
+        data-testid="custom-group-demo-banner"
+      >
+        <span>
+          {t("chat.demo_status_notice", {
+            defaultValue: "Chỉ lưu cục bộ trên trình duyệt (Demo) — không gửi qua STOMP tới đồng nghiệp",
+          })}
+        </span>
+        <Badge variant="outline" className="text-[10px] border-amber-500/40 text-amber-800 dark:text-amber-300">
+          {t("chat.demo_badge", { defaultValue: "Demo cục bộ" })}
+        </Badge>
+      </div>
       {/* Messages Stream */}
       <div className="flex-1 p-4 overflow-y-auto space-y-4">
         {messages.length === 0 ? (

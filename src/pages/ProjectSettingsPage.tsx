@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { toast } from "react-toastify";
@@ -17,7 +17,9 @@ import {
   Archive,
   RefreshCw,
   Plus,
-  LogOut
+  LogOut,
+  Copy,
+  MailPlus
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -26,15 +28,30 @@ import { useLeaveProject } from "@/hooks/useLeaveProject";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 import { Form, FormControl, FormField, FormItem, FormLabel } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 
-import { getApiErrorMessage } from "@/lib/http";
+import { createRequestId, getApiErrorMessage } from "@/lib/http";
+import { isSupportedProjectTimezone } from "@/lib/projectTaskDate";
 import { projectService } from "@/services/project.service";
 import { labelService } from "@/services/label.service";
 import { profileService } from "@/services/profile.service";
-import type { Project, ProjectMember } from "@/types/project";
+import type {
+  CreateProjectInvitationResponse,
+  Project,
+  ProjectInvitation,
+  ProjectMember,
+} from "@/types/project";
 import type { LabelDto } from "@/types/task";
 
 const projectFormSchema = z.object({
@@ -43,9 +60,28 @@ const projectFormSchema = z.object({
   status: z.enum(["PLANNING", "ACTIVE", "COMPLETED"]),
   heuristicMode: z.enum(["BALANCED", "URGENT", "TRAINING"]).optional(),
   workflowMode: z.enum(["KANBAN", "SCRUM"]),
+  timezoneId: z
+    .string()
+    .min(1, "Timezone is required")
+    .refine(
+      (val) => isSupportedProjectTimezone(val),
+      "Timezone must be \"UTC\" or a canonical IANA region ID (e.g. Asia/Ho_Chi_Minh)",
+    ),
   startDate: z.string().optional(),
   endDate: z.string().optional(),
 });
+
+const COMMON_PROJECT_TIMEZONES = [
+  "Asia/Ho_Chi_Minh",
+  "UTC",
+  "Asia/Singapore",
+  "Asia/Tokyo",
+  "Europe/London",
+  "Europe/Berlin",
+  "America/New_York",
+  "America/Los_Angeles",
+  "Australia/Sydney",
+];
 
 export default function ProjectSettingsPage() {
   const { t } = useTranslation();
@@ -56,6 +92,10 @@ export default function ProjectSettingsPage() {
 
   const [project, setProject] = useState<Project | null>(null);
   const [projectMembers, setProjectMembers] = useState<ProjectMember[]>([]);
+  const [invitations, setInvitations] = useState<ProjectInvitation[]>([]);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [isCreatingInvite, setIsCreatingInvite] = useState(false);
+  const [createdInvite, setCreatedInvite] = useState<CreateProjectInvitationResponse | null>(null);
   const [labels, setLabels] = useState<LabelDto[]>([]);
   const [myUserId, setMyUserId] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -64,11 +104,15 @@ export default function ProjectSettingsPage() {
   const [newLabelName, setNewLabelName] = useState("");
   const [newLabelColor, setNewLabelColor] = useState("#6366F1");
   const [isCreatingLabel, setIsCreatingLabel] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  const [isDeletingProject, setIsDeletingProject] = useState(false);
+  const deleteRequestIdRef = useRef<string>(createRequestId());
   const { isLeaving, handleLeaveProject } = useLeaveProject(currentProjectId, projectMembers, myUserId);
 
   const form = useForm<z.infer<typeof projectFormSchema>>({
     resolver: zodResolver(projectFormSchema),
-    defaultValues: { name: "", description: "", status: "ACTIVE", workflowMode: "KANBAN" },
+    defaultValues: { name: "", description: "", status: "ACTIVE", workflowMode: "KANBAN", timezoneId: "Asia/Ho_Chi_Minh" },
   });
 
   const loadData = async () => {
@@ -91,6 +135,7 @@ export default function ProjectSettingsPage() {
         status: projRes.data.status as "PLANNING" | "ACTIVE" | "COMPLETED",
         heuristicMode: projRes.data.heuristicMode || "BALANCED",
         workflowMode: projRes.data.workflowMode || "KANBAN",
+        timezoneId: projRes.data.timezoneId || "Asia/Ho_Chi_Minh",
         startDate: projRes.data.startDate ? projRes.data.startDate.split("T")[0] : "",
         endDate: projRes.data.endDate ? projRes.data.endDate.split("T")[0] : "",
       });
@@ -99,6 +144,13 @@ export default function ProjectSettingsPage() {
       if (!me || me.role !== "MANAGER") {
         toast.error("You don't have permission to access project settings");
         navigate(`/projects/${currentProjectId}/overview`);
+      } else {
+        try {
+          const invRes = await projectService.listInvitations(currentProjectId);
+          setInvitations(invRes.data || []);
+        } catch {
+          setInvitations([]);
+        }
       }
     } catch (error) {
       toast.error(getApiErrorMessage(error));
@@ -112,6 +164,7 @@ export default function ProjectSettingsPage() {
     if (currentProjectId) {
       void loadData();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentProjectId]);
 
   const onSubmitGeneral = async (values: z.infer<typeof projectFormSchema>) => {
@@ -122,6 +175,7 @@ export default function ProjectSettingsPage() {
         status: values.status,
         heuristicMode: values.heuristicMode,
         workflowMode: values.workflowMode,
+        timezoneId: values.timezoneId,
         startDate: values.startDate || undefined,
         endDate: values.endDate || undefined,
       });
@@ -139,6 +193,41 @@ export default function ProjectSettingsPage() {
       await projectService.updateMemberRole(currentProjectId, userId, role);
       toast.success("Member role updated");
       void loadData();
+    } catch (err) {
+      toast.error(getApiErrorMessage(err));
+    }
+  };
+
+  const handleCreateInvitation = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!inviteEmail.trim()) return;
+    setIsCreatingInvite(true);
+    try {
+      const res = await projectService.createInvitation(currentProjectId, {
+        email: inviteEmail.trim(),
+      });
+      setCreatedInvite(res.data);
+      setInviteEmail("");
+      toast.success(
+        t("projects.p2.invite_created", {
+          defaultValue: "Invitation created! Copy the link below to share it once.",
+        }),
+      );
+      const invRes = await projectService.listInvitations(currentProjectId);
+      setInvitations(invRes.data || []);
+    } catch (err) {
+      toast.error(getApiErrorMessage(err));
+    } finally {
+      setIsCreatingInvite(false);
+    }
+  };
+
+  const handleRevokeInvitation = async (invitationId: number) => {
+    try {
+      await projectService.revokeInvitation(currentProjectId, invitationId);
+      toast.success(t("projects.p2.invite_revoked", { defaultValue: "Invitation revoked." }));
+      const invRes = await projectService.listInvitations(currentProjectId);
+      setInvitations(invRes.data || []);
     } catch (err) {
       toast.error(getApiErrorMessage(err));
     }
@@ -223,17 +312,29 @@ export default function ProjectSettingsPage() {
     }
   };
 
+  const openDeleteProjectDialog = () => {
+    deleteRequestIdRef.current = createRequestId();
+    setDeleteConfirmText("");
+    setIsDeleteDialogOpen(true);
+  };
+
   const handleDeleteProject = async () => {
-    if (!window.prompt("DANGER: Type the project ID to confirm deletion:")?.includes(currentProjectId.toString())) {
-      toast.error("Deletion cancelled");
+    const trimmed = deleteConfirmText.trim();
+    const idText = currentProjectId.toString();
+    if (trimmed !== idText && trimmed.toUpperCase() !== `DELETE ${idText}`) {
+      toast.error(`Type "${idText}" or "DELETE ${idText}" to confirm permanent deletion.`);
       return;
     }
+    setIsDeletingProject(true);
     try {
-      await projectService.deleteProject(currentProjectId);
+      await projectService.deleteProject(currentProjectId, trimmed, deleteRequestIdRef.current);
       toast.success("Project deleted permanently");
+      setIsDeleteDialogOpen(false);
       navigate("/projects");
     } catch (err) {
       toast.error(getApiErrorMessage(err));
+    } finally {
+      setIsDeletingProject(false);
     }
   };
 
@@ -331,17 +432,36 @@ export default function ProjectSettingsPage() {
                     </FormItem>
                   )} />
                 </div>
-                <FormField control={form.control} name="workflowMode" render={({ field }) => (
-                  <FormItem><FormLabel>Workflow Mode</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value} disabled={isArchived}>
-                      <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                      <SelectContent>
-                        <SelectItem value="KANBAN">Kanban - Board shows all project tasks</SelectItem>
-                        <SelectItem value="SCRUM">Scrum - Board shows only active sprint tasks</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </FormItem>
-                )} />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <FormField control={form.control} name="workflowMode" render={({ field }) => (
+                    <FormItem><FormLabel>Workflow Mode</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value} disabled={isArchived}>
+                        <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                        <SelectContent>
+                          <SelectItem value="KANBAN">Kanban - Board shows all project tasks</SelectItem>
+                          <SelectItem value="SCRUM">Scrum - Board shows only active sprint tasks</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </FormItem>
+                  )} />
+                  <FormField control={form.control} name="timezoneId" render={({ field }) => {
+                    const zoneOptions = COMMON_PROJECT_TIMEZONES.includes(field.value)
+                      ? COMMON_PROJECT_TIMEZONES
+                      : [field.value, ...COMMON_PROJECT_TIMEZONES].filter(Boolean);
+                    return (
+                      <FormItem><FormLabel>Project Timezone</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value} disabled={isArchived}>
+                          <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                          <SelectContent>
+                            {zoneOptions.map((tz) => (
+                              <SelectItem key={tz} value={tz}>{tz}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </FormItem>
+                    );
+                  }} />
+                </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <FormField control={form.control} name="startDate" render={({ field }) => (
                     <FormItem><FormLabel>Start Date</FormLabel>
@@ -369,26 +489,90 @@ export default function ProjectSettingsPage() {
             <CardDescription>Manage who has access to this project and their roles.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {/* Invite Code */}
+            {/* Private Invitations */}
             {!isArchived && (
-              <div className="flex items-center gap-3 p-3 bg-blue-500/5 border border-blue-500/20 rounded-lg">
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-blue-700 dark:text-blue-400">Invite Code</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">Share this code so others can join the project</p>
+              <div className="space-y-3 p-4 bg-blue-500/5 border border-blue-500/20 rounded-lg">
+                <div>
+                  <p className="text-sm font-medium text-blue-700 dark:text-blue-400 flex items-center gap-1.5">
+                    <MailPlus className="h-4 w-4" />
+                    {t("projects.p2.invitations_title", { defaultValue: "Private Email-Bound Invitations" })}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {t("projects.p2.invitations_desc", {
+                      defaultValue:
+                        "Create a single-use 7-day invite bound to the recipient's verified email, then copy and share the link manually.",
+                    })}
+                  </p>
                 </div>
-                <div className="flex items-center gap-2">
-                  <code className="bg-muted px-3 py-1.5 rounded text-sm font-mono font-semibold">PRJ-{currentProjectId}</code>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      navigator.clipboard.writeText(`PRJ-${currentProjectId}`);
-                      toast.success("Invite code copied!");
-                    }}
-                  >
-                    Copy
+
+                <form onSubmit={handleCreateInvitation} className="flex flex-col gap-2 sm:flex-row">
+                  <Input
+                    type="email"
+                    required
+                    value={inviteEmail}
+                    onChange={(e) => setInviteEmail(e.target.value)}
+                    placeholder="teammate@example.com"
+                    className="flex-1"
+                  />
+                  <Button type="submit" size="sm" disabled={isCreatingInvite || !inviteEmail.trim()}>
+                    {isCreatingInvite && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
+                    {t("projects.p2.create_invite_btn", { defaultValue: "Create Invite Link" })}
                   </Button>
-                </div>
+                </form>
+
+                {createdInvite && (
+                  <div className="rounded-md border border-emerald-500/30 bg-emerald-500/10 p-3 space-y-2">
+                    <p className="text-xs font-medium text-emerald-800 dark:text-emerald-300">
+                      {t("projects.p2.copy_once_notice", {
+                        defaultValue: "One-time shareable invitation link for {{email}} (copy now — hidden after reload):",
+                        email: createdInvite.inviteeEmail,
+                      })}
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <code className="flex-1 truncate rounded bg-background px-2 py-1 text-xs font-mono">
+                        {createdInvite.inviteUrl}
+                      </code>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          void navigator.clipboard.writeText(createdInvite.inviteUrl);
+                          toast.success(t("projects.p2.invite_copied", { defaultValue: "Invitation link copied!" }));
+                        }}
+                      >
+                        <Copy className="mr-1 h-3.5 w-3.5" />
+                        Copy
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {invitations.length > 0 && (
+                  <div className="divide-y rounded-md border bg-background/80">
+                    {invitations.map((inv) => (
+                      <div key={inv.id} className="flex items-center justify-between gap-2 px-3 py-2 text-xs">
+                        <div>
+                          <span className="font-medium">{inv.inviteeEmail}</span>
+                          <span className="ml-2 rounded bg-muted px-1.5 py-0.5 font-mono text-[11px]">
+                            {inv.status}
+                          </span>
+                        </div>
+                        {inv.status === "PENDING" && (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 text-destructive hover:text-destructive"
+                            onClick={() => void handleRevokeInvitation(inv.id)}
+                          >
+                            {t("projects.p2.revoke_invite_btn", { defaultValue: "Revoke" })}
+                          </Button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
@@ -528,13 +712,48 @@ export default function ProjectSettingsPage() {
                 <h4 className="font-semibold text-sm text-red-600 dark:text-red-400">Delete Project</h4>
                 <p className="text-sm text-muted-foreground">Permanently delete this project and all its data. This action is irreversible.</p>
               </div>
-              <Button variant="destructive" onClick={handleDeleteProject}>
+              <Button variant="destructive" onClick={openDeleteProjectDialog}>
                 <Trash2 className="w-4 h-4 mr-2" /> Delete Project
               </Button>
             </div>
           </CardContent>
         </Card>
       </div>
+
+      <Dialog open={isDeleteDialogOpen} onOpenChange={(open) => !open && setIsDeleteDialogOpen(false)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="text-red-600 dark:text-red-400 flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5" />
+              Permanently Delete Project
+            </DialogTitle>
+            <DialogDescription>
+              This permanently purges all sprints, tasks, submissions, evaluations, AI snapshots/outcomes, and
+              schedules durable storage cleanup. Only a deletion audit record survives.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 py-2">
+            <Label htmlFor="delete-project-confirm-input">
+              Type <span className="font-mono font-semibold">{currentProjectId}</span> or{" "}
+              <span className="font-mono font-semibold">DELETE {currentProjectId}</span> to confirm:
+            </Label>
+            <Input
+              id="delete-project-confirm-input"
+              value={deleteConfirmText}
+              onChange={(e) => setDeleteConfirmText(e.target.value)}
+              placeholder={`DELETE ${currentProjectId}`}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsDeleteDialogOpen(false)} disabled={isDeletingProject}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleDeleteProject} disabled={isDeletingProject}>
+              {isDeletingProject ? "Deleting..." : "Confirm Permanent Delete"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

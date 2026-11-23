@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./helpers/isolated-test";
 import { setupWorkspaceMocks, DEFAULT_MOCK_USER } from "./helpers/mock-setup";
 
 test.describe("Phase 5: Meeting Recording Playback & Custom Dialogs E2E (TC201 - TC207)", () => {
@@ -7,7 +7,7 @@ test.describe("Phase 5: Meeting Recording Playback & Custom Dialogs E2E (TC201 -
   });
 
   // --- TC201: Completed meeting displays "Xem video ghi hình" button & REC badge ---
-  test("TC201: Completed meeting displays watch recording button and REC badge in History tab", async ({ page }) => {
+  test("TC201: Completed meeting displays watch recording button and saved-file badge in History tab", async ({ page }) => {
     const mockEndedMeeting = {
       id: 234,
       projectId: 100,
@@ -20,12 +20,13 @@ test.describe("Phase 5: Meeting Recording Playback & Custom Dialogs E2E (TC201 -
       hostName: DEFAULT_MOCK_USER.fullName,
       hostId: DEFAULT_MOCK_USER.id,
       recordingEnabled: true,
+      recordingFileId: 777,
       activeParticipantsCount: 0,
       totalParticipantsCount: 3,
       isHost: true,
     };
 
-    await setupWorkspaceMocks(page, { initialMeetings: [mockEndedMeeting] });
+    await setupWorkspaceMocks(page, { language: "vi", initialMeetings: [mockEndedMeeting] });
     await page.goto("/projects/100/meetings");
     await page.waitForLoadState("domcontentloaded");
 
@@ -37,7 +38,7 @@ test.describe("Phase 5: Meeting Recording Playback & Custom Dialogs E2E (TC201 -
 
     const meetingCard = page.locator('[data-testid="meeting-card-234"]');
     await expect(meetingCard).toBeVisible({ timeout: 10000 });
-    await expect(meetingCard).toContainText("REC");
+    await expect(meetingCard).toContainText("Có bản ghi");
 
     const watchBtn = page.locator('[data-testid="watch-recording-btn-234"]');
     await expect(watchBtn).toBeVisible();
@@ -58,12 +59,13 @@ test.describe("Phase 5: Meeting Recording Playback & Custom Dialogs E2E (TC201 -
       hostName: DEFAULT_MOCK_USER.fullName,
       hostId: DEFAULT_MOCK_USER.id,
       recordingEnabled: true,
+      recordingFileId: 777,
       activeParticipantsCount: 0,
       totalParticipantsCount: 3,
       isHost: true,
     };
 
-    await setupWorkspaceMocks(page, { initialMeetings: [mockEndedMeeting] });
+    await setupWorkspaceMocks(page, { language: "vi", initialMeetings: [mockEndedMeeting] });
     await page.goto("/projects/100/meetings");
     await page.waitForLoadState("domcontentloaded");
 
@@ -80,44 +82,20 @@ test.describe("Phase 5: Meeting Recording Playback & Custom Dialogs E2E (TC201 -
     await expect(downloadBtn).toContainText("Tải video");
   });
 
-  // --- TC203: Video player loads authentic sample recording webm ---
-  test("TC203: Video player loads authentic HD recording with sample badge", async ({ page }) => {
-    const mockEndedMeeting = {
-      id: 234,
-      projectId: 100,
-      title: "Sprint 14 Sync & Demo",
-      status: "ENDED",
-      roomName: "room-234",
-      startedAt: new Date(Date.now() - 1800000).toISOString(),
-      endedAt: new Date().toISOString(),
-      durationSeconds: 120,
-      hostName: DEFAULT_MOCK_USER.fullName,
-      hostId: DEFAULT_MOCK_USER.id,
-      recordingEnabled: true,
-      activeParticipantsCount: 0,
-      totalParticipantsCount: 3,
-      isHost: true,
-    };
-
-    await setupWorkspaceMocks(page, { initialMeetings: [mockEndedMeeting] });
+  test("TC203: an old enabled flag without a real file does not show a sample or ready player", async ({ page }) => {
+    const requests: string[] = [];
+    page.on("request", (request) => requests.push(request.url()));
+    await setupWorkspaceMocks(page, { language: "vi", initialMeetings: [{
+      id: 234, projectId: 100, title: "No actual recording", status: "ENDED",
+      roomName: "room-234", startedAt: new Date().toISOString(),
+      hostName: DEFAULT_MOCK_USER.fullName, hostId: DEFAULT_MOCK_USER.id,
+      recordingEnabled: true, activeParticipantsCount: 0, totalParticipantsCount: 1, isHost: true,
+    }] });
     await page.goto("/projects/100/meetings");
-    await page.waitForLoadState("domcontentloaded");
-
-    const watchBtn = page.locator('[data-testid="watch-recording-btn-234"]');
-    await expect(watchBtn).toBeVisible({ timeout: 10000 });
-    await watchBtn.click();
-
-    const video = page.locator('[data-testid="recording-video-player"]');
-    await expect(video).toBeVisible({ timeout: 10000 });
-
-    // Check video source contains sample recording or valid url
-    const src = await video.getAttribute("src");
-    expect(src).toBeTruthy();
-    expect(src).toMatch(/(sample-meeting-recording\.webm|blob:)/);
-
-    // Verify sample badge is displayed
-    const sampleBadge = page.locator('[data-testid="recording-sample-badge"]');
-    await expect(sampleBadge).toBeVisible();
+    await page.getByTestId("watch-recording-btn-234").click();
+    await expect(page.getByTestId("recording-unavailable")).toBeVisible();
+    await expect(page.getByTestId("recording-video-player")).toHaveCount(0);
+    expect(requests.some((url) => url.includes("sample-meeting-recording.webm"))).toBe(false);
   });
 
   // --- TC204: Video download triggers .webm file download ---
@@ -134,12 +112,13 @@ test.describe("Phase 5: Meeting Recording Playback & Custom Dialogs E2E (TC201 -
       hostName: DEFAULT_MOCK_USER.fullName,
       hostId: DEFAULT_MOCK_USER.id,
       recordingEnabled: true,
+      recordingFileId: 777,
       activeParticipantsCount: 0,
       totalParticipantsCount: 3,
       isHost: true,
     };
 
-    await setupWorkspaceMocks(page, { initialMeetings: [mockEndedMeeting] });
+    await setupWorkspaceMocks(page, { language: "vi", initialMeetings: [mockEndedMeeting] });
     await page.goto("/projects/100/meetings");
     await page.waitForLoadState("domcontentloaded");
 
@@ -181,7 +160,7 @@ test.describe("Phase 5: Meeting Recording Playback & Custom Dialogs E2E (TC201 -
       nativeDialogFired = true;
     });
 
-    await setupWorkspaceMocks(page, { initialMeetings: [mockActiveMeeting] });
+    await setupWorkspaceMocks(page, { language: "vi", initialMeetings: [mockActiveMeeting] });
     await page.goto("/projects/100/meetings");
     await page.waitForLoadState("domcontentloaded");
 
@@ -236,7 +215,7 @@ test.describe("Phase 5: Meeting Recording Playback & Custom Dialogs E2E (TC201 -
       isHost: true,
     };
 
-    await setupWorkspaceMocks(page, { initialMeetings: [mockActiveMeeting] });
+    await setupWorkspaceMocks(page, { language: "vi", initialMeetings: [mockActiveMeeting] });
     await page.goto("/projects/100/meetings");
     await page.waitForLoadState("domcontentloaded");
 
@@ -264,12 +243,13 @@ test.describe("Phase 5: Meeting Recording Playback & Custom Dialogs E2E (TC201 -
       hostName: DEFAULT_MOCK_USER.fullName,
       hostId: DEFAULT_MOCK_USER.id,
       recordingEnabled: true,
+      recordingFileId: 777,
       activeParticipantsCount: 0,
       totalParticipantsCount: 3,
       isHost: true,
     };
 
-    await setupWorkspaceMocks(page, { initialMeetings: [mockEndedMeeting] });
+    await setupWorkspaceMocks(page, { language: "vi", initialMeetings: [mockEndedMeeting] });
     await page.goto("/projects/100/meetings");
     await page.waitForLoadState("domcontentloaded");
 

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Clock,
@@ -17,6 +17,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { meetingService } from "@/services/meeting.service";
+import { localDayKey, parseLocalDayKey } from "@/lib/calendarDay";
+import { formatInstantToProjectDateInput, formatTaskDateDisplay } from "@/lib/projectTaskDate";
 import { ScheduleMeetingDialog } from "./ScheduleMeetingDialog";
 import { LiveMeetingRoom } from "@/components/meetings/LiveMeetingRoom";
 import type { ProjectMeetingDto } from "@/types/meeting";
@@ -25,6 +27,7 @@ import type { ProjectMember } from "@/types/project";
 
 interface ProjectCalendarTabProps {
   projectId: number;
+  projectTimezoneId?: string;
   projectMembers?: ProjectMember[];
   tasks?: TaskDto[];
   currentUserId?: number | null;
@@ -36,6 +39,7 @@ type CalendarViewMode = "AGENDA" | "MONTH" | "WEEK";
 
 export function ProjectCalendarTab({
   projectId,
+  projectTimezoneId,
   projectMembers = [],
   tasks = [],
   currentUserId,
@@ -43,54 +47,136 @@ export function ProjectCalendarTab({
   hideTitle = false,
 }: ProjectCalendarTabProps) {
   const { t, i18n } = useTranslation();
-  const [meetings, setMeetings] = useState<ProjectMeetingDto[]>([]);
+  const [meetingsState, setMeetingsState] = useState<{
+    projectId: number;
+    items: ProjectMeetingDto[];
+  }>({ projectId, items: [] });
   const [viewMode, setViewMode] = useState<CalendarViewMode>("AGENDA");
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [isScheduleOpen, setIsScheduleOpen] = useState(false);
-  const [joinedMeetingId, setJoinedMeetingId] = useState<number | null>(null);
+  const [joinedMeetingState, setJoinedMeetingState] = useState<{
+    projectId: number;
+    meetingId: number;
+  } | null>(null);
+  const meetingsRequestSeqRef = useRef(0);
+  const activeProjectIdRef = useRef(projectId);
+
+  const meetings = useMemo(
+    () => (meetingsState.projectId === projectId ? meetingsState.items : []),
+    [meetingsState, projectId],
+  );
+  const joinedMeetingId =
+    joinedMeetingState?.projectId === projectId ? joinedMeetingState.meetingId : null;
+
+  useEffect(() => {
+    activeProjectIdRef.current = projectId;
+  }, [projectId]);
 
   // Filters
   const [showMeetings, setShowMeetings] = useState(true);
   const [showTasks, setShowTasks] = useState(true);
 
-  // Load meetings
-  const loadMeetings = async () => {
-    try {
-      const data = await meetingService.getMeetings(projectId);
-      setMeetings(data);
-    } catch (err) {
-      console.warn("Failed to load meetings for calendar", err);
-    }
-  };
+  // Load meetings with cancellation & stale-response protection
+  const fetchProjectMeetings = useCallback(
+    async (targetProjectId: number, isCancelled?: () => boolean) => {
+      const seq = ++meetingsRequestSeqRef.current;
+      try {
+        const data = await meetingService.getMeetings(targetProjectId);
+        if (
+          isCancelled?.() ||
+          activeProjectIdRef.current !== targetProjectId ||
+          meetingsRequestSeqRef.current !== seq
+        ) {
+          return;
+        }
+        setMeetingsState({
+          projectId: targetProjectId,
+          items: Array.isArray(data) ? data : [],
+        });
+      } catch (err) {
+        if (
+          isCancelled?.() ||
+          activeProjectIdRef.current !== targetProjectId ||
+          meetingsRequestSeqRef.current !== seq
+        ) {
+          return;
+        }
+        console.warn("Failed to load meetings for calendar", err);
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
-    void loadMeetings();
-  }, [projectId]);
+    let cancelled = false;
+    async function run() {
+      await fetchProjectMeetings(projectId, () => cancelled);
+    }
+    void run();
+    return () => {
+      cancelled = true;
+      meetingsRequestSeqRef.current += 1;
+    };
+  }, [projectId, fetchProjectMeetings]);
 
-  // Date utilities
-  const todayStr = useMemo(() => new Date().toISOString().split("T")[0], []);
+  // Local calendar day keys
+  const todayStr = localDayKey(new Date());
   const selectedDateStr = useMemo(
-    () => selectedDate.toISOString().split("T")[0],
-    [selectedDate]
+    () => localDayKey(selectedDate),
+    [selectedDate],
   );
+
+  // Group meetings & tasks consistently by local calendar day key
+  const meetingsByDay = useMemo(() => {
+    const grouped = new Map<string, ProjectMeetingDto[]>();
+    for (const meeting of meetings) {
+      const key = localDayKey(meeting.scheduledStartTime || meeting.startedAt);
+      if (!key) continue;
+      const bucket = grouped.get(key);
+      if (bucket) {
+        bucket.push(meeting);
+      } else {
+        grouped.set(key, [meeting]);
+      }
+    }
+    return grouped;
+  }, [meetings]);
+
+  const { tasksByDay, taskTimezoneError } = useMemo(() => {
+    const grouped = new Map<string, TaskDto[]>();
+    let firstZoneError: string | null = null;
+    for (const task of tasks) {
+      if (!task.dueDate) continue;
+      let key = "";
+      try {
+        key = formatInstantToProjectDateInput(task.dueDate, task.projectTimezoneId || projectTimezoneId);
+      } catch (err) {
+        if (!firstZoneError) {
+          firstZoneError = err instanceof Error ? err.message : "Unsupported project timezone";
+        }
+        continue;
+      }
+      if (!key) continue;
+      const bucket = grouped.get(key);
+      if (bucket) {
+        bucket.push(task);
+      } else {
+        grouped.set(key, [task]);
+      }
+    }
+    return { tasksByDay: grouped, taskTimezoneError: firstZoneError };
+  }, [tasks, projectTimezoneId]);
 
   // Filter items for selected date (Agenda / Day)
   const dayMeetings = useMemo(() => {
-    if (!showMeetings) return [];
-    return meetings.filter((m) => {
-      const targetTime = m.scheduledStartTime || m.startedAt;
-      if (!targetTime) return false;
-      return targetTime.startsWith(selectedDateStr);
-    });
-  }, [meetings, selectedDateStr, showMeetings]);
+    if (!showMeetings || !selectedDateStr) return [];
+    return meetingsByDay.get(selectedDateStr) ?? [];
+  }, [meetingsByDay, selectedDateStr, showMeetings]);
 
   const dayTasks = useMemo(() => {
-    if (!showTasks) return [];
-    return tasks.filter((t) => {
-      if (!t.dueDate) return false;
-      return t.dueDate.startsWith(selectedDateStr);
-    });
-  }, [tasks, selectedDateStr, showTasks]);
+    if (!showTasks || !selectedDateStr) return [];
+    return tasksByDay.get(selectedDateStr) ?? [];
+  }, [tasksByDay, selectedDateStr, showTasks]);
 
   // Month grid computation
   const monthData = useMemo(() => {
@@ -127,14 +213,19 @@ export function ProjectCalendarTab({
   };
 
   const handleSelectDay = (dateStr: string) => {
-    setSelectedDate(new Date(dateStr));
+    const parsed = parseLocalDayKey(dateStr);
+    if (!parsed) return;
+    setSelectedDate(parsed);
     setViewMode("AGENDA");
   };
 
   const handleMeetingCreated = (newMeeting: ProjectMeetingDto, autoJoin?: boolean) => {
-    setMeetings((prev) => [newMeeting, ...prev]);
+    setMeetingsState((prev) => ({
+      projectId,
+      items: [newMeeting, ...(prev.projectId === projectId ? prev.items : [])],
+    }));
     if (autoJoin) {
-      setJoinedMeetingId(newMeeting.id);
+      setJoinedMeetingState({ projectId, meetingId: newMeeting.id });
     }
   };
 
@@ -145,12 +236,12 @@ export function ProjectCalendarTab({
         meetingId={joinedMeetingId}
         currentUserId={currentUserId ?? 0}
         onLeave={() => {
-          setJoinedMeetingId(null);
-          void loadMeetings();
+          setJoinedMeetingState(null);
+          void fetchProjectMeetings(projectId);
         }}
         onEndMeeting={() => {
-          setJoinedMeetingId(null);
-          void loadMeetings();
+          setJoinedMeetingState(null);
+          void fetchProjectMeetings(projectId);
         }}
       />
     );
@@ -160,6 +251,14 @@ export function ProjectCalendarTab({
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto pb-10" data-testid="project-calendar-tab">
+      {taskTimezoneError && (
+        <div
+          role="alert"
+          className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive"
+        >
+          {taskTimezoneError}
+        </div>
+      )}
       {/* 1. Header Toolbar (Teams & Outlook layout) */}
       {!hideTitle ? (
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-border/60">
@@ -186,11 +285,10 @@ export function ProjectCalendarTab({
               <button
                 type="button"
                 onClick={() => setViewMode("AGENDA")}
-                className={`px-3 py-1.5 rounded-md transition-all ${
-                  viewMode === "AGENDA"
-                    ? "bg-card text-foreground shadow-xs font-semibold"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
+                className={`px-3 py-1.5 rounded-md transition-all ${viewMode === "AGENDA"
+                  ? "bg-card text-foreground shadow-xs font-semibold"
+                  : "text-muted-foreground hover:text-foreground"
+                  }`}
                 data-testid="calendar-agenda-view-btn"
               >
                 {t("calendar.view_agenda", { defaultValue: "Hôm nay / Lịch trình" })}
@@ -198,11 +296,10 @@ export function ProjectCalendarTab({
               <button
                 type="button"
                 onClick={() => setViewMode("MONTH")}
-                className={`px-3 py-1.5 rounded-md transition-all ${
-                  viewMode === "MONTH"
-                    ? "bg-card text-foreground shadow-xs font-semibold"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
+                className={`px-3 py-1.5 rounded-md transition-all ${viewMode === "MONTH"
+                  ? "bg-card text-foreground shadow-xs font-semibold"
+                  : "text-muted-foreground hover:text-foreground"
+                  }`}
                 data-testid="calendar-month-view-btn"
               >
                 {t("calendar.view_month", { defaultValue: "Tháng" })}
@@ -226,11 +323,10 @@ export function ProjectCalendarTab({
             <button
               type="button"
               onClick={() => setViewMode("AGENDA")}
-              className={`px-3 py-1.5 rounded-md transition-all ${
-                viewMode === "AGENDA"
-                  ? "bg-card text-foreground shadow-xs font-semibold"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
+              className={`px-3 py-1.5 rounded-md transition-all ${viewMode === "AGENDA"
+                ? "bg-card text-foreground shadow-xs font-semibold"
+                : "text-muted-foreground hover:text-foreground"
+                }`}
               data-testid="calendar-agenda-view-btn"
             >
               {t("calendar.view_agenda", { defaultValue: "Hôm nay / Lịch trình" })}
@@ -238,11 +334,10 @@ export function ProjectCalendarTab({
             <button
               type="button"
               onClick={() => setViewMode("MONTH")}
-              className={`px-3 py-1.5 rounded-md transition-all ${
-                viewMode === "MONTH"
-                  ? "bg-card text-foreground shadow-xs font-semibold"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
+              className={`px-3 py-1.5 rounded-md transition-all ${viewMode === "MONTH"
+                ? "bg-card text-foreground shadow-xs font-semibold"
+                : "text-muted-foreground hover:text-foreground"
+                }`}
               data-testid="calendar-month-view-btn"
             >
               {t("calendar.view_month", { defaultValue: "Tháng" })}
@@ -376,20 +471,20 @@ export function ProjectCalendarTab({
                 {dayMeetings.map((m) => {
                   const isActive = m.status === "ACTIVE";
                   const isScheduled = m.status === "SCHEDULED";
-                  const timeDisplay = m.scheduledStartTime
-                    ? new Date(m.scheduledStartTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-                    : m.startedAt
-                    ? new Date(m.startedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-                    : t("calendar.flexible", { defaultValue: "Linh hoạt" });
+                  const rawTime = m.scheduledStartTime || m.startedAt;
+                  const parsedTime = rawTime ? new Date(rawTime) : null;
+                  const timeDisplay =
+                    parsedTime && !Number.isNaN(parsedTime.getTime())
+                      ? parsedTime.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+                      : t("calendar.flexible", { defaultValue: "Linh hoạt" });
 
                   return (
                     <Card
                       key={`meet-${m.id}`}
-                      className={`overflow-hidden border transition-all ${
-                        isActive
-                          ? "border-emerald-500/60 bg-emerald-500/5 shadow-sm"
-                          : "border-border/80 bg-card hover:border-primary/40"
-                      }`}
+                      className={`overflow-hidden border transition-all ${isActive
+                        ? "border-emerald-500/60 bg-emerald-500/5 shadow-sm"
+                        : "border-border/80 bg-card hover:border-primary/40"
+                        }`}
                       data-testid={`calendar-meeting-card-${m.id}`}
                     >
                       <CardContent className="p-4 flex items-center justify-between gap-4">
@@ -397,27 +492,28 @@ export function ProjectCalendarTab({
                           <div className="flex items-center gap-2 flex-wrap">
                             <Badge
                               variant="outline"
-                              className={`text-[10px] font-medium gap-1 px-2 ${
-                                isActive
-                                  ? "bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
-                                  : isScheduled
+                              className={`text-[10px] font-medium gap-1 px-2 ${isActive
+                                ? "bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
+                                : isScheduled
                                   ? "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30"
                                   : "bg-muted text-muted-foreground border-border"
-                              }`}
+                                }`}
                             >
                               <Video className="w-3 h-3" />
                               {isActive
                                 ? t("calendar.meeting_status_active", { defaultValue: "Đang diễn ra" })
                                 : isScheduled
-                                ? t("calendar.meeting_status_scheduled", { defaultValue: "Đã lên lịch" })
-                                : t("calendar.meeting_status_ended", { defaultValue: "Đã kết thúc" })}
+                                  ? t("calendar.meeting_status_scheduled", { defaultValue: "Đã lên lịch" })
+                                  : m.status === "ENDING"
+                                    ? t("meetings.meeting_closing", { defaultValue: "Đang đóng phòng họp" })
+                                    : t("calendar.meeting_status_ended", { defaultValue: "Đã kết thúc" })}
                             </Badge>
                             <span className="text-xs font-mono font-semibold text-muted-foreground">
                               {timeDisplay}
                             </span>
-                            {m.recordingEnabled && (
-                              <Badge variant="outline" className="text-[10px] text-red-500 border-red-500/30 py-0">
-                                REC
+                            {m.recordingFileId != null && (
+                              <Badge variant="outline" className="text-[10px] py-0">
+                                {t("meetings.recording_available", { defaultValue: "Có bản ghi" })}
                               </Badge>
                             )}
                           </div>
@@ -440,7 +536,7 @@ export function ProjectCalendarTab({
                         <div>
                           <Button
                             size="sm"
-                            onClick={() => setJoinedMeetingId(m.id)}
+                            onClick={() => setJoinedMeetingState({ projectId, meetingId: m.id })}
                             className={
                               isActive
                                 ? "bg-emerald-600 hover:bg-emerald-500 text-white gap-1.5 text-xs font-medium"
@@ -484,10 +580,15 @@ export function ProjectCalendarTab({
                           {task.title}
                         </h4>
                       </div>
-                      <div className="text-right">
-                        <span className="text-[11px] text-amber-800 dark:text-amber-300 font-medium flex items-center gap-1">
+                      <div className="text-right space-y-0.5">
+                        <span className="text-[11px] text-amber-800 dark:text-amber-300 font-medium flex items-center justify-end gap-1">
                           <AlertCircle className="w-3 h-3" />
-                          {t("calendar.due_today", { defaultValue: "Hạn chót hôm nay" })}
+                          {task.dueDate
+                            ? formatTaskDateDisplay(task.dueDate, task.projectTimezoneId || projectTimezoneId)
+                            : t("calendar.due_today", { defaultValue: "Hạn chót hôm nay" })}
+                        </span>
+                        <span className="block text-[10px] text-muted-foreground font-mono">
+                          {task.projectTimezoneId || projectTimezoneId || "Asia/Ho_Chi_Minh"}
                         </span>
                       </div>
                     </CardContent>
@@ -526,40 +627,38 @@ export function ProjectCalendarTab({
                     const isToday = d.dateStr === todayStr;
 
                     // Has items?
-                    const hasMeet = meetings.some((m) =>
-                      (m.scheduledStartTime || m.startedAt || "").startsWith(d.dateStr)
-                    );
-                    const hasTask = tasks.some((t) =>
-                      (t.dueDate || "").startsWith(d.dateStr)
-                    );
+                    const hasMeet = (meetingsByDay.get(d.dateStr)?.length ?? 0) > 0;
+                    const hasTask = (tasksByDay.get(d.dateStr)?.length ?? 0) > 0;
 
                     return (
                       <button
                         key={d.dateStr}
                         type="button"
-                        onClick={() => setSelectedDate(new Date(d.dateStr))}
-                        className={`h-7 rounded-md flex flex-col items-center justify-center relative transition-all ${
-                          isSelected
-                            ? "bg-primary text-primary-foreground font-bold shadow-xs"
-                            : isToday
+                        onClick={() => {
+                          const parsed = parseLocalDayKey(d.dateStr);
+                          if (parsed) {
+                            setSelectedDate(parsed);
+                          }
+                        }}
+                        className={`h-7 rounded-md flex flex-col items-center justify-center relative transition-all ${isSelected
+                          ? "bg-primary text-primary-foreground font-bold shadow-xs"
+                          : isToday
                             ? "border border-primary text-primary font-semibold"
                             : "hover:bg-muted text-foreground"
-                        }`}
+                          }`}
                       >
                         <span>{d.day}</span>
                         <div className="flex gap-0.5 mt-0.5">
                           {hasMeet && (
                             <span
-                              className={`w-1 h-1 rounded-full ${
-                                isSelected ? "bg-white" : "bg-emerald-500"
-                              }`}
+                              className={`w-1 h-1 rounded-full ${isSelected ? "bg-white" : "bg-emerald-500"
+                                }`}
                             />
                           )}
                           {hasTask && (
                             <span
-                              className={`w-1 h-1 rounded-full ${
-                                isSelected ? "bg-white" : "bg-amber-500"
-                              }`}
+                              className={`w-1 h-1 rounded-full ${isSelected ? "bg-white" : "bg-amber-500"
+                                }`}
                             />
                           )}
                         </div>
@@ -621,31 +720,25 @@ export function ProjectCalendarTab({
               const isSelected = d.dateStr === selectedDateStr;
 
               // Items for this day
-              const dayMeets = meetings.filter((m) =>
-                (m.scheduledStartTime || m.startedAt || "").startsWith(d.dateStr)
-              );
-              const dayTs = tasks.filter((t) =>
-                (t.dueDate || "").startsWith(d.dateStr)
-              );
+              const dayMeets = meetingsByDay.get(d.dateStr) ?? [];
+              const dayTs = tasksByDay.get(d.dateStr) ?? [];
 
               return (
                 <div
                   key={d.dateStr}
                   onClick={() => handleSelectDay(d.dateStr)}
-                  className={`min-h-[110px] p-2 flex flex-col justify-between cursor-pointer transition-colors ${
-                    isSelected
-                      ? "bg-primary/5 ring-1 ring-primary/40 inset-0"
-                      : "hover:bg-muted/30 bg-card"
-                  }`}
+                  className={`min-h-[110px] p-2 flex flex-col justify-between cursor-pointer transition-colors ${isSelected
+                    ? "bg-primary/5 ring-1 ring-primary/40 inset-0"
+                    : "hover:bg-muted/30 bg-card"
+                    }`}
                   data-testid={`calendar-cell-${d.dateStr}`}
                 >
                   <div className="flex items-center justify-between mb-1">
                     <span
-                      className={`text-xs font-semibold inline-flex items-center justify-center w-6 h-6 rounded-full ${
-                        isToday
-                          ? "bg-primary text-primary-foreground font-bold shadow-xs"
-                          : "text-foreground"
-                      }`}
+                      className={`text-xs font-semibold inline-flex items-center justify-center w-6 h-6 rounded-full ${isToday
+                        ? "bg-primary text-primary-foreground font-bold shadow-xs"
+                        : "text-foreground"
+                        }`}
                     >
                       {d.day}
                     </span>

@@ -9,6 +9,7 @@ import { meetingService } from "@/services/meeting.service";
 import ProjectWorkspacePage from "@/pages/ProjectWorkspacePage";
 import { Routes, Route } from "react-router-dom";
 import { ConfirmProvider } from "@/components/ui/confirm-dialog";
+import { isSupportedProjectTimezone } from "@/lib/projectTaskDate";
 
 // Mocks
 (globalThis as any).ResizeObserver = class ResizeObserver {
@@ -33,7 +34,8 @@ vi.mock("@/services/project.service", () => ({
     getProjectSummary: vi.fn().mockResolvedValue({
       data: {
         totalTasks: 10,
-        completedTasks: 5,
+        doneTasks: 5,
+        reviewTasks: 0,
         inProgressTasks: 3,
         todoTasks: 2,
       },
@@ -71,6 +73,18 @@ vi.mock("@/services/meeting.service", () => ({
   },
 }));
 
+function resolveRuntimeProjectTimezone(): string {
+  const runtimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  return isSupportedProjectTimezone(runtimeZone) ? runtimeZone : "UTC";
+}
+
+const TEST_PROJECT_TIMEZONE = resolveRuntimeProjectTimezone();
+
+function todayAtLocalTime(hour: number, minute = 0): string {
+  const now = new Date();
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate(), hour, minute).toISOString();
+}
+
 const mockMeetings: any[] = [
   {
     id: 1,
@@ -84,8 +98,8 @@ const mockMeetings: any[] = [
     maxParticipants: 50,
     isRecording: false,
     startedAt: "",
-    scheduledStartTime: new Date().toISOString().split("T")[0] + "T10:00:00Z",
-    scheduledEndTime: new Date().toISOString().split("T")[0] + "T11:00:00Z",
+    scheduledStartTime: todayAtLocalTime(10),
+    scheduledEndTime: todayAtLocalTime(11),
     createdAt: new Date().toISOString(),
     isHost: false,
   },
@@ -101,8 +115,8 @@ const mockMeetings: any[] = [
     maxParticipants: 50,
     isRecording: false,
     startedAt: new Date().toISOString(),
-    scheduledStartTime: new Date().toISOString().split("T")[0] + "T09:00:00Z",
-    scheduledEndTime: new Date().toISOString().split("T")[0] + "T09:30:00Z",
+    scheduledStartTime: todayAtLocalTime(9),
+    scheduledEndTime: todayAtLocalTime(9, 30),
     createdAt: new Date().toISOString(),
     isHost: false,
   },
@@ -114,7 +128,8 @@ const mockTasks: any[] = [
     title: "Integrate Teams Calendar API",
     status: "IN_PROGRESS",
     priority: "HIGH",
-    dueDate: new Date().toISOString().split("T")[0] + "T18:00:00Z",
+    dueDate: todayAtLocalTime(18),
+    projectTimezoneId: TEST_PROJECT_TIMEZONE,
     assigneeId: 1,
     position: 1,
   },
@@ -166,6 +181,7 @@ describe("Calendar & Teams/Outlook Scheduling", () => {
       render(
         <ProjectCalendarTab
           projectId={100}
+          projectTimezoneId={TEST_PROJECT_TIMEZONE}
           tasks={mockTasks}
           currentUserId={1}
         />
@@ -176,7 +192,7 @@ describe("Calendar & Teams/Outlook Scheduling", () => {
       });
 
       // Meeting check
-      expect(screen.getByText("Sprint Planning & Outlook Sync")).toBeInTheDocument();
+      expect(await screen.findByText("Sprint Planning & Outlook Sync")).toBeInTheDocument();
       // Task check
       expect(screen.getByText("Integrate Teams Calendar API")).toBeInTheDocument();
 

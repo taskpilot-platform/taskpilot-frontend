@@ -29,9 +29,10 @@ import {
 } from "@/components/ui/table";
 import { usePaginatedSplitView } from "@/hooks/usePaginatedSplitView";
 import { getApiErrorMessage } from "@/lib/http";
-import { adminUserService } from "@/services/admin.service";
+import { adminProjectRecoveryService, adminUserService } from "@/services/admin.service";
 import { profileService } from "@/services/profile.service";
-import type { AdminUserResponse } from "@/types/admin";
+import type { AdminUserResponse, ProjectAttentionItem } from "@/types/admin";
+import type { UserProfile } from "@/types/user";
 
 export default function AdminUsersPage() {
   const { t } = useTranslation();
@@ -61,7 +62,11 @@ export default function AdminUsersPage() {
     onError: (error) => toast.error(getApiErrorMessage(error)),
   });
 
-  const [myProfile, setMyProfile] = useState<any | null>(null);
+  const [myProfile, setMyProfile] = useState<UserProfile | null>(null);
+  const [attentionProjects, setAttentionProjects] = useState<ProjectAttentionItem[]>([]);
+  const [transferTargets, setTransferTargets] = useState<Record<number, number>>({});
+  const [transferReasons, setTransferReasons] = useState<Record<number, string>>({});
+  const [suspendReason, setSuspendReason] = useState("");
 
   // Edit form state
   const [editRole, setEditRole] = useState<string>("USER");
@@ -73,8 +78,18 @@ export default function AdminUsersPage() {
   const [createFullName, setCreateFullName] = useState("");
   const [createRole, setCreateRole] = useState("USER");
 
+  const loadAttentionProjects = async () => {
+    try {
+      const res = await adminProjectRecoveryService.listAttentionRequired();
+      setAttentionProjects(res.data || []);
+    } catch {
+      // Non-fatal if empty or transient
+    }
+  };
+
   useEffect(() => {
     void loadUsersList(0, pageSize, keyword);
+    void loadAttentionProjects();
     const loadMyProfile = async () => {
       try {
         const res = await profileService.getMe();
@@ -143,9 +158,46 @@ export default function AdminUsersPage() {
     if (!selectedUserId) { toast.error(t("admin.detail_empty")); return; }
     setIsMutating(true);
     try {
-      await adminUserService.deactivateUser(selectedUserId);
+      await adminUserService.suspendUser(selectedUserId, suspendReason || undefined);
+      setSuspendReason("");
       toast.success(t("admin.deactivate_success"));
+      await Promise.all([loadUsersList(), loadAttentionProjects()]);
+    } catch (error) {
+      toast.error(getApiErrorMessage(error));
+    } finally {
+      setIsMutating(false);
+    }
+  };
+
+  const handleReactivateUser = async () => {
+    if (!selectedUserId) { toast.error(t("admin.detail_empty")); return; }
+    setIsMutating(true);
+    try {
+      await adminUserService.reactivateUser(selectedUserId, suspendReason || undefined);
+      setSuspendReason("");
+      toast.success(t("admin.p2.reactivate_success", { defaultValue: "User reactivated successfully" }));
       await loadUsersList();
+    } catch (error) {
+      toast.error(getApiErrorMessage(error));
+    } finally {
+      setIsMutating(false);
+    }
+  };
+
+  const handleTransferManager = async (projectId: number, defaultTargetId?: number) => {
+    const targetUserId = transferTargets[projectId] ?? defaultTargetId;
+    if (!targetUserId) {
+      toast.error(t("admin.p2.select_manager_target", { defaultValue: "Select an eligible active member first." }));
+      return;
+    }
+    setIsMutating(true);
+    try {
+      await adminProjectRecoveryService.transferManager(projectId, {
+        targetUserId,
+        reason: transferReasons[projectId]?.trim() || "Admin manager transfer",
+      });
+      toast.success(t("admin.p2.transfer_success", { defaultValue: "Project manager transferred!" }));
+      await loadAttentionProjects();
     } catch (error) {
       toast.error(getApiErrorMessage(error));
     } finally {
@@ -279,9 +331,22 @@ export default function AdminUsersPage() {
                             </Badge>
                           </TableCell>
                           <TableCell>
-                            <Badge variant={user.status === "AVAILABLE" ? "outline" : "destructive"}>
-                              {user.status}
-                            </Badge>
+                            <div className="flex flex-wrap items-center gap-1">
+                              <Badge
+                                variant={
+                                  (user.accountState ?? "ACTIVE") === "ACTIVE"
+                                    ? "outline"
+                                    : "destructive"
+                                }
+                              >
+                                {user.accountState ?? user.status}
+                              </Badge>
+                              {user.availability && (user.accountState ?? "ACTIVE") === "ACTIVE" && (
+                                <Badge variant="secondary" className="text-[11px]">
+                                  {user.availability}
+                                </Badge>
+                              )}
+                            </div>
                           </TableCell>
                         </TableRow>
                       ))
@@ -438,7 +503,7 @@ export default function AdminUsersPage() {
                           >
                             <option value="AVAILABLE">AVAILABLE</option>
                             <option value="BUSY">BUSY</option>
-                            <option value="DEACTIVATED">DEACTIVATED</option>
+                            <option value="OOO">OOO</option>
                           </select>
                         </div>
 
@@ -462,6 +527,29 @@ export default function AdminUsersPage() {
                       </form>
 
                       <div className="flex flex-col gap-2">
+                        <div className="rounded-md border bg-muted/30 p-2.5 text-xs space-y-1">
+                          <div>
+                            <span className="text-muted-foreground">Lifecycle: </span>
+                            <span className="font-mono font-medium">{selectedUser.accountState ?? "ACTIVE"}</span>
+                          </div>
+                          <div>
+                            <span className="text-muted-foreground">Email verified: </span>
+                            <span className="font-mono font-medium">{selectedUser.emailVerified ? "true" : "false"}</span>
+                          </div>
+                          {selectedUser.legacyReviewRequired && (
+                            <div className="text-amber-600 dark:text-amber-400 font-medium">
+                              Legacy review required before reactivation
+                            </div>
+                          )}
+                        </div>
+                        <Input
+                          placeholder={t("admin.p2.lifecycle_reason_placeholder", {
+                            defaultValue: "Reason for suspend/reactivate audit",
+                          })}
+                          value={suspendReason}
+                          onChange={(e) => setSuspendReason(e.target.value)}
+                          disabled={selectedUserId === myProfile?.id}
+                        />
                         <Button
                           type="button"
                           className="w-full gap-2"
@@ -472,16 +560,33 @@ export default function AdminUsersPage() {
                           <Key className="h-4 w-4" />
                           {t("admin.reset_pw_btn")}
                         </Button>
-                        <Button
-                          type="button"
-                          className="w-full gap-2"
-                          variant="destructive"
-                          disabled={isMutating || selectedUser.status === "DEACTIVATED" || selectedUserId === myProfile?.id}
-                          onClick={() => void handleDeactivateUser()}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                          {t("admin.deactivate_btn")}
-                        </Button>
+                        {(selectedUser.accountState ?? "ACTIVE") === "ACTIVE" ? (
+                          <Button
+                            type="button"
+                            className="w-full gap-2"
+                            variant="destructive"
+                            disabled={isMutating || selectedUserId === myProfile?.id}
+                            onClick={() => void handleDeactivateUser()}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                            {t("admin.p2.suspend_btn", { defaultValue: "Suspend Account" })}
+                          </Button>
+                        ) : (
+                          <Button
+                            type="button"
+                            className="w-full gap-2"
+                            variant="outline"
+                            disabled={
+                              isMutating ||
+                              selectedUserId === myProfile?.id ||
+                              !selectedUser.emailVerified
+                            }
+                            onClick={() => void handleReactivateUser()}
+                          >
+                            <RefreshCw className="h-4 w-4" />
+                            {t("admin.p2.reactivate_btn", { defaultValue: "Reactivate Account" })}
+                          </Button>
+                        )}
                       </div>
                     </div>
                   )}
@@ -491,6 +596,96 @@ export default function AdminUsersPage() {
           </div>
         )}
       </div>
+
+      {attentionProjects.length > 0 && (
+        <Card className="border-amber-500/40">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base text-amber-700 dark:text-amber-400">
+              <ShieldAlert className="h-4 w-4" />
+              {t("admin.p2.attention_title", {
+                defaultValue: "Projects Requiring Manager Transfer ({{count}})",
+                count: attentionProjects.length,
+              })}
+            </CardTitle>
+            <CardDescription>
+              {t("admin.p2.attention_desc", {
+                defaultValue:
+                  "Suspending a sole active manager preserves project visibility cleanly without silent archival. Explicitly promote an eligible active member below.",
+              })}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {attentionProjects.map((proj) => {
+              const selectedTarget =
+                transferTargets[proj.projectId] ?? proj.eligibleActiveMembers[0]?.userId;
+              return (
+                <div
+                  key={proj.projectId}
+                  className="rounded-lg border p-4 space-y-3 bg-amber-500/5"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <p className="font-medium text-sm">
+                        #{proj.projectId} · {proj.projectName}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {proj.reason} · {proj.projectStatus}
+                      </p>
+                    </div>
+                  </div>
+                  {proj.eligibleActiveMembers.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">
+                      {t("admin.p2.no_eligible_members", {
+                        defaultValue:
+                          "No active eligible members currently exist in this project (reactivate a verified member or invite one first).",
+                      })}
+                    </p>
+                  ) : (
+                    <div className="flex flex-col gap-2 sm:flex-row">
+                      <select
+                        className="rounded-md border bg-background px-3 py-2 text-sm flex-1"
+                        value={selectedTarget ?? ""}
+                        onChange={(e) =>
+                          setTransferTargets((prev) => ({
+                            ...prev,
+                            [proj.projectId]: Number(e.target.value),
+                          }))
+                        }
+                      >
+                        {proj.eligibleActiveMembers.map((m) => (
+                          <option key={m.userId} value={m.userId}>
+                            {m.fullName} ({m.email})
+                          </option>
+                        ))}
+                      </select>
+                      <Input
+                        placeholder={t("admin.p2.transfer_reason_placeholder", {
+                          defaultValue: "Transfer audit reason",
+                        })}
+                        value={transferReasons[proj.projectId] ?? ""}
+                        onChange={(e) =>
+                          setTransferReasons((prev) => ({
+                            ...prev,
+                            [proj.projectId]: e.target.value,
+                          }))
+                        }
+                        className="flex-1"
+                      />
+                      <Button
+                        type="button"
+                        disabled={isMutating}
+                        onClick={() => void handleTransferManager(proj.projectId, selectedTarget)}
+                      >
+                        {t("admin.p2.transfer_btn", { defaultValue: "Transfer Manager" })}
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

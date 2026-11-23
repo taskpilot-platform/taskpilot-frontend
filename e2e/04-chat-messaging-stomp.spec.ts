@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./helpers/isolated-test";
 import { setupWorkspaceMocks, DEFAULT_MOCK_USER, TEAMMATE_USER } from "./helpers/mock-setup";
 
 const SAMPLE_MESSAGES = [
@@ -39,7 +39,7 @@ test.describe("Suite 4: Real-time Project Chat & STOMP Messaging (TC061 - TC085)
   // TC062: Connection status badge renders
   test("TC062: Displays connection status badge in header", async ({ page }) => {
     await page.goto("/projects/100/chat");
-    const badge = page.getByText(/Connected|Reconnecting/i);
+    const badge = page.getByText(/^(Connected|Connecting\.\.\.)$/);
     await expect(badge).toBeVisible();
   });
 
@@ -54,14 +54,13 @@ test.describe("Suite 4: Real-time Project Chat & STOMP Messaging (TC061 - TC085)
   test("TC064: Displays empty conversation message when no messages exist", async ({ page }) => {
     await setupWorkspaceMocks(page, { initialMessages: [] });
     await page.goto("/projects/100/chat");
-    await expect(page.getByText("No messages yet")).toBeVisible();
-    await expect(page.getByText("Say hello to your project teammates to kick off collaboration!")).toBeVisible();
+    await expect(page.getByText("No messages yet. Start the conversation!", { exact: true })).toBeVisible();
   });
 
   // TC065: Send plain text message via submit button
   test("TC065: Typing and clicking Send button appends new message", async ({ page }) => {
     await page.goto("/projects/100/chat");
-    const input = page.getByPlaceholder("Type a message...");
+    const input = page.getByPlaceholder("Type a message... (Press Enter to send)", { exact: true });
     await input.fill("Let's schedule our sprint planning at 2 PM.");
 
     const sendBtn = page.getByRole("button", { name: /Send/i });
@@ -73,7 +72,7 @@ test.describe("Suite 4: Real-time Project Chat & STOMP Messaging (TC061 - TC085)
   // TC066: Send message via Enter key
   test("TC066: Pressing Enter key submits the chat message", async ({ page }) => {
     await page.goto("/projects/100/chat");
-    const input = page.getByPlaceholder("Type a message...");
+    const input = page.getByPlaceholder("Type a message... (Press Enter to send)", { exact: true });
     await input.fill("Message sent via Enter key press.");
     await input.press("Enter");
 
@@ -83,7 +82,7 @@ test.describe("Suite 4: Real-time Project Chat & STOMP Messaging (TC061 - TC085)
   // TC067: Input clears after send
   test("TC067: Message input field is cleared immediately after sending", async ({ page }) => {
     await page.goto("/projects/100/chat");
-    const input = page.getByPlaceholder("Type a message...");
+    const input = page.getByPlaceholder("Type a message... (Press Enter to send)", { exact: true });
     await input.fill("Checking input clear behavior");
     await input.press("Enter");
 
@@ -93,7 +92,7 @@ test.describe("Suite 4: Real-time Project Chat & STOMP Messaging (TC061 - TC085)
   // TC068: Prevent sending empty message
   test("TC068: Submitting empty input does not dispatch any message", async ({ page }) => {
     await page.goto("/projects/100/chat");
-    const input = page.getByPlaceholder("Type a message...");
+    const input = page.getByPlaceholder("Type a message... (Press Enter to send)", { exact: true });
     await input.fill("");
     await input.press("Enter");
 
@@ -105,7 +104,7 @@ test.describe("Suite 4: Real-time Project Chat & STOMP Messaging (TC061 - TC085)
   // TC069: Prevent sending whitespace-only message
   test("TC069: Submitting whitespace-only input does not create new message", async ({ page }) => {
     await page.goto("/projects/100/chat");
-    const input = page.getByPlaceholder("Type a message...");
+    const input = page.getByPlaceholder("Type a message... (Press Enter to send)", { exact: true });
     await input.fill("     ");
     await input.press("Enter");
 
@@ -137,7 +136,7 @@ test.describe("Suite 4: Real-time Project Chat & STOMP Messaging (TC061 - TC085)
   test("TC073: Chat input is disabled when project is archived", async ({ page }) => {
     await setupWorkspaceMocks(page, { isArchived: true });
     await page.goto("/projects/100/chat");
-    const input = page.getByPlaceholder("Project is archived");
+    const input = page.getByPlaceholder("Project is archived, read-only", { exact: true });
     await expect(input).toBeDisabled();
   });
 
@@ -152,7 +151,7 @@ test.describe("Suite 4: Real-time Project Chat & STOMP Messaging (TC061 - TC085)
   // TC075: Send message with emojis
   test("TC075: Supports emojis and symbols in chat text", async ({ page }) => {
     await page.goto("/projects/100/chat");
-    const input = page.getByPlaceholder("Type a message...");
+    const input = page.getByPlaceholder("Type a message... (Press Enter to send)", { exact: true });
     await input.fill("Great job on sprint delivery! 🚀🎉💯");
     await input.press("Enter");
 
@@ -162,7 +161,7 @@ test.describe("Suite 4: Real-time Project Chat & STOMP Messaging (TC061 - TC085)
   // TC076: Send message with punctuation and quotes
   test("TC076: Handles special quotes and symbols accurately", async ({ page }) => {
     await page.goto("/projects/100/chat");
-    const input = page.getByPlaceholder("Type a message...");
+    const input = page.getByPlaceholder("Type a message... (Press Enter to send)", { exact: true });
     await input.fill('Meeting topic: "API Refactoring & V32 schema" — see #collab');
     await input.press("Enter");
 
@@ -172,7 +171,7 @@ test.describe("Suite 4: Real-time Project Chat & STOMP Messaging (TC061 - TC085)
   // TC077: Send message with URL
   test("TC077: Renders message containing web link URL", async ({ page }) => {
     await page.goto("/projects/100/chat");
-    const input = page.getByPlaceholder("Type a message...");
+    const input = page.getByPlaceholder("Type a message... (Press Enter to send)", { exact: true });
     await input.fill("Check the live deployment at https://taskpilot-platform.netlify.app");
     await input.press("Enter");
 
@@ -182,7 +181,7 @@ test.describe("Suite 4: Real-time Project Chat & STOMP Messaging (TC061 - TC085)
   // TC078: Long continuous text wraps gracefully
   test("TC078: Wraps long unbroken string without layout overflow", async ({ page }) => {
     await page.goto("/projects/100/chat");
-    const input = page.getByPlaceholder("Type a message...");
+    const input = page.getByPlaceholder("Type a message... (Press Enter to send)", { exact: true });
     const longToken = "abcde".repeat(20);
     await input.fill(`Token: ${longToken}`);
     await input.press("Enter");
@@ -193,7 +192,7 @@ test.describe("Suite 4: Real-time Project Chat & STOMP Messaging (TC061 - TC085)
   // TC079: Rapid consecutive messages
   test("TC079: Supports sending multiple messages in rapid succession", async ({ page }) => {
     await page.goto("/projects/100/chat");
-    const input = page.getByPlaceholder("Type a message...");
+    const input = page.getByPlaceholder("Type a message... (Press Enter to send)", { exact: true });
 
     await input.fill("Rapid message 1");
     await input.press("Enter");
@@ -224,7 +223,7 @@ test.describe("Suite 4: Real-time Project Chat & STOMP Messaging (TC061 - TC085)
     await page.setViewportSize({ width: 375, height: 667 });
     await page.goto("/projects/100/chat");
     await expect(page.getByText("Project Chat Room")).toBeVisible();
-    await expect(page.getByPlaceholder("Type a message...")).toBeVisible();
+    await expect(page.getByPlaceholder("Type a message... (Press Enter to send)", { exact: true })).toBeVisible();
   });
 
   // TC083: Chat scroll container presence

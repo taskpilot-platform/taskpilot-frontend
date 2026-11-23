@@ -10,6 +10,21 @@ export interface UserProfile {
   updatedAt: string;
   hasPassword?: boolean;
   linkedProviders?: string[];
+  accountState?: string;
+  availability?: string;
+  emailVerified?: boolean;
+  legacyReviewRequired?: boolean;
+  avatarRejected?: boolean;
+}
+
+export interface UpdateAvailabilityRequest {
+  availability: "AVAILABLE" | "BUSY" | "OOO";
+}
+
+export interface SelfDeactivateRequest {
+  confirmation: string;
+  currentPassword?: string;
+  reauthTicket?: string;
 }
 
 export interface UserSkill {

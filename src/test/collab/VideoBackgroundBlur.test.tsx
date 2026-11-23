@@ -10,11 +10,14 @@ import { LiveMeetingRoom } from "@/components/meetings/LiveMeetingRoom";
 import { ConfirmProvider } from "@/components/ui/confirm-dialog";
 import { meetingService } from "@/services/meeting.service";
 
+vi.mock("livekit-client", () => import("../../../e2e/helpers/livekit-sdk-stub"));
+
 // Mock services
 vi.mock("@/services/meeting.service", () => ({
   meetingService: {
     getMeetings: vi.fn(),
     joinMeeting: vi.fn(),
+    confirmAttendance: vi.fn().mockResolvedValue({ data: null }),
     leaveMeeting: vi.fn(),
     endMeeting: vi.fn(),
     updateRecordingFile: vi.fn().mockResolvedValue({}),
@@ -216,8 +219,8 @@ describe("VideoBackgroundBlurService Unit Tests", () => {
 
 describe("LiveMeetingRoom Background Blur Integration Tests", () => {
   const mockTokenData = {
-    token: "mock-jwt-token-blur-test",
-    livekitUrl: "wss://test.livekit.cloud",
+    token: "isolated-sdk-fixture-blur",
+    livekitUrl: "wss://livekit.invalid",
     participantName: "Tester Minh",
     identity: "user_tester",
     isHost: true,

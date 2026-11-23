@@ -22,6 +22,7 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { toast } from "react-toastify";
 import { projectService } from "@/services/project.service";
+import { isCustomChatDemoEnabled } from "@/lib/features";
 import {
   customChatStorage,
   type CustomGroupChat,
@@ -34,6 +35,7 @@ interface CreateGroupChatModalProps {
   onCreated: (group: CustomGroupChat) => void;
   currentUserId: number | null;
   currentUserName?: string;
+  currentUserEmail?: string;
 }
 
 interface ColleagueCandidate {
@@ -50,8 +52,14 @@ export const CreateGroupChatModal: React.FC<CreateGroupChatModalProps> = ({
   onCreated,
   currentUserId,
   currentUserName = "Tôi",
+  currentUserEmail = "",
 }) => {
   const { t } = useTranslation();
+  const demoEnabled = isCustomChatDemoEnabled();
+  const hasValidUserId =
+    typeof currentUserId === "number" &&
+    Number.isSafeInteger(currentUserId) &&
+    currentUserId > 0;
   const [groupName, setGroupName] = useState("");
   const [description, setDescription] = useState("");
   const [searchMemberQuery, setSearchMemberQuery] = useState("");
@@ -60,9 +68,12 @@ export const CreateGroupChatModal: React.FC<CreateGroupChatModalProps> = ({
   const [isLoadingCandidates, setIsLoadingCandidates] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Load colleagues from projects or workspace
+  // Load real project colleagues only when local demo is explicitly enabled
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen || !demoEnabled || !hasValidUserId) {
+      setCandidates([]);
+      return;
+    }
 
     let mounted = true;
     async function loadColleagues() {
@@ -73,22 +84,6 @@ export const CreateGroupChatModal: React.FC<CreateGroupChatModalProps> = ({
 
         const memberMap = new Map<number, ColleagueCandidate>();
 
-        // Fallback workspace team candidates if projects are sparse
-        const defaultColleagues: ColleagueCandidate[] = [
-          { id: 991, name: "Alex Rivera", email: "alex.rivera@taskpilot.local", role: "Frontend Lead" },
-          { id: 992, name: "Minh Tran", email: "minh.tran@taskpilot.local", role: "Backend Architect" },
-          { id: 993, name: "Sarah Chen", email: "sarah.chen@taskpilot.local", role: "Product Manager" },
-          { id: 994, name: "David Kim", email: "david.kim@taskpilot.local", role: "DevOps Engineer" },
-          { id: 995, name: "Lan Nguyen", email: "lan.nguyen@taskpilot.local", role: "QA Engineer" },
-        ];
-
-        defaultColleagues.forEach((c) => {
-          if (c.id !== currentUserId) {
-            memberMap.set(c.id, c);
-          }
-        });
-
-        // Fetch actual project members
         if (projectList.length > 0) {
           const memberPromises = projectList.slice(0, 3).map((p: any) =>
             projectService.getProjectMembers(p.id).catch(() => ({ data: [] }))
@@ -102,7 +97,7 @@ export const CreateGroupChatModal: React.FC<CreateGroupChatModalProps> = ({
                 memberMap.set(uId, {
                   id: uId,
                   name: m.fullName || m.name || `User ${uId}`,
-                  email: m.email || `user${uId}@taskpilot.local`,
+                  email: m.email || "",
                   avatarUrl: m.avatarUrl,
                   role: m.role || "MEMBER",
                 });
@@ -124,7 +119,11 @@ export const CreateGroupChatModal: React.FC<CreateGroupChatModalProps> = ({
     return () => {
       mounted = false;
     };
-  }, [isOpen, currentUserId]);
+  }, [isOpen, demoEnabled, hasValidUserId, currentUserId]);
+
+  if (!demoEnabled) {
+    return null;
+  }
 
   const toggleSelectCandidate = (candidateId: number) => {
     setSelectedCandidateIds((prev) =>
@@ -146,6 +145,14 @@ export const CreateGroupChatModal: React.FC<CreateGroupChatModalProps> = ({
 
   const handleCreateGroup = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!hasValidUserId || currentUserId === null) {
+      toast.error(
+        t("chat.user_required_error", {
+          defaultValue: "Cần phiên đăng nhập hợp lệ để thực hiện thao tác này.",
+        })
+      );
+      return;
+    }
     if (!groupName.trim()) {
       toast.warning(t("chat.group_name_required", { defaultValue: "Vui lòng nhập tên nhóm trò chuyện!" }));
       return;
@@ -154,9 +161,9 @@ export const CreateGroupChatModal: React.FC<CreateGroupChatModalProps> = ({
     setIsSubmitting(true);
     try {
       const myMember: CustomGroupMember = {
-        id: currentUserId || 1,
+        id: currentUserId,
         name: currentUserName,
-        email: "me@taskpilot.local",
+        email: currentUserEmail,
         role: "OWNER",
       };
 
@@ -172,7 +179,7 @@ export const CreateGroupChatModal: React.FC<CreateGroupChatModalProps> = ({
         groupName.trim(),
         description.trim(),
         [myMember, ...otherMembers],
-        currentUserId || 1
+        currentUserId
       );
 
       toast.success(
@@ -204,17 +211,32 @@ export const CreateGroupChatModal: React.FC<CreateGroupChatModalProps> = ({
                 <Users className="h-5 w-5" />
               </div>
               <div>
-                <DialogTitle className="text-base font-semibold text-foreground">
-                  {t("chat.create_group_title", { defaultValue: "Tạo Nhóm Trò Chuyện Mới" })}
-                </DialogTitle>
+                <div className="flex items-center gap-2">
+                  <DialogTitle className="text-base font-semibold text-foreground">
+                    {t("chat.create_group_title", { defaultValue: "Tạo Nhóm Trò Chuyện Mới" })}
+                  </DialogTitle>
+                  <Badge variant="outline" className="text-[10px] border-amber-500/40 bg-amber-500/10 text-amber-800 dark:text-amber-300">
+                    {t("chat.demo_badge", { defaultValue: "Demo cục bộ" })}
+                  </Badge>
+                </div>
                 <DialogDescription className="text-xs text-muted-foreground mt-0.5">
-                  {t("chat.create_group_desc", { defaultValue: "Tạo không gian trao đổi tự do không giới hạn với bất kỳ đồng nghiệp nào." })}
+                  {t("chat.demo_modal_notice", {
+                    defaultValue: "Chế độ Demo cục bộ trên trình duyệt. Nhóm và tin nhắn chỉ lưu cho tài khoản hiện tại trên trình duyệt này, không gửi qua STOMP tới đồng nghiệp.",
+                  })}
                 </DialogDescription>
               </div>
             </div>
           </DialogHeader>
 
           <div className="p-5 space-y-4 max-h-[70vh] overflow-y-auto">
+            <div
+              className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-800 dark:text-amber-300"
+              data-testid="create-group-demo-notice"
+            >
+              {t("chat.demo_status_notice", {
+                defaultValue: "Chỉ lưu cục bộ trên trình duyệt (Demo) — không gửi qua STOMP tới đồng nghiệp",
+              })}
+            </div>
             {/* 1. Group Name Input */}
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-foreground">

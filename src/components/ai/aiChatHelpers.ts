@@ -1,3 +1,4 @@
+import type { ChatMessage } from "@/services/ai.service";
 import type {
   ToolAccess,
   ToolEvent,
@@ -8,10 +9,11 @@ import type {
   PendingActionConfirmation,
   ConfirmedTaskMutation,
   RecommendationView,
+  RecommendedCandidateView,
 } from "./aiChatTypes";
 import i18n from "../../lib/i18n";
 
-export const WRITE_TOOL_NAMES = new Set(["assignTaskToMember", "assignTaskToMemberByName", "recommendAndAssignTask", "updateTaskRequiredSkills", "updateTaskStatus", "patchTask", "patchProject", "patchSprint", "patchTaskComment", "createSystemSkill", "patchSystemSkill", "deleteSystemSkill", "addMySkill", "patchMySkill", "deleteMySkill", "markNotificationRead", "markAllNotificationsRead", "createTask", "createSprint", "startSprint", "completeSprint", "assignTaskToSprint", "sendChannelAnnouncement", "scheduleMeeting", "createTasksFromMeetingActionItems"]);
+export const WRITE_TOOL_NAMES = new Set(["assignTaskToMember", "assignTaskToMemberByName", "recommendAndAssignTask", "updateTaskRequiredSkills", "updateTaskStatus", "patchTask", "submitTaskWork", "withdrawTaskSubmission", "reviewTaskSubmission", "reopenTask", "supersedeTaskEvaluation", "patchProject", "patchSprint", "patchTaskComment", "createSystemSkill", "patchSystemSkill", "deleteSystemSkill", "addMySkill", "patchMySkill", "deleteMySkill", "markNotificationRead", "markAllNotificationsRead", "createTask", "createSprint", "startSprint", "completeSprint", "assignTaskToSprint", "sendChannelAnnouncement", "scheduleMeeting", "createTasksFromMeetingActionItems"]);
 
 export function createAssignmentRow(taskId = "", id?: string): AssignmentRequirementRow {
   return {
@@ -335,6 +337,29 @@ export function isRecommendationView(data: unknown): data is RecommendationView 
   );
 }
 
+export function recommendationFitText(candidate: RecommendedCandidateView): string {
+  if (candidate.fitStatus === "MISSING_REQUIREMENTS") {
+    return i18n.t("copilot.recommendation.skill_fit_missing_requirements");
+  }
+  if (candidate.fitStatus === "MEASURED" && candidate.presentationFitValue != null) {
+    const key = candidate.fitSource === "DECLARED_PROFILE" ? "skill_fit_declared" : "skill_fit_measured";
+    return i18n.t(`copilot.recommendation.${key}`, { percent: Math.round(candidate.presentationFitValue * 100) });
+  }
+  return i18n.t("copilot.recommendation.skill_fit_insufficient");
+}
+
+export function recommendationPerformanceText(candidate: RecommendedCandidateView): string {
+  if (candidate.performanceStatus === "MEASURED" && candidate.observedQualityMean != null
+    && candidate.performanceSampleCount != null && candidate.evidenceWeight != null) {
+    return i18n.t("copilot.recommendation.performance_measured", {
+      percent: Math.round(candidate.observedQualityMean * 100),
+      count: candidate.performanceSampleCount,
+      evidence: Math.round(candidate.evidenceWeight * 100),
+    });
+  }
+  return i18n.t("copilot.recommendation.performance_unavailable");
+}
+
 export function formatRecommendationView(view: RecommendationView): string {
   const lines: string[] = [];
   lines.push(`### ${i18n.t("copilot.recommendation.title")}`);
@@ -350,15 +375,13 @@ export function formatRecommendationView(view: RecommendationView): string {
   if (view.candidates && view.candidates.length > 0) {
     lines.push(`\n**${i18n.t("copilot.recommendation.candidates_list_title")}**`);
     view.candidates.forEach((c) => {
-      const fitText = c.fitStatus === "MEASURED" && c.presentationFitValue !== null && c.presentationFitValue !== undefined
-        ? i18n.t("copilot.recommendation.skill_fit_measured", { percent: Math.round(c.presentationFitValue * 100) })
-        : i18n.t("copilot.recommendation.skill_fit_insufficient");
+      const fitText = recommendationFitText(c);
       const workloadText = c.workloadStatus === "MEASURED" && c.workloadUnit === "ACTIVE_TASK_COUNT"
         ? i18n.t("copilot.recommendation.active_task_count", { count: c.storedWorkloadValue ?? 0 })
         : c.storedWorkloadValue !== null && c.storedWorkloadValue !== undefined
         ? `${i18n.t("copilot.recommendation.unverified_workload_value", { value: c.storedWorkloadValue })} ${i18n.t("copilot.recommendation.unverified_workload_explanation")}`
         : i18n.t("copilot.recommendation.unverified_workload_fallback");
-      const perfText = i18n.t("copilot.recommendation.performance_unavailable");
+      const perfText = recommendationPerformanceText(c);
       lines.push(`${c.rank}. **${c.displayName}** (${c.memberStatus ?? "AVAILABLE"})`);
       lines.push(`   - ${i18n.t("copilot.recommendation.skill_fit_label")}: ${fitText}`);
       lines.push(`   - ${i18n.t("copilot.recommendation.workload_label")}: ${workloadText}`);
@@ -480,6 +503,11 @@ export const TOOL_NAME_MAPPING: Record<string, string> = {
   createTask: "Tạo task mới",
   updateTask: "Cập nhật task",
   deleteTask: "Xóa task",
+  submitTaskWork: "Nộp task để duyệt",
+  withdrawTaskSubmission: "Rút bài nộp",
+  reviewTaskSubmission: "Nghiệm thu / Trả lại task",
+  reopenTask: "Mở lại task",
+  supersedeTaskEvaluation: "Cập nhật đánh giá nghiệm thu",
   searchTasks: "Tìm kiếm task",
   getTaskComments: "Bình luận",
   addTaskComment: "Thêm bình luận",
@@ -593,3 +621,136 @@ export const parseThinkingToSteps = (thinking: string, stepTitlePrefix: string) 
       thinkingText,
     };
   };
+
+export const COPILOT_STATUS_CODES = new Set([
+  "COPILOT_MODELS_EXHAUSTED",
+  "COPILOT_TURN_DEADLINE_EXCEEDED",
+  "COPILOT_MAX_ATTEMPTS_REACHED",
+  "COPILOT_NO_AVAILABLE_MODEL",
+  "COPILOT_CONFIRMATION_EXPLANATION_INCOMPLETE",
+]);
+
+export function hasVisibleAssistantText(buffer: string): boolean {
+  if (!buffer) return false;
+  return extractThinkPayload(buffer).beforeThink.trim().length > 0;
+}
+
+/**
+ * Discards any partial visible answer streamed by a failed attempt before a mid-turn
+ * model switch or retry, while keeping thinking blocks intact.
+ */
+export function discardPartialStreamResponse(buffer: string): string {
+  if (!buffer) return "";
+  const segments = parseInterleavedContent(buffer);
+  const hasVisible = segments.some((s) => s.type === "response" && s.content.length > 0);
+  if (!hasVisible) {
+    return buffer;
+  }
+  const thinkBlocks = segments
+    .filter((s) => s.type === "think")
+    .map((s) => (s.isUnclosed ? `<think>${s.content}` : `<think>${s.content}</think>`));
+  if (thinkBlocks.length === 0) {
+    return "";
+  }
+  const lastIsUnclosed = segments.some((s) => s.type === "think" && s.isUnclosed);
+  return lastIsUnclosed ? thinkBlocks.join("\n\n") : `${thinkBlocks.join("\n\n")}\n\n`;
+}
+
+export function resolveStreamErrorMessage(
+  raw: string | null | undefined,
+  t: (key: string, opts?: Record<string, unknown>) => string,
+): string | null {
+  if (!raw) return null;
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+
+  if (trimmed.startsWith("{")) {
+    try {
+      const parsed = JSON.parse(trimmed) as {
+        code?: unknown;
+        params?: unknown;
+        error?: unknown;
+        message?: unknown;
+      };
+      if (typeof parsed.code === "string" && parsed.code.trim()) {
+        const code = parsed.code.trim();
+        const params =
+          parsed.params && typeof parsed.params === "object" && !Array.isArray(parsed.params)
+            ? (parsed.params as Record<string, unknown>)
+            : undefined;
+        const key = `copilot.status.${code}`;
+        const translated = t(key, params);
+        if (translated && translated !== key) {
+          return translated;
+        }
+        return code;
+      }
+      if (typeof parsed.error === "string" && parsed.error.trim()) {
+        return parsed.error.trim();
+      }
+      if (typeof parsed.message === "string" && parsed.message.trim()) {
+        return parsed.message.trim();
+      }
+    } catch {
+      // Legacy plain-text SSE error fallback
+    }
+  }
+
+  if (COPILOT_STATUS_CODES.has(trimmed)) {
+    const key = `copilot.status.${trimmed}`;
+    const translated = t(key);
+    return translated && translated !== key ? translated : trimmed;
+  }
+
+  return trimmed;
+}
+
+export function localizeCopilotStatusContent(
+  content: string,
+  t: (key: string, opts?: Record<string, unknown>) => string,
+): string {
+  if (!content) return content;
+  const trimmed = content.trim();
+  if (COPILOT_STATUS_CODES.has(trimmed)) {
+    const key = `copilot.status.${trimmed}`;
+    const translated = t(key);
+    return translated && translated !== key ? translated : content;
+  }
+  return content;
+}
+
+export function mergeMissingConfirmationMessage(
+  messages: ChatMessage[],
+  confirmations: PendingActionConfirmation[],
+  note: string,
+): ChatMessage[] {
+  if (!confirmations || confirmations.length === 0) {
+    return messages;
+  }
+  const existingKeys = new Set<string>();
+  for (const msg of messages) {
+    if (msg.sender !== "ASSISTANT" || !msg.content) continue;
+    for (const spec of extractConfirmationSpecs(msg.content)) {
+      existingKeys.add(confirmationDedupeKey(spec));
+    }
+  }
+
+  const missing = dedupeConfirmations(confirmations).filter(
+    (conf) => !existingKeys.has(confirmationDedupeKey(conf)),
+  );
+  if (missing.length === 0) {
+    return messages;
+  }
+
+  const blocks = missing.map(
+    (conf) =>
+      `\`\`\`taskpilot-confirm\n${JSON.stringify({ ...conf, confirmationRequired: true })}\n\`\`\``,
+  );
+  const localMsg: ChatMessage = {
+    id: -Date.now(),
+    sender: "ASSISTANT",
+    createdAt: new Date().toISOString(),
+    content: `${note}\n\n${blocks.join("\n\n")}`.trim(),
+  };
+  return [...messages, localMsg];
+}
