@@ -8,6 +8,12 @@ export interface MeetingRecordingScope {
   meetingId: number;
 }
 
+export interface MeetingRecordingUploadReceipt {
+  uploadToken: string;
+  expiresAt?: string | null;
+  uploaded: boolean;
+}
+
 export interface MeetingRecordingRecord extends MeetingRecordingScope {
   recordingId: string;
   title: string;
@@ -20,6 +26,7 @@ export interface MeetingRecordingRecord extends MeetingRecordingScope {
   uploadTarget?: "B2";
   durationMs?: number;
   blob?: Blob;
+  pendingUpload?: MeetingRecordingUploadReceipt;
 }
 
 function scopeKey(scope: MeetingRecordingScope) {

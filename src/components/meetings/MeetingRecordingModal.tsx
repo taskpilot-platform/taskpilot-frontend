@@ -5,7 +5,11 @@ import { toast } from "react-toastify";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from "@/components/ui/dialog";
 import { meetingService } from "@/services/meeting.service";
-import { meetingRecordingStore, type MeetingRecordingRecord } from "@/services/meetingRecordingStore";
+import {
+  meetingRecordingStore,
+  type MeetingRecordingRecord,
+  type MeetingRecordingUploadReceipt,
+} from "@/services/meetingRecordingStore";
 import { maxRecordingBytes, recordingChecksum, syncMeetingRecording } from "@/services/meetingRecordingSync";
 import { projectFilesService } from "@/services/project-files.service";
 import type { MeetingRecordingDto, MeetingRecordingPlaybackResponse, ProjectMeetingDto } from "@/types/meeting";
@@ -21,6 +25,7 @@ interface Clip {
   local?: MeetingRecordingRecord;
   createdAt: string;
   legacy?: boolean;
+  origin?: MeetingRecordingDto["origin"];
   cloud?: MeetingRecordingPlaybackResponse;
 }
 
@@ -59,15 +64,22 @@ export function MeetingRecordingModal({
   const [busy, setBusy] = useState(false);
   const [playbackInfo, setPlaybackInfo] = useState<MeetingRecordingPlaybackResponse>();
   const operation = useRef(0);
+  const receiptCacheRef = useRef<Map<string, MeetingRecordingUploadReceipt | undefined>>(new Map());
   const projectId = meeting?.projectId;
   const meetingId = meeting?.id;
   const legacyFileId = meeting?.recordingFileId;
+  const ownerScopeRef = useRef({ userId: currentUserId, projectId, meetingId });
+  ownerScopeRef.current = { userId: currentUserId, projectId, meetingId };
   const chosen = clips.find((clip) => clip.key === chosenKey);
 
   useEffect(() => {
     mounted.current = true;
     return () => { mounted.current = false; };
   }, []);
+
+  useEffect(() => {
+    if (!isOpen) receiptCacheRef.current.clear();
+  }, [isOpen, currentUserId, projectId, meetingId]);
 
   useEffect(() => {
     operation.current += 1;
@@ -110,11 +122,26 @@ export function MeetingRecordingModal({
       if (!current()) return;
       const ready: Clip[] = remote.flatMap((clip) =>
         clip.state === "READY" && clip.fileId
-          ? [{ key: clip.id, fileId: clip.fileId, createdAt: clip.createdAt }]
+          ? [{ key: clip.id, fileId: clip.fileId, createdAt: clip.createdAt, origin: clip.origin }]
           : []
       );
-      if (cloud?.url) ready.unshift({ key: "cloud", createdAt: "", cloud });
-      if (legacyFileId && !cloud?.url && !ready.some((clip) => clip.fileId === legacyFileId)) {
+      if (cloud?.url) {
+        const existingIndex = cloud.recordingFileId != null
+          ? ready.findIndex((clip) => clip.fileId === cloud.recordingFileId)
+          : -1;
+        if (existingIndex >= 0) {
+          ready[existingIndex] = { ...ready[existingIndex], cloud };
+        } else {
+          ready.unshift({
+            key: "cloud",
+            fileId: cloud.recordingFileId ?? undefined,
+            createdAt: "",
+            origin: "CLOUD_EGRESS",
+            cloud,
+          });
+        }
+      }
+      if (legacyFileId && !ready.some((clip) => clip.fileId === legacyFileId)) {
         ready.push({ key: `legacy-${legacyFileId}`, fileId: legacyFileId, createdAt: "", legacy: true });
       }
 
@@ -122,10 +149,13 @@ export function MeetingRecordingModal({
         ? await meetingRecordingStore.list({ projectId, meetingId, userId: currentUserId }).catch(() => [])
         : [];
       if (!current()) return;
+      const hasMatchingServerClip = (record: MeetingRecordingRecord) =>
+        ready.some((clip) => clip.key === record.recordingId || (record.fileId != null && clip.fileId === record.fileId));
       const list = [
         ...ready,
-        ...recovery.filter((record) => record.uploadState !== "READY" && !ready.some((clip) => clip.key === record.recordingId))
-          .map((local) => ({ key: local.recordingId, local, createdAt: local.recordedAt })),
+        ...recovery
+          .filter((record) => !hasMatchingServerClip(record))
+          .map((local) => ({ key: local.recordingId, local, createdAt: local.recordedAt, origin: local.origin })),
       ];
       setClips(list);
       setChosenKey(list[0]?.key ?? "");
@@ -153,6 +183,15 @@ export function MeetingRecordingModal({
           }
           return;
         }
+        if (chosen.fileId && typeof meetingService.getRecordingPlaybackUrl === "function") {
+          const proxied = await meetingService.getRecordingPlaybackUrl(projectId, meetingId!, chosen.fileId);
+          if (!current()) return;
+          if (proxied?.url) {
+            setVideo({ url: resolvePlaybackUrl(proxied.url), type: proxied.contentType || "video/mp4", clipKey: chosen.key });
+            setState("ready");
+            return;
+          }
+        }
         const blob = chosen.fileId
           ? await projectFilesService.downloadFileBlob(projectId, chosen.fileId)
           : chosen.local?.blob ?? (chosen.local && await meetingRecordingStore.recoverChunks(chosen.local));
@@ -178,20 +217,65 @@ export function MeetingRecordingModal({
       active = false;
       if (url) URL.revokeObjectURL(url);
     };
-  }, [isOpen, projectId, chosen]);
+  }, [isOpen, projectId, meetingId, chosen]);
 
   const synchronize = async (record: MeetingRecordingRecord, generation: number) => {
     const version = operation.current;
-    const isCurrent = () => mounted.current && getSessionGeneration() === generation && operation.current === version;
+    const isCurrent = () =>
+      mounted.current
+      && getSessionGeneration() === generation
+      && operation.current === version
+      && ownerScopeRef.current.userId === record.userId
+      && ownerScopeRef.current.projectId === record.projectId
+      && ownerScopeRef.current.meetingId === record.meetingId;
     if (!isCurrent()) return;
     setBusy(true);
     try {
       if (record.uploadTarget === "B2") {
+        const receiptKey = `${record.userId}:${record.projectId}:${record.meetingId}:${record.recordingId}`;
+        let persistedReceipt: MeetingRecordingUploadReceipt | undefined = receiptCacheRef.current.has(receiptKey)
+          ? receiptCacheRef.current.get(receiptKey)
+          : record.pendingUpload;
+        if (!persistedReceipt) {
+          const latestRecords = await meetingRecordingStore
+            .list({ userId: record.userId, projectId: record.projectId, meetingId: record.meetingId })
+            .catch(() => []);
+          if (!isCurrent()) return;
+          persistedReceipt = latestRecords.find((item) => item.recordingId === record.recordingId)?.pendingUpload;
+        }
+        if (!isCurrent()) return;
+        let currentRecord: MeetingRecordingRecord = { ...record, pendingUpload: persistedReceipt };
         const updated = await meetingService.uploadFallbackRecordingToB2(record.projectId, record.meetingId, record.blob!, {
           fileName: `meeting_${record.meetingId}_fallback_${record.recordingId}.${record.mimeType.startsWith("video/mp4") ? "mp4" : "webm"}`,
           durationSeconds: record.durationMs ? Math.round(record.durationMs / 1000) : undefined,
+          origin: record.origin,
+          coverage: record.coverage,
+          clientRecordingId: record.recordingId,
+          pendingUpload: persistedReceipt,
+          onUploadReceipt: async (receipt) => {
+            if (getSessionGeneration() !== generation) return;
+            receiptCacheRef.current.set(receiptKey, receipt);
+            currentRecord = { ...currentRecord, pendingUpload: receipt };
+            if (isCurrent()) {
+              setClips((prev) =>
+                prev.map((clip) =>
+                  clip.local?.recordingId === record.recordingId
+                    ? { ...clip, local: { ...clip.local, pendingUpload: receipt } }
+                    : clip
+                )
+              );
+            }
+            await meetingRecordingStore.save(currentRecord).catch(() => undefined);
+          },
         });
-        await meetingRecordingStore.save({ ...record, uploadState: "READY", fileId: updated.recordingFileId ?? undefined });
+        if (getSessionGeneration() !== generation) return;
+        receiptCacheRef.current.delete(receiptKey);
+        await meetingRecordingStore.save({
+          ...currentRecord,
+          uploadState: "READY",
+          fileId: updated.completedRecordingFileId ?? updated.recordingFileId ?? undefined,
+          pendingUpload: undefined,
+        });
         if (isCurrent()) onMeetingUpdated?.(updated);
       } else {
         await syncMeetingRecording(record, generation);
@@ -287,12 +371,22 @@ export function MeetingRecordingModal({
           <select className="w-full rounded-md border bg-background p-2 text-sm" value={chosenKey}
             aria-label={t("meetings.choose_recording", { defaultValue: "Chọn bản ghi" })}
             onChange={(event) => setChosenKey(event.target.value)}>
-            {clips.map((clip, index) => (
-              <option key={clip.key} value={clip.key}>
-                {clip.createdAt ? new Date(clip.createdAt).toLocaleString(i18n.language) : `#${index + 1}`}
-                {clip.local ? ` · ${t("meetings.local_copy", { defaultValue: "Chỉ có trên thiết bị này" })}` : ""}
-              </option>
-            ))}
+            {clips.map((clip, index) => {
+              const originLabel = clip.origin === "CLOUD_EGRESS"
+                ? t("meetings.origin_cloud", { defaultValue: "Đám mây" })
+                : clip.origin === "IMPORT"
+                ? t("meetings.origin_import", { defaultValue: "Tải lên" })
+                : clip.origin === "BROWSER"
+                ? t("meetings.origin_browser", { defaultValue: "Trình duyệt" })
+                : "";
+              return (
+                <option key={clip.key} value={clip.key}>
+                  {clip.createdAt ? new Date(clip.createdAt).toLocaleString(i18n.language) : `#${index + 1}`}
+                  {originLabel ? ` · ${originLabel}` : ""}
+                  {clip.local ? ` · ${t("meetings.local_copy", { defaultValue: "Chỉ có trên thiết bị này" })}` : ""}
+                </option>
+              );
+            })}
           </select>
         )}
         {isPlayerVisible && video ? (

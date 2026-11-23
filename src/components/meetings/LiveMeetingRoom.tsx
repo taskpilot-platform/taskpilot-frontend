@@ -293,7 +293,13 @@ export function LiveMeetingRoom({
     temporaryRecordingRef.current = record;
     setTemporaryRecording(record);
   };
-  const fallbackCompletionRef = useRef<{ promise: Promise<void>; resolve: () => void } | null>(null);
+  const fallbackCompletionRef = useRef<{
+    persistPromise: Promise<boolean>;
+    uploadPromise: Promise<void>;
+    abortUpload: () => void;
+    resolvePersist: (durable: boolean) => void;
+    resolveUpload: () => void;
+  } | null>(null);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -786,23 +792,51 @@ export function LiveMeetingRoom({
         onStorageError: () => { if (sameOwner()) toast.warning(t("meetings.recording_storage_warning", { defaultValue: "Thiết bị không lưu được dữ liệu bản ghi. Hãy giữ tab mở." })); },
       });
       captureRef.current = capture;
-      let resolve!: () => void;
-      const completion = { promise: new Promise<void>((done) => { resolve = done; }), resolve: () => resolve() };
+      let resolvePersist!: (durable: boolean) => void;
+      let resolveUpload!: () => void;
+      const uploadAbortController = new AbortController();
+      const completion = {
+        persistPromise: new Promise<boolean>((done) => { resolvePersist = done; }),
+        uploadPromise: new Promise<void>((done) => { resolveUpload = done; }),
+        abortUpload: () => uploadAbortController.abort(),
+        resolvePersist: (durable: boolean) => resolvePersist(durable),
+        resolveUpload: () => resolveUpload(),
+      };
       fallbackCompletionRef.current = completion;
       void capture.finished.then(async ({ record, durable }) => {
         if (sameOwner()) { setIsRecording(false); setRecordingMode("none"); setIsUploadingFallback(true); }
-        if (!record.blob?.size) return;
+        if (!record.blob?.size) {
+          completion.resolvePersist(true);
+          return;
+        }
         // Preserve non-durable export path across disconnect/room replacement for the original owner session only.
         if (!durable && sameOwner()) rememberTemporaryRecording(record);
+        // Release the R1 persistence barrier once capture finalization & local durability/export setup is complete.
+        completion.resolvePersist(durable);
         // Unmount or account/session switch still persists the creator's bytes, but never uploads as another account.
         if (!sameOwner()) return;
+        let currentRecord = record;
         try {
           const updated = await meetingService.uploadFallbackRecordingToB2(projectId, meetingId, record.blob, {
             fileName: `meeting_${meetingId}_fallback_${record.recordingId}.${record.mimeType.startsWith("video/mp4") ? "mp4" : "webm"}`,
             durationSeconds: Math.max(1, Math.round((record.durationMs || 1000) / 1000)),
+            origin: record.origin,
+            coverage: record.coverage,
+            clientRecordingId: record.recordingId,
+            pendingUpload: record.pendingUpload,
+            onUploadReceipt: async (receipt) => {
+              currentRecord = { ...currentRecord, pendingUpload: receipt };
+              await meetingRecordingStore.save(currentRecord).catch(() => undefined);
+            },
+            signal: uploadAbortController.signal,
           });
           if (getSessionGeneration() !== generation) return;
-          await meetingRecordingStore.save({ ...record, uploadState: "READY", fileId: updated.recordingFileId ?? undefined }).catch(() => undefined);
+          await meetingRecordingStore.save({
+            ...currentRecord,
+            uploadState: "READY",
+            fileId: updated.completedRecordingFileId ?? updated.recordingFileId ?? undefined,
+            pendingUpload: undefined,
+          }).catch(() => undefined);
           if (!sameOwner()) return;
           rememberTemporaryRecording(undefined);
           setMeeting(updated);
@@ -811,12 +845,14 @@ export function LiveMeetingRoom({
           if (sameOwner()) toast.warning(t("meetings.recording_local_only", { defaultValue: "Bản ghi chưa được chia sẻ lên dự án." }));
         }
       }).catch(() => {
+        completion.resolvePersist(true);
         if (sameOwner()) toast.error(t("meetings.recording_empty", { defaultValue: "Bản ghi không có dữ liệu video." }));
       }).finally(() => {
         if (captureRef.current === capture) captureRef.current = null;
         if (fallbackCompletionRef.current === completion) fallbackCompletionRef.current = null;
         if (sameOwner()) { setIsUploadingFallback(false); setIsRecording(false); setRecordingMode("none"); }
-        completion.resolve();
+        completion.resolvePersist(true);
+        completion.resolveUpload();
       });
       setIsRecording(true);
       setRecordingMode("fallback");
@@ -950,7 +986,26 @@ export function LiveMeetingRoom({
   const flushFallbackRecordingBeforeExit = async () => {
     const completion = fallbackCompletionRef.current;
     void captureRef.current?.stop();
-    if (completion) await completion.promise;
+    if (completion) {
+      // R1 barrier: always wait for capture finalization & local durability/export setup before leaving or retrying.
+      const durable = await completion.persistPromise;
+      // F5 bounded wait: give fast uploads a short grace window to finish cleanly; if a durable clip's PUT stalls,
+      // abort the hung upload cleanly (single-owner, zero duplicate background uploads) so Retry/Leave never freezes.
+      let uploadSettled = false;
+      const uploadDone = completion.uploadPromise.then(() => { uploadSettled = true; });
+      const graceTimer = new Promise<void>((resolve) => setTimeout(resolve, 1_500));
+      await Promise.race([uploadDone, graceTimer]);
+      if (!uploadSettled) {
+        if (durable) {
+          completion.abortUpload();
+          await Promise.race([uploadDone, new Promise<void>((resolve) => setTimeout(resolve, 500))]);
+        } else if (temporaryRecordingRef.current) {
+          // Non-durable clip still in memory: keep export UI visible and do NOT proceed with Retry/Leave.
+          leavingRef.current = false;
+          return false;
+        }
+      }
+    }
     if (temporaryRecordingRef.current) {
       leavingRef.current = false;
       return false;
