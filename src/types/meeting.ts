@@ -49,6 +49,25 @@ export interface MeetingRecordingPlaybackResponse {
   recordingError?: string | null;
 }
 
+export interface PresignRecordingUploadRequest {
+  contentType: string;
+  fileName?: string;
+}
+
+export interface PresignRecordingUploadResponse {
+  uploadUrl: string;
+  uploadToken: string;
+  contentType: string;
+  fileName: string;
+  maxFileSizeBytes: number;
+  expiresAt: string;
+}
+
+export interface CompleteRecordingUploadRequest {
+  uploadToken: string;
+  durationSeconds?: number;
+}
+
 export interface CreateMeetingRequest {
   title: string;
   description?: string;

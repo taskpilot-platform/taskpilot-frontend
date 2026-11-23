@@ -47,6 +47,28 @@ vi.mock("@/services/meeting.service", () => ({
       backupStorageUsed: false,
       recordingError: null,
     }),
+    presignFallbackUpload: vi.fn().mockResolvedValue({
+      uploadUrl: "https://s3.us-east-005.backblazeb2.com/taskpilot-recordings-2026/recordings/4/234/test.webm",
+      uploadToken: "signed-upload-token",
+      contentType: "video/webm",
+      fileName: "meeting_234_fallback.webm",
+      maxFileSizeBytes: 1073741824,
+      expiresAt: new Date(Date.now() + 1200_000).toISOString(),
+    }),
+    completeFallbackUpload: vi.fn().mockResolvedValue({
+      id: 234,
+      projectId: 4,
+      recordingFileId: 1001,
+      recordingStatus: "COMPLETED",
+      recordingEnabled: true,
+    }),
+    uploadFallbackRecordingToB2: vi.fn().mockResolvedValue({
+      id: 234,
+      projectId: 4,
+      recordingFileId: 1001,
+      recordingStatus: "COMPLETED",
+      recordingEnabled: true,
+    }),
   },
 }));
 
@@ -396,6 +418,81 @@ describe("Meeting Recording and Screen Sharing Features", () => {
 
       await waitFor(() => {
         expect(meetingService.stopRecording).toHaveBeenCalledWith(4, 234);
+      });
+    });
+
+    it("falls back to browser MediaRecorder with explicit fallback badge and B2 presigned upload when Egress start fails", async () => {
+      const stopTrack = vi.fn();
+      Object.defineProperty(navigator, "mediaDevices", {
+        writable: true,
+        value: {
+          getUserMedia: vi.fn().mockResolvedValue({
+            getTracks: () => [{ stop: vi.fn() }],
+          }),
+          getDisplayMedia: vi.fn().mockResolvedValue({
+            getTracks: () => [{ stop: stopTrack }],
+            getVideoTracks: () => [{ onended: null, stop: stopTrack }],
+          }),
+        },
+      });
+
+      class MockMediaRecorder {
+        state = "inactive";
+        mimeType = "video/webm";
+        ondataavailable: ((e: { data: Blob }) => void) | null = null;
+        onstop: (() => void) | null = null;
+        static isTypeSupported = () => true;
+        start() {
+          this.state = "recording";
+        }
+        stop() {
+          this.state = "inactive";
+          this.ondataavailable?.({ data: new Blob(["fallback-video-bytes"], { type: "video/webm" }) });
+          this.onstop?.();
+        }
+      }
+      (globalThis as any).MediaRecorder = MockMediaRecorder;
+
+      vi.mocked(meetingService.startRecording).mockRejectedValueOnce(new Error("LiveKit Egress unavailable"));
+      vi.mocked(meetingService.joinMeeting).mockResolvedValue({
+        token: "mock-token",
+        livekitUrl: "wss://mock.livekit.cloud",
+        roomName: "tp-proj-4-m-234",
+        identity: "user_1",
+        participantName: "Admin",
+        isHost: true,
+        meeting: { ...mockEndedMeeting, status: "ACTIVE", recordingStatus: "IDLE" },
+      });
+
+      render(
+        <ConfirmProvider>
+          <LiveMeetingRoom
+            projectId={4}
+            meetingId={234}
+            currentUserId={1}
+            onLeave={vi.fn()}
+            onEndMeeting={vi.fn()}
+          />
+        </ConfirmProvider>
+      );
+
+      const recBtn = await screen.findByTestId("toggle-recording-btn");
+      fireEvent.click(recBtn);
+
+      await waitFor(() => {
+        expect(screen.getByTestId("meeting-fallback-recording-badge")).toBeInTheDocument();
+        expect(screen.getByText(/chế độ dự phòng/i)).toBeInTheDocument();
+      });
+
+      fireEvent.click(recBtn);
+
+      await waitFor(() => {
+        expect(meetingService.uploadFallbackRecordingToB2).toHaveBeenCalledWith(
+          4,
+          234,
+          expect.any(Blob),
+          expect.objectContaining({ fileName: expect.stringContaining("meeting_234_fallback_") })
+        );
       });
     });
   });

@@ -269,20 +269,28 @@ export function MeetingRecordingModal({
     });
 
     if (meeting.projectId) {
+      const ext = file.name.includes(".") ? file.name.slice(file.name.lastIndexOf(".")) : ".webm";
+      const uploadName = `meeting_${meeting.id}_rec_${Date.now()}${ext}`;
       try {
-        const ext = file.name.includes(".") ? file.name.slice(file.name.lastIndexOf(".")) : ".webm";
-        const uploadName = `meeting_${meeting.id}_rec_${Date.now()}${ext}`;
-        const uploadFileObj = new File([patchedFile], uploadName, { type: patchedFile.type || "video/webm" });
-        const uploaded = await projectFilesService.uploadFile(
-          meeting.projectId,
-          uploadFileObj,
-          `Bản ghi cuộc họp: ${meeting.title}`
-        );
-        if (uploaded?.data?.id) {
-          await meetingService.updateRecordingFile(meeting.projectId, meeting.id, uploaded.data.id);
+        await meetingService.uploadFallbackRecordingToB2(meeting.projectId, meeting.id, patchedFile, {
+          fileName: uploadName,
+          durationSeconds: meeting.durationSeconds || 30,
+        });
+      } catch (b2Err) {
+        console.warn("Direct B2 presigned upload unavailable, falling back to project files API:", b2Err);
+        try {
+          const uploadFileObj = new File([patchedFile], uploadName, { type: patchedFile.type || "video/webm" });
+          const uploaded = await projectFilesService.uploadFile(
+            meeting.projectId,
+            uploadFileObj,
+            `Bản ghi cuộc họp: ${meeting.title}`
+          );
+          if (uploaded?.data?.id) {
+            await meetingService.updateRecordingFile(meeting.projectId, meeting.id, uploaded.data.id);
+          }
+        } catch (err) {
+          console.warn("Could not upload/link custom recording file:", err);
         }
-      } catch (err) {
-        console.warn("Could not upload/link custom recording file:", err);
       }
     }
   };
