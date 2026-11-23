@@ -9,6 +9,7 @@ import { meetingService } from "@/services/meeting.service";
 import ProjectWorkspacePage from "@/pages/ProjectWorkspacePage";
 import { Routes, Route } from "react-router-dom";
 import { ConfirmProvider } from "@/components/ui/confirm-dialog";
+import { isSupportedProjectTimezone } from "@/lib/projectTaskDate";
 
 // Mocks
 (globalThis as any).ResizeObserver = class ResizeObserver {
@@ -72,6 +73,13 @@ vi.mock("@/services/meeting.service", () => ({
   },
 }));
 
+function resolveRuntimeProjectTimezone(): string {
+  const runtimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  return isSupportedProjectTimezone(runtimeZone) ? runtimeZone : "UTC";
+}
+
+const TEST_PROJECT_TIMEZONE = resolveRuntimeProjectTimezone();
+
 function todayAtLocalTime(hour: number, minute = 0): string {
   const now = new Date();
   return new Date(now.getFullYear(), now.getMonth(), now.getDate(), hour, minute).toISOString();
@@ -121,6 +129,7 @@ const mockTasks: any[] = [
     status: "IN_PROGRESS",
     priority: "HIGH",
     dueDate: todayAtLocalTime(18),
+    projectTimezoneId: TEST_PROJECT_TIMEZONE,
     assigneeId: 1,
     position: 1,
   },
@@ -172,6 +181,7 @@ describe("Calendar & Teams/Outlook Scheduling", () => {
       render(
         <ProjectCalendarTab
           projectId={100}
+          projectTimezoneId={TEST_PROJECT_TIMEZONE}
           tasks={mockTasks}
           currentUserId={1}
         />
