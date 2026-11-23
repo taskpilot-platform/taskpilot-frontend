@@ -10,7 +10,11 @@ import { projectService } from "@/services/project.service";
 import { projectChatService } from "@/services/project-chat.service";
 import { taskService } from "@/services/task.service";
 import { meetingService } from "@/services/meeting.service";
+import { isSupportedProjectTimezone } from "@/lib/projectTaskDate";
 import type { ProjectChatMessage } from "@/types/collab";
+
+const runtimeTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+const testProjectTimezone = isSupportedProjectTimezone(runtimeTimezone) ? runtimeTimezone : "UTC";
 
 const PROJECTS = [
   { id: 100, name: "Project Alpha", status: "ACTIVE", myRole: "MANAGER" },
@@ -97,6 +101,7 @@ describe("P4.3 Mounted Route & Project Switch Synchronization", () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     localStorage.clear();
   });
 
@@ -318,6 +323,8 @@ describe("P4.3 Mounted Route & Project Switch Synchronization", () => {
   });
 
   it("GlobalCalendarPage clears stale project tasks/meetings and ignores late responses across route changes and back", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-23T17:24:00Z"));
     const deferredTasks100 = createDeferred<unknown>();
     vi.spyOn(projectService, "getProjectMembers").mockResolvedValue({
       status: 200,
@@ -341,6 +348,7 @@ describe("P4.3 Mounted Route & Project Switch Synchronization", () => {
             priority: "HIGH",
             status: "TODO",
             dueDate: new Date().toISOString(),
+            projectTimezoneId: testProjectTimezone,
           },
         ],
       }) as never;
@@ -381,6 +389,7 @@ describe("P4.3 Mounted Route & Project Switch Synchronization", () => {
             priority: "LOW",
             status: "TODO",
             dueDate: new Date().toISOString(),
+            projectTimezoneId: testProjectTimezone,
           },
         ],
       });
