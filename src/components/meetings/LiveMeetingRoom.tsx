@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useEffectEvent, useRef, useState } from "react";
 import {
   Mic,
   MicOff,
@@ -26,7 +26,11 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { meetingService } from "@/services/meeting.service";
 import { meetingRecordingStore } from "@/services/meetingRecordingStore";
-import fixWebmDuration from "fix-webm-duration";
+import { createMeetingCapture, startMeetingCapture } from "@/services/meetingCaptureSession";
+import { getSessionGeneration } from "@/lib/http";
+import { recordingFilename } from "@/services/meetingRecordingSync";
+import type { MeetingRecordingRecord } from "@/services/meetingRecordingStore";
+import { RemoteAudioRenderer } from "./RemoteAudioRenderer";
 import {
   videoBackgroundBlurService,
   BLUR_PRESETS,
@@ -79,91 +83,25 @@ function ParticipantTile({
 }) {
   const { t } = useTranslation();
   const videoRef = useRef<HTMLVideoElement>(null);
-  const [hasVideoStream, setHasVideoStream] = useState(false);
+  const camera = view.isLocal
+    ? room?.localParticipant.getTrackPublication(Track.Source.Camera)
+    : room?.remoteParticipants.get(view.identity)?.getTrackPublication(Track.Source.Camera);
+  const track = view.isCameraOff || (!view.isLocal && !camera?.isSubscribed) ? undefined : camera?.track;
+  const processed = !view.isCameraOff && view.isLocal && blurPreset !== "off" ? blurStream : null;
+  const hasVideoStream = Boolean(processed || track);
 
   useEffect(() => {
-    let attachedTrack: any = null;
-    let fallbackStream: MediaStream | null = null;
-    let isCancelled = false;
-
-    if (view.isCameraOff) {
-      if (videoRef.current) {
-        videoRef.current.srcObject = null;
-      }
-      setHasVideoStream(false);
-      return;
+    const video = videoRef.current;
+    if (!video) return;
+    if (processed) {
+      video.srcObject = processed;
+      void video.play().catch(() => undefined);
+      return () => { video.srcObject = null; };
     }
-
-    // 0. If local user has background blur active, prioritize processed blurred stream
-    if (view.isLocal && blurPreset !== "off" && blurStream) {
-      if (videoRef.current) {
-        videoRef.current.srcObject = blurStream;
-        videoRef.current.play()?.catch(() => {});
-        setHasVideoStream(true);
-      }
-      return;
-    }
-
-    // 1. Try LiveKit track first
-    if (room) {
-      if (view.isLocal) {
-        const pub = room.localParticipant.getTrackPublication(Track.Source.Camera);
-        if (pub?.track) {
-          attachedTrack = pub.track;
-          if (videoRef.current) {
-            attachedTrack.attach(videoRef.current);
-            setHasVideoStream(true);
-          }
-        }
-      } else {
-        const remote = room.remoteParticipants.get(view.identity);
-        if (remote) {
-          const pub = remote.getTrackPublication(Track.Source.Camera);
-          if (pub?.track && pub.isSubscribed) {
-            attachedTrack = pub.track;
-            if (videoRef.current) {
-              attachedTrack.attach(videoRef.current);
-              setHasVideoStream(true);
-            }
-          }
-        }
-      }
-    }
-
-    // 2. Fallback to direct local camera stream if local and no LiveKit track yet
-    if (view.isLocal && !attachedTrack && typeof navigator !== "undefined" && navigator.mediaDevices?.getUserMedia) {
-      navigator.mediaDevices
-        .getUserMedia({ video: { width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false })
-        .then((stream) => {
-          if (isCancelled) {
-            stream.getTracks().forEach((t) => t.stop());
-            return;
-          }
-          fallbackStream = stream;
-          if (videoRef.current) {
-            videoRef.current.srcObject = stream;
-            videoRef.current.play()?.catch(() => {});
-            setHasVideoStream(true);
-          }
-        })
-        .catch((err) => {
-          console.warn("Direct webcam acquisition fallback error:", err);
-          setHasVideoStream(false);
-        });
-    }
-
-    return () => {
-      isCancelled = true;
-      if (attachedTrack && videoRef.current) {
-        try {
-          attachedTrack.detach(videoRef.current);
-        } catch {}
-      }
-      if (fallbackStream) {
-        fallbackStream.getTracks().forEach((t) => t.stop());
-      }
-    };
-  }, [view.isCameraOff, view.isLocal, view.identity, room, blurStream, blurPreset]);
+    if (!track) return;
+    track.attach(video);
+    return () => { track.detach(video); };
+  }, [processed, track]);
 
   return (
     <div
@@ -181,7 +119,7 @@ function ParticipantTile({
             ref={videoRef}
             autoPlay
             playsInline
-            muted={view.isLocal}
+            muted
             className={`w-full h-full object-cover transition-opacity duration-300 ${
               hasVideoStream ? "opacity-100" : "opacity-0"
             }`}
@@ -270,42 +208,22 @@ function ScreenShareViewer({
   const { t } = useTranslation();
   const videoRef = useRef<HTMLVideoElement>(null);
 
+  const remoteTrack = [...(room?.remoteParticipants.values() ?? [])]
+    .map((participant) => participant.getTrackPublication(Track.Source.ScreenShare))
+    .find((publication) => publication?.isSubscribed && publication.track)?.track;
+
   useEffect(() => {
-    // 1. Prioritize direct local display MediaStream
-    if (stream && videoRef.current) {
-      videoRef.current.srcObject = stream;
-      videoRef.current.play()?.catch(() => {});
-      return;
+    const video = videoRef.current;
+    if (!video) return;
+    if (stream) {
+      video.srcObject = stream;
+      void video.play().catch(() => undefined);
+      return () => { video.srcObject = null; };
     }
-
-    // 2. Fallback or remote LiveKit screen share track
-    let track: any = null;
-    if (room) {
-      let pub: any = room.localParticipant?.getTrackPublication(Track.Source.ScreenShare);
-      if (!pub?.track) {
-        for (const remote of room.remoteParticipants.values()) {
-          const remotePub = remote.getTrackPublication(Track.Source.ScreenShare);
-          if (remotePub?.track && remotePub.isSubscribed) {
-            pub = remotePub;
-            break;
-          }
-        }
-      }
-
-      if (pub?.track && videoRef.current) {
-        track = pub.track;
-        track.attach(videoRef.current);
-      }
-    }
-
-    return () => {
-      if (track && videoRef.current) {
-        try {
-          track.detach(videoRef.current);
-        } catch {}
-      }
-    };
-  }, [room, stream]);
+    if (!remoteTrack) return;
+    remoteTrack.attach(video);
+    return () => { remoteTrack.detach(video); };
+  }, [stream, remoteTrack]);
 
   return (
     <div className="w-full h-full min-h-[320px] max-h-[720px] bg-slate-950 rounded-2xl overflow-hidden border border-emerald-500/40 shadow-2xl relative flex items-center justify-center" data-testid="screen-share-viewer">
@@ -352,9 +270,47 @@ export function LiveMeetingRoom({
   const [recordingMode, setRecordingMode] = useState<"none" | "cloud" | "fallback">("none");
   const [isRecordingBusy, setIsRecordingBusy] = useState(false);
   const [isUploadingFallback, setIsUploadingFallback] = useState(false);
-  const fallbackRecorderRef = useRef<MediaRecorder | null>(null);
-  const fallbackStreamRef = useRef<MediaStream | null>(null);
+  const captureRef = useRef<ReturnType<typeof startMeetingCapture> | null>(null);
+  const leavingRef = useRef(false);
+  const retryingRef = useRef(false);
+  const [isRetrying, setIsRetrying] = useState(false);
+  const mountedRef = useRef(true);
+  const ownerContextRef = useRef({ userId: currentUserId, projectId, meetingId });
+  ownerContextRef.current = { userId: currentUserId, projectId, meetingId };
+  const isSameOwnerSession = (
+    generation: number,
+    owner: { userId: number; projectId: number; meetingId: number }
+  ) =>
+    mountedRef.current
+    && getSessionGeneration() === generation
+    && ownerContextRef.current.userId === owner.userId
+    && ownerContextRef.current.projectId === owner.projectId
+    && ownerContextRef.current.meetingId === owner.meetingId;
+  const [connectionAttempt, setConnectionAttempt] = useState(0);
+  const [temporaryRecording, setTemporaryRecording] = useState<MeetingRecordingRecord>();
+  const temporaryRecordingRef = useRef<MeetingRecordingRecord | undefined>(undefined);
+  const rememberTemporaryRecording = (record: MeetingRecordingRecord | undefined) => {
+    temporaryRecordingRef.current = record;
+    setTemporaryRecording(record);
+  };
   const fallbackCompletionRef = useRef<{ promise: Promise<void>; resolve: () => void } | null>(null);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    const existing = temporaryRecordingRef.current;
+    if (
+      existing
+      && (existing.userId !== currentUserId || existing.projectId !== projectId || existing.meetingId !== meetingId)
+    ) {
+      rememberTemporaryRecording(undefined);
+    }
+  }, [currentUserId, projectId, meetingId]);
 
   // Drawers
   const [isParticipantsOpen, setIsParticipantsOpen] = useState(false);
@@ -376,241 +332,7 @@ export function LiveMeetingRoom({
   const roomRef = useRef<Room | null>(null);
   const tokenDataRef = useRef<MeetingTokenResponse | null>(null);
 
-  // 1. Join meeting & Fetch token
-  useEffect(() => {
-    let isMounted = true;
-
-    async function initMeeting() {
-      try {
-        setConnectionState("connecting");
-        const rawRes = await meetingService.joinMeeting(projectId, meetingId);
-        if (!isMounted) return;
-
-        const res: MeetingTokenResponse = (rawRes as any)?.data?.token
-          ? (rawRes as any).data
-          : (rawRes as any)?.token
-          ? rawRes
-          : ((rawRes as any)?.data || rawRes);
-
-        tokenDataRef.current = res;
-        setTokenData(res);
-        if (res?.meeting) {
-          setMeeting(res.meeting);
-          const cloudActive =
-            res.meeting.recordingStatus === "STARTING" ||
-            res.meeting.recordingStatus === "RECORDING";
-          setIsRecording(cloudActive);
-          setRecordingMode(cloudActive ? "cloud" : "none");
-        }
-
-        // Connect to LiveKit Room
-        await connectLiveKit(res);
-      } catch (err: any) {
-        if (!isMounted) return;
-        console.error("Error joining meeting:", err);
-        setErrorMessage(err?.response?.data?.message || err?.message || "Failed to join meeting");
-        setConnectionState("error");
-      }
-    }
-
-    initMeeting();
-
-    return () => {
-      isMounted = false;
-      cleanupRoom();
-      videoBackgroundBlurService.stop();
-      if (rawWebcamStreamRef.current) {
-        rawWebcamStreamRef.current.getTracks().forEach((t) => t.stop());
-        rawWebcamStreamRef.current = null;
-      }
-    };
-  }, [projectId, meetingId]);
-
-  // Timer counter
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setElapsedSeconds((prev) => prev + 1);
-    }, 1000);
-    return () => clearInterval(timer);
-  }, []);
-
-  // Warn user before closing tab while Tier 3 local fallback recording or B2 upload is in progress
-  useEffect(() => {
-    const protectTab = (recordingMode === "fallback" && isRecording) || isUploadingFallback;
-    if (!protectTab) return;
-    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      e.preventDefault();
-      e.returnValue = "";
-    };
-    window.addEventListener("beforeunload", handleBeforeUnload);
-    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
-  }, [recordingMode, isRecording, isUploadingFallback]);
-
-  // Periodically sync server-side Cloud Egress status so all participants see live REC / PROCESSING state
-  useEffect(() => {
-    if (connectionState !== "connected" || typeof meetingService.getMeetingById !== "function") return;
-    let active = true;
-    const interval = setInterval(async () => {
-      if (!active || recordingMode === "fallback") return;
-      try {
-        const latest = await meetingService.getMeetingById(projectId, meetingId);
-        if (!active || !latest) return;
-        setMeeting(latest);
-        const cloudActive = latest.recordingStatus === "STARTING" || latest.recordingStatus === "RECORDING";
-        setIsRecording(cloudActive);
-        setRecordingMode(cloudActive ? "cloud" : "none");
-      } catch {
-        // Non-fatal background refresh
-      }
-    }, 15000);
-    return () => {
-      active = false;
-      clearInterval(interval);
-    };
-  }, [connectionState, projectId, meetingId, recordingMode]);
-
-  // Format timer
-  const formatTime = (secs: number) => {
-    const h = Math.floor(secs / 3600);
-    const m = Math.floor((secs % 3600) / 60);
-    const s = secs % 60;
-    if (h > 0) {
-      return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
-    }
-    return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
-  };
-
-  // Connect to LiveKit
-  const connectLiveKit = async (tokenRes?: MeetingTokenResponse) => {
-    const activeTokenData: MeetingTokenResponse = (tokenRes as any)?.data?.token
-      ? (tokenRes as any).data
-      : (tokenRes as any)?.token
-      ? tokenRes
-      : tokenDataRef.current || tokenData || ({} as any);
-
-    tokenDataRef.current = activeTokenData;
-    setupFallbackViews(activeTokenData);
-
-    const token = activeTokenData?.token;
-    if (!token || typeof token !== "string" || token.startsWith("mock-")) {
-      setConnectionState("connected");
-      return;
-    }
-
-    try {
-      const room = new Room({
-        adaptiveStream: true,
-        dynacast: true,
-        videoCaptureDefaults: {
-          resolution: VideoPresets.h720.resolution,
-        },
-      });
-
-      roomRef.current = room;
-
-      // Event handlers
-      room.on(RoomEvent.Connected, () => {
-        setConnectionState("connected");
-        updateParticipantViews(activeTokenData);
-      });
-
-      room.on(RoomEvent.Disconnected, () => {
-        setConnectionState("disconnected");
-      });
-
-      room.on(RoomEvent.ParticipantConnected, (p) => {
-        toast.info(`${p.name || p.identity} đã tham gia`);
-        updateParticipantViews(activeTokenData);
-      });
-
-      room.on(RoomEvent.ParticipantDisconnected, (p) => {
-        toast.info(`${p.name || p.identity} đã rời phòng`);
-        updateParticipantViews(activeTokenData);
-      });
-
-      room.on(RoomEvent.ActiveSpeakersChanged, (speakers) => {
-        const speakerIds = new Set(speakers.map((s) => s.identity));
-        setViews((prev) =>
-          prev.map((v) => ({
-            ...v,
-            isSpeaking: speakerIds.has(v.identity),
-          }))
-        );
-      });
-
-      room.on(RoomEvent.TrackSubscribed, () => {
-        updateParticipantViews(activeTokenData);
-      });
-
-      room.on(RoomEvent.TrackUnsubscribed, () => {
-        updateParticipantViews(activeTokenData);
-      });
-
-      room.on(RoomEvent.DataReceived, (payload, participant) => {
-        try {
-          const str = new TextDecoder().decode(payload);
-          const data = JSON.parse(str);
-          if (data.type === "chat") {
-            setMessages((prev) => [
-              ...prev,
-              {
-                id: data.id || String(Date.now()),
-                senderName: participant?.name || participant?.identity || "Participant",
-                senderId: data.senderId || 0,
-                content: data.content,
-                time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-                isSelf: false,
-              },
-            ]);
-          }
-        } catch (e) {
-          console.warn("Failed to parse data message", e);
-        }
-      });
-
-      // Try connecting to LiveKit cloud
-      const livekitUrl = activeTokenData?.livekitUrl || "wss://taskpilot-collab-m3oqfj4g.livekit.cloud";
-      await room.connect(livekitUrl, token);
-
-      // Attempt publishing local camera & mic
-      try {
-        await room.localParticipant.enableCameraAndMicrophone();
-        setIsMicOn(true);
-        setIsCamOn(true);
-      } catch (devErr) {
-        console.warn("Media devices not available (running in headless or simulated environment):", devErr);
-      }
-
-      setConnectionState("connected");
-      updateParticipantViews(activeTokenData);
-    } catch (err: any) {
-      console.warn("LiveKit Room connection fallback mode active:", err?.message || err);
-      setConnectionState("connected");
-      setupFallbackViews(activeTokenData);
-    }
-  };
-
-  const setupFallbackViews = (tokenRes?: MeetingTokenResponse) => {
-    const resolved = (tokenRes as any)?.data?.token ? (tokenRes as any).data : tokenRes;
-    const name = resolved?.participantName ? `${resolved.participantName} (Bạn)` : "Alex Rivera (Bạn)";
-    setViews([
-      {
-        identity: resolved?.identity || "user_local",
-        name,
-        isHost: resolved?.isHost ?? true,
-        isLocal: true,
-        isSpeaking: false,
-        isMuted: false,
-        isCameraOff: false,
-      },
-    ]);
-  };
-
-  const updateParticipantViews = (providedToken?: MeetingTokenResponse) => {
-    const room = roomRef.current;
-    if (!room) return;
-
-    const currentToken = providedToken || tokenDataRef.current || tokenData;
+  const updateParticipantViews = useEffectEvent((room: Room, currentToken: MeetingTokenResponse) => {
     const list: ParticipantView[] = [];
 
     // Local participant
@@ -642,6 +364,230 @@ export function LiveMeetingRoom({
     });
 
     setViews(list);
+  });
+
+  const notifyRoomEnded = useEffectEvent(() => {
+    if (!temporaryRecordingRef.current) (onEndMeeting ?? onLeave)();
+  });
+
+  useEffect(() => {
+    let active = true;
+    let joinedRoom: Room | undefined;
+    const generation = getSessionGeneration();
+    const isCurrentRoom = () => active && generation === getSessionGeneration() && roomRef.current === joinedRoom;
+    async function confirmSession(room: Room) {
+      const sid = room.localParticipant.sid;
+      if (!sid) throw new Error("LiveKit did not establish a participant session");
+      for (let attempt = 0; attempt < 3 && isCurrentRoom(); attempt += 1) {
+        try {
+          await meetingService.confirmAttendance(projectId, meetingId, sid);
+          return;
+        } catch (error) {
+          if (attempt === 2) throw error;
+          await new Promise((resolve) => setTimeout(resolve, 350));
+        }
+      }
+    }
+
+    async function init() {
+      if (!active || generation !== getSessionGeneration()) return;
+      leavingRef.current = false;
+      setConnectionState("connecting");
+      setErrorMessage(null);
+      setIsRecordingBusy(false);
+      if (!fallbackCompletionRef.current) setIsUploadingFallback(false);
+      const pendingExport = temporaryRecordingRef.current;
+      if (
+        pendingExport
+        && (pendingExport.userId !== currentUserId
+          || pendingExport.projectId !== projectId
+          || pendingExport.meetingId !== meetingId)
+      ) {
+        rememberTemporaryRecording(undefined);
+      }
+      setViews([]);
+      setScreenStream(null);
+      setIsScreenSharing(false);
+      setTokenData(null);
+      tokenDataRef.current = null;
+      try {
+        const res = await meetingService.joinMeeting(projectId, meetingId);
+        if (!active || generation !== getSessionGeneration()) return;
+        if (!res?.token || res.token.startsWith("mock-") || !res.livekitUrl) {
+          throw new Error("LIVEKIT_UNAVAILABLE");
+        }
+        setTokenData(res);
+        tokenDataRef.current = res;
+        setMeeting(res.meeting);
+        if (res.meeting.status === "ENDED" || res.meeting.status === "ENDING") throw new Error("LIVEKIT_UNAVAILABLE");
+        const cloudActive = res.meeting.recordingStatus === "STARTING" || res.meeting.recordingStatus === "RECORDING";
+        setIsRecording(cloudActive);
+        setRecordingMode(cloudActive ? "cloud" : "none");
+
+        const room = new Room({
+          adaptiveStream: true,
+          dynacast: true,
+          videoCaptureDefaults: { resolution: VideoPresets.h720.resolution },
+        });
+        joinedRoom = room;
+        roomRef.current = room;
+        const refresh = () => { if (isCurrentRoom()) updateParticipantViews(room, res); };
+
+        room.on(RoomEvent.TrackSubscribed, refresh);
+        room.on(RoomEvent.TrackUnsubscribed, refresh);
+        room.on(RoomEvent.TrackMuted, refresh);
+        room.on(RoomEvent.TrackUnmuted, refresh);
+        room.on(RoomEvent.ParticipantConnected, refresh);
+        room.on(RoomEvent.ParticipantDisconnected, refresh);
+        room.on(RoomEvent.Reconnecting, () => {
+          if (isCurrentRoom()) setConnectionState("connecting");
+        });
+        room.on(RoomEvent.Reconnected, () => {
+          void confirmSession(room).then(() => {
+            if (isCurrentRoom() && room.state === "connected") {
+              setConnectionState("connected");
+              refresh();
+            }
+          }).catch(() => { if (isCurrentRoom()) void room.disconnect(); });
+        });
+        room.on(RoomEvent.Disconnected, () => {
+          if (!isCurrentRoom()) return;
+          const saved = flushFallbackRecordingBeforeExit();
+          setConnectionState("disconnected");
+          void meetingService.getMeetingById(projectId, meetingId).then(async (latest) => {
+            if (latest.status === "ENDED" || latest.status === "ENDING") {
+              await saved;
+              if (isCurrentRoom() && !leavingRef.current) notifyRoomEnded();
+            }
+          }).catch(() => undefined);
+        });
+        room.on(RoomEvent.ActiveSpeakersChanged, (speakers) => {
+          if (!isCurrentRoom()) return;
+          const activeSpeakers = new Set(speakers.map((speaker) => speaker.identity));
+          setViews((previous) => previous.map((view) => ({ ...view, isSpeaking: activeSpeakers.has(view.identity) })));
+        });
+        room.on(RoomEvent.DataReceived, (payload, participant) => {
+          if (!isCurrentRoom()) return;
+          try {
+            const message = JSON.parse(new TextDecoder().decode(payload));
+            if (message.type === "chat" && typeof message.content === "string") {
+              setMessages((previous) => [...previous, {
+                id: message.id || crypto.randomUUID(),
+                senderName: participant?.name || participant?.identity || "Participant",
+                senderId: message.senderId || 0,
+                content: message.content,
+                time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+                isSelf: false,
+              }]);
+            }
+          } catch {
+            // Ignore incomplete or unsupported data messages.
+          }
+        });
+
+        await room.connect(res.livekitUrl, res.token);
+        if (!isCurrentRoom()) {
+          await room.disconnect();
+          return;
+        }
+        await confirmSession(room);
+        if (!isCurrentRoom() || room.state !== "connected") return;
+        setConnectionState("connected");
+        setIsMicOn(room.localParticipant.isMicrophoneEnabled);
+        setIsCamOn(room.localParticipant.isCameraEnabled);
+        refresh();
+        await Promise.allSettled([
+          room.localParticipant.setMicrophoneEnabled(true),
+          room.localParticipant.setCameraEnabled(true),
+        ]);
+        if (isCurrentRoom()) {
+          setIsMicOn(room.localParticipant.isMicrophoneEnabled);
+          setIsCamOn(room.localParticipant.isCameraEnabled);
+          refresh();
+        }
+      } catch (error) {
+        if (!active || generation !== getSessionGeneration()) return;
+        if (roomRef.current === joinedRoom) roomRef.current = null;
+        if (joinedRoom) void joinedRoom.disconnect();
+        setErrorMessage(error instanceof Error ? error.message : null);
+        setConnectionState("error");
+      }
+    }
+
+    queueMicrotask(() => { void init(); });
+    return () => {
+      active = false;
+      leavingRef.current = true;
+      if (roomRef.current === joinedRoom) roomRef.current = null;
+      void captureRef.current?.stop();
+      if (joinedRoom) void joinedRoom.disconnect();
+      videoBackgroundBlurService.stop();
+      rawWebcamStreamRef.current?.getTracks().forEach((track) => track.stop());
+      rawWebcamStreamRef.current = null;
+    };
+  }, [projectId, meetingId, currentUserId, connectionAttempt]);
+
+
+  // Timer counter
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setElapsedSeconds((prev) => prev + 1);
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Warn user before closing tab while Tier 3 local fallback recording or B2 upload is in progress
+  useEffect(() => {
+    const protectTab = (recordingMode === "fallback" && isRecording) || isUploadingFallback || Boolean(temporaryRecording);
+    if (!protectTab) return;
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [recordingMode, isRecording, isUploadingFallback, temporaryRecording]);
+
+  // Periodically sync server-side Cloud Egress status so all participants see live REC / PROCESSING state
+  useEffect(() => {
+    if (connectionState !== "connected" || typeof meetingService.getMeetingById !== "function") return;
+    let active = true;
+    const generation = getSessionGeneration();
+    const current = () => active && generation === getSessionGeneration();
+    const interval = setInterval(async () => {
+      if (!current()) return;
+      try {
+        const latest = await meetingService.getMeetingById(projectId, meetingId);
+        if (!current() || !latest) return;
+        setMeeting(latest);
+        if (latest.status === "ENDED" || latest.status === "ENDING") {
+          await flushFallbackRecordingBeforeExit();
+          if (current() && !leavingRef.current) notifyRoomEnded();
+          return;
+        }
+        if (recordingMode === "fallback") return;
+        const cloudActive = latest.recordingStatus === "STARTING" || latest.recordingStatus === "RECORDING";
+        setIsRecording(cloudActive);
+        setRecordingMode(cloudActive ? "cloud" : "none");
+      } catch {
+        // Non-fatal background refresh
+      }
+    }, 15000);
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
+  }, [connectionState, projectId, meetingId, recordingMode]);
+
+  // Format timer
+  const formatTime = (secs: number) => {
+    const h = Math.floor(secs / 3600);
+    const m = Math.floor((secs % 3600) / 60);
+    const s = secs % 60;
+    if (h > 0) {
+      return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+    }
+    return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
   };
 
   const cleanupRoom = () => {
@@ -653,18 +599,7 @@ export function LiveMeetingRoom({
     setBlurStream(null);
     setBlurPreset("off");
 
-    if (fallbackRecorderRef.current && fallbackRecorderRef.current.state === "recording") {
-      try {
-        fallbackRecorderRef.current.stop();
-      } catch (e) {
-        console.warn("Error stopping fallback media recorder", e);
-      }
-    }
-    if (fallbackStreamRef.current) {
-      fallbackStreamRef.current.getTracks().forEach((t) => t.stop());
-      fallbackStreamRef.current = null;
-    }
-
+    void captureRef.current?.stop();
     if (screenStream) {
       screenStream.getTracks().forEach((t) => t.stop());
       setScreenStream(null);
@@ -681,34 +616,36 @@ export function LiveMeetingRoom({
 
   // Toggle Microphone
   const toggleMic = async () => {
-    const next = !isMicOn;
-    setIsMicOn(next);
-    if (roomRef.current?.localParticipant) {
-      try {
-        await roomRef.current.localParticipant.setMicrophoneEnabled(next);
-      } catch (e) {
-        console.warn("Mic toggle error", e);
-      }
+    const room = roomRef.current;
+    if (!room) return;
+    try {
+      if (isMicOn) captureRef.current?.setMicEnabled(false);
+      await room.localParticipant.setMicrophoneEnabled(!isMicOn);
+    } catch {
+      toast.warning(t("meetings.mic_change_failed", { defaultValue: "Không đổi được trạng thái mic." }));
+    } finally {
+      const enabled = room.localParticipant.isMicrophoneEnabled;
+      captureRef.current?.setMicEnabled(enabled);
+      setIsMicOn(enabled);
+      setViews((previous) => previous.map((view) => view.isLocal
+        ? { ...view, isMuted: !room.localParticipant.isMicrophoneEnabled, isCameraOff: !room.localParticipant.isCameraEnabled }
+        : view));
     }
-    setViews((prev) =>
-      prev.map((v) => (v.isLocal ? { ...v, isMuted: !next } : v))
-    );
   };
 
-  // Toggle Camera
   const toggleCam = async () => {
-    const next = !isCamOn;
-    setIsCamOn(next);
-    if (roomRef.current?.localParticipant) {
-      try {
-        await roomRef.current.localParticipant.setCameraEnabled(next);
-      } catch (e) {
-        console.warn("Camera toggle error", e);
-      }
+    const room = roomRef.current;
+    if (!room) return;
+    try {
+      await room.localParticipant.setCameraEnabled(!isCamOn);
+    } catch {
+      toast.warning(t("meetings.camera_change_failed", { defaultValue: "Không đổi được trạng thái camera." }));
+    } finally {
+      setIsCamOn(room.localParticipant.isCameraEnabled);
+      setViews((previous) => previous.map((view) => view.isLocal
+        ? { ...view, isMuted: !room.localParticipant.isMicrophoneEnabled, isCameraOff: !room.localParticipant.isCameraEnabled }
+        : view));
     }
-    setViews((prev) =>
-      prev.map((v) => (v.isLocal ? { ...v, isCameraOff: !next } : v))
-    );
   };
 
   // Background blur management
@@ -783,240 +720,121 @@ export function LiveMeetingRoom({
     }
   };
 
-  // Toggle Screen Share
   const toggleScreenShare = async () => {
-    if (isScreenSharing) {
-      if (screenStream) {
-        screenStream.getTracks().forEach((t) => t.stop());
+    const room = roomRef.current;
+    if (!room) return;
+    try {
+      if (screenStream && captureRef.current) void captureRef.current.stop();
+      const publication = await room.localParticipant.setScreenShareEnabled(!isScreenSharing, {
+        audio: true, resolution: { width: 1280, height: 720, frameRate: 30 },
+      });
+      if (roomRef.current !== room) return;
+      const video = publication?.track?.mediaStreamTrack;
+      if (video && !isScreenSharing) {
+        const audio = room.localParticipant.getTrackPublication(Track.Source.ScreenShareAudio)?.track?.mediaStreamTrack;
+        setScreenStream(new MediaStream(audio ? [video, audio] : [video]));
+        setIsScreenSharing(true);
+        video.addEventListener("ended", () => {
+          if (roomRef.current === room) {
+            setScreenStream(null);
+            setIsScreenSharing(false);
+          }
+        }, { once: true });
+      } else {
+        setIsScreenSharing(false);
         setScreenStream(null);
       }
-      if (roomRef.current?.localParticipant) {
-        try {
-          await roomRef.current.localParticipant.setScreenShareEnabled(false);
-        } catch {}
-      }
-      setIsScreenSharing(false);
-      toast.info(t("meetings.screen_share_stopped", { defaultValue: "Đã dừng chia sẻ màn hình" }));
-    } else {
-      try {
-        const stream = await navigator.mediaDevices.getDisplayMedia({
-          video: true,
-          audio: true,
-        });
-
-        stream.getVideoTracks()[0].onended = () => {
-          if (roomRef.current?.localParticipant) {
-            void roomRef.current.localParticipant.setScreenShareEnabled(false);
-          }
-          setScreenStream(null);
-          setIsScreenSharing(false);
-          toast.info(t("meetings.screen_share_stopped", { defaultValue: "Đã dừng chia sẻ màn hình" }));
-        };
-
-        setScreenStream(stream);
-        setIsScreenSharing(true);
-
-        if (roomRef.current?.localParticipant) {
-          try {
-            await roomRef.current.localParticipant.setScreenShareEnabled(true);
-          } catch {}
-        }
-
-        toast.info(t("meetings.screen_sharing_active", { defaultValue: "Đang chia sẻ màn hình" }));
-      } catch (e: any) {
-        console.warn("Screen share cancel/error", e);
-        setIsScreenSharing(false);
-      }
+    } catch {
+      toast.warning(t("meetings.screen_sharing_failed", { defaultValue: "Không thể chia sẻ màn hình." }));
     }
   };
 
   const startFallbackBrowserRecording = async (): Promise<boolean> => {
-    if (typeof MediaRecorder === "undefined") {
-      toast.error(
-        t("meetings.browser_unsupported_record", {
-          defaultValue: "Trình duyệt không hỗ trợ ghi hình dự phòng",
-        })
-      );
-      return false;
-    }
-
-    let streamToRecord = screenStream;
-    let ownsStream = false;
-    if (!streamToRecord) {
-      if (typeof navigator === "undefined" || !navigator.mediaDevices?.getDisplayMedia) {
-        toast.error(
-          t("meetings.browser_unsupported_record", {
-            defaultValue: "Trình duyệt không hỗ trợ ghi hình màn hình dự phòng",
-          })
-        );
-        return false;
-      }
-      try {
-        streamToRecord = await navigator.mediaDevices.getDisplayMedia({
-          video: true,
-          audio: true,
-        });
-        ownsStream = true;
-      } catch {
-        toast.warning(
-          t("meetings.no_permission_record", {
-            defaultValue: "Chưa cấp quyền ghi hình màn hình cho chế độ dự phòng",
-          })
-        );
-        return false;
-      }
-    }
-
-    let resolveFallbackDone: (() => void) | null = null;
+    const room = roomRef.current;
+    const generation = getSessionGeneration();
+    const owner = { userId: currentUserId, projectId, meetingId };
+    const current = () => roomRef.current === room && isSameOwnerSession(generation, owner);
+    const sameOwner = () => isSameOwnerSession(generation, owner);
+    if (!room || !currentUserId || captureRef.current || temporaryRecordingRef.current || typeof MediaRecorder === "undefined") return false;
+    let source: MediaStream | undefined;
+    let input: ReturnType<typeof createMeetingCapture> | undefined;
     try {
-      const localChunks: Blob[] = [];
-      const startedAt = Date.now();
-      const mime = MediaRecorder.isTypeSupported("video/webm;codecs=vp8,opus")
-        ? "video/webm;codecs=vp8,opus"
-        : MediaRecorder.isTypeSupported("video/webm")
-        ? "video/webm"
-        : "";
-      const recorder = new MediaRecorder(streamToRecord, mime ? { mimeType: mime } : undefined);
-
-      // Create completion barrier BEFORE recorder.start() so Leave/End always waits across async recorder.stop() -> onstop -> B2 upload.
-      let resolveDone!: () => void;
-      const donePromise = new Promise<void>((res) => {
-        resolveDone = res;
+      source = screenStream ?? await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+      if (!current() || leavingRef.current) throw new Error("Meeting session changed");
+      const mic = room.localParticipant.getTrackPublication(Track.Source.Microphone);
+      input = createMeetingCapture(source, !screenStream, mic?.isMuted ? undefined : mic?.track?.mediaStreamTrack);
+      await input.ready;
+      if (input.coverage === "SCREEN_ONLY" && !await confirm({
+        title: t("meetings.video_only_title", { defaultValue: "Ghi hình không âm thanh" }),
+        message: t("meetings.video_only_confirm", { defaultValue: "Nguồn đang chọn không có âm thanh. Ghi chỉ hình ảnh, tối đa 5 phút?" }),
+        confirmText: t("meetings.video_only_action", { defaultValue: "Chỉ ghi hình" }),
+        cancelText: t("common.cancel", { defaultValue: "Hủy" }),
+      })) {
+        input.dispose();
+        return false;
+      }
+      if (!current() || leavingRef.current) throw new Error("Meeting session changed");
+      const draft: MeetingRecordingRecord = {
+        userId: currentUserId, projectId, meetingId, recordingId: crypto.randomUUID(),
+        recordedAt: new Date().toISOString(), title: meeting?.title || tokenData?.meeting.title || `#${meetingId}`,
+        origin: "BROWSER", uploadTarget: "B2", coverage: input.coverage,
+        mimeType: "video/webm", uploadState: "CAPTURING",
+      };
+      const capture = startMeetingCapture(input, draft, {
+        onFinalizing: () => { if (sameOwner()) { setIsRecording(false); setIsUploadingFallback(true); } },
+        onSizeWarning: () => { if (sameOwner()) toast.warning(t("meetings.recording_near_limit", { defaultValue: "Bản ghi sắp đạt giới hạn dung lượng." })); },
+        onStorageError: () => { if (sameOwner()) toast.warning(t("meetings.recording_storage_warning", { defaultValue: "Thiết bị không lưu được dữ liệu bản ghi. Hãy giữ tab mở." })); },
       });
-      resolveFallbackDone = resolveDone;
-      const completionHandle = { promise: donePromise, resolve: resolveDone };
-      fallbackCompletionRef.current = completionHandle;
-
-      const finishCompletion = () => {
-        resolveDone();
-        if (fallbackCompletionRef.current === completionHandle) {
-          fallbackCompletionRef.current = null;
+      captureRef.current = capture;
+      let resolve!: () => void;
+      const completion = { promise: new Promise<void>((done) => { resolve = done; }), resolve: () => resolve() };
+      fallbackCompletionRef.current = completion;
+      void capture.finished.then(async ({ record, durable }) => {
+        if (sameOwner()) { setIsRecording(false); setRecordingMode("none"); setIsUploadingFallback(true); }
+        if (!record.blob?.size) return;
+        // Preserve non-durable export path across disconnect/room replacement for the original owner session only.
+        if (!durable && sameOwner()) rememberTemporaryRecording(record);
+        // Unmount or account/session switch still persists the creator's bytes, but never uploads as another account.
+        if (!sameOwner()) return;
+        try {
+          const updated = await meetingService.uploadFallbackRecordingToB2(projectId, meetingId, record.blob, {
+            fileName: `meeting_${meetingId}_fallback_${record.recordingId}.${record.mimeType.startsWith("video/mp4") ? "mp4" : "webm"}`,
+            durationSeconds: Math.max(1, Math.round((record.durationMs || 1000) / 1000)),
+          });
+          if (getSessionGeneration() !== generation) return;
+          await meetingRecordingStore.save({ ...record, uploadState: "READY", fileId: updated.recordingFileId ?? undefined }).catch(() => undefined);
+          if (!sameOwner()) return;
+          rememberTemporaryRecording(undefined);
+          setMeeting(updated);
+          toast.success(t("meetings.fallback_upload_success", { defaultValue: "Đã tải bản ghi dự phòng lên Backblaze B2 thành công!" }));
+        } catch {
+          if (sameOwner()) toast.warning(t("meetings.recording_local_only", { defaultValue: "Bản ghi chưa được chia sẻ lên dự án." }));
         }
-      };
-
-      const handleTrackEnded = () => {
-        if (recorder.state === "recording") {
-          try {
-            recorder.stop();
-          } catch (stopErr) {
-            console.warn("Could not stop fallback recorder on track end:", stopErr);
-          }
-        }
-      };
-
-      const videoTrack = streamToRecord.getVideoTracks?.()[0];
-      if (videoTrack && typeof videoTrack.addEventListener === "function") {
-        videoTrack.addEventListener("ended", handleTrackEnded, { once: true });
-      }
-
-      recorder.ondataavailable = (e) => {
-        if (e.data && e.data.size > 0) {
-          localChunks.push(e.data);
-        }
-      };
-
-      recorder.onstop = () => {
-        if (videoTrack && typeof videoTrack.removeEventListener === "function") {
-          videoTrack.removeEventListener("ended", handleTrackEnded);
-        }
-        if (fallbackRecorderRef.current === recorder) {
-          fallbackRecorderRef.current = null;
-        }
-        if (ownsStream && fallbackStreamRef.current === streamToRecord) {
-          streamToRecord.getTracks().forEach((t) => t.stop());
-          fallbackStreamRef.current = null;
-        }
-        setIsRecording(false);
-        setRecordingMode("none");
-
-        const durationMs = Math.max(1000, Date.now() - startedAt);
-        const durationSec = Math.max(1, Math.round(durationMs / 1000));
-        const detectedType = recorder.mimeType || "video/webm";
-        const initialBlob = new Blob(localChunks, { type: detectedType });
-        if (initialBlob.size === 0) {
-          finishCompletion();
-          return;
-        }
-
-        void (async () => {
-          setIsUploadingFallback(true);
-          try {
-            let blob = initialBlob;
-            const isWebm = !blob.type || blob.type.toLowerCase().includes("webm");
-            if (isWebm) {
-              try {
-                blob = await fixWebmDuration(blob, durationMs);
-              } catch (fixErr) {
-                console.warn("Could not patch WebM duration header:", fixErr);
-              }
-            }
-
-            await meetingRecordingStore.saveRecording(meetingId, blob, {
-              title: meeting?.title || tokenData?.meeting?.title || `Cuộc họp #${meetingId}`,
-              projectId,
-              durationSeconds: durationSec,
-            });
-
-            const ext = blob.type.toLowerCase().includes("mp4") ? ".mp4" : ".webm";
-            try {
-              const updated = await meetingService.uploadFallbackRecordingToB2(projectId, meetingId, blob, {
-                fileName: `meeting_${meetingId}_fallback_${Date.now()}${ext}`,
-                durationSeconds: durationSec,
-              });
-              if (updated) {
-                setMeeting(updated);
-              }
-              toast.success(
-                t("meetings.fallback_upload_success", {
-                  defaultValue: "Đã tải bản ghi dự phòng lên Backblaze B2 thành công!",
-                })
-              );
-            } catch (uploadErr: any) {
-              console.warn("Fallback B2 presigned upload failed; local IndexedDB copy preserved", uploadErr);
-              toast.warning(
-                uploadErr?.response?.data?.message ||
-                  uploadErr?.message ||
-                  t("meetings.recording_upload_failed", {
-                    defaultValue:
-                      "Không thể tải bản ghi dự phòng lên Backblaze B2; bản sao cục bộ vẫn được giữ trên trình duyệt.",
-                  })
-              );
-            }
-          } finally {
-            setIsUploadingFallback(false);
-            finishCompletion();
-          }
-        })();
-      };
-
-      recorder.start(1000);
-      fallbackRecorderRef.current = recorder;
-      if (ownsStream) {
-        fallbackStreamRef.current = streamToRecord;
-      }
+      }).catch(() => {
+        if (sameOwner()) toast.error(t("meetings.recording_empty", { defaultValue: "Bản ghi không có dữ liệu video." }));
+      }).finally(() => {
+        if (captureRef.current === capture) captureRef.current = null;
+        if (fallbackCompletionRef.current === completion) fallbackCompletionRef.current = null;
+        if (sameOwner()) { setIsUploadingFallback(false); setIsRecording(false); setRecordingMode("none"); }
+        completion.resolve();
+      });
       setIsRecording(true);
       setRecordingMode("fallback");
-      toast.warning(
-        t("meetings.recording_fallback_started", {
-          defaultValue:
-            "Đang ghi (chế độ dự phòng trên trình duyệt) — đừng đóng tab cho đến khi dừng ghi.",
-        })
-      );
+      toast.warning(t("meetings.recording_fallback_started", { defaultValue: "Đang ghi (chế độ dự phòng trên trình duyệt) — đừng đóng tab cho đến khi dừng ghi." }));
       return true;
-    } catch (recErr) {
-      console.warn("Could not start fallback MediaRecorder:", recErr);
-      resolveFallbackDone?.();
-      fallbackCompletionRef.current = null;
-      if (ownsStream && streamToRecord) {
-        streamToRecord.getTracks().forEach((t) => t.stop());
-      }
+    } catch {
+      input?.dispose();
+      if (!input && source && source !== screenStream) source.getTracks().forEach((track) => track.stop());
       return false;
     }
   };
 
   // Cloud Egress recording toggle with graceful degradation to Tier 3 browser fallback
   const handleToggleCloudRecording = async () => {
-    if (isRecordingBusy || isUploadingFallback) return;
+    if (isRecordingBusy || isUploadingFallback || leavingRef.current || connectionState !== "connected") return;
+    const activeRoom = roomRef.current;
+    const generation = getSessionGeneration();
+    const current = () => activeRoom !== null && roomRef.current === activeRoom && generation === getSessionGeneration();
     if (!tokenData?.isHost) {
       toast.error(
         t("meetings.recording_host_only", {
@@ -1029,12 +847,7 @@ export function LiveMeetingRoom({
     try {
       if (isRecording) {
         if (recordingMode === "fallback") {
-          if (fallbackRecorderRef.current && fallbackRecorderRef.current.state === "recording") {
-            fallbackRecorderRef.current.stop();
-          } else {
-            setIsRecording(false);
-            setRecordingMode("none");
-          }
+          void captureRef.current?.stop();
           toast.info(
             t("meetings.fallback_stopping", {
               defaultValue: "Đã dừng ghi hình dự phòng. Đang tải video lên Backblaze B2...",
@@ -1044,6 +857,7 @@ export function LiveMeetingRoom({
         }
 
         const updated = await meetingService.stopRecording(projectId, meetingId);
+        if (!current()) return;
         if (updated) {
           setMeeting(updated);
         }
@@ -1057,6 +871,7 @@ export function LiveMeetingRoom({
       } else {
         try {
           const updated = await meetingService.startRecording(projectId, meetingId);
+          if (!current()) return;
           if (updated) {
             setMeeting(updated);
           }
@@ -1068,12 +883,14 @@ export function LiveMeetingRoom({
             })
           );
         } catch (cloudErr: any) {
+          if (!current()) return;
           const status = cloudErr?.response?.status ?? cloudErr?.status;
           // Never fall back to local browser recording on authorization, conflict, or bad-request errors.
           if (status === 409) {
             if (typeof meetingService.getMeetingById === "function") {
               try {
                 const latest = await meetingService.getMeetingById(projectId, meetingId);
+                if (!current()) return;
                 if (latest) {
                   setMeeting(latest);
                   const cloudActive =
@@ -1124,36 +941,48 @@ export function LiveMeetingRoom({
         t("meetings.recording_toggle_error", {
           defaultValue: "Không thể điều khiển ghi hình",
         });
-      toast.error(msg);
+      if (current()) toast.error(msg);
     } finally {
-      setIsRecordingBusy(false);
+      if (current()) setIsRecordingBusy(false);
     }
   };
 
   const flushFallbackRecordingBeforeExit = async () => {
     const completion = fallbackCompletionRef.current;
-    if (fallbackRecorderRef.current && fallbackRecorderRef.current.state === "recording") {
-      try {
-        fallbackRecorderRef.current.stop();
-      } catch (e) {
-        console.warn("Error stopping fallback recorder before exit", e);
-        completion?.resolve();
-      }
+    void captureRef.current?.stop();
+    if (completion) await completion.promise;
+    if (temporaryRecordingRef.current) {
+      leavingRef.current = false;
+      return false;
     }
-    if (completion) {
-      try {
-        await completion.promise;
-      } catch {
-        // Error already toasted inside onstop
-      }
+    return true;
+  };
+
+  const handleRetry = async () => {
+    if (retryingRef.current || leavingRef.current || temporaryRecordingRef.current) return;
+    retryingRef.current = true;
+    setIsRetrying(true);
+    const generation = getSessionGeneration();
+    const owner = { ...ownerContextRef.current };
+    try {
+      const ready = await flushFallbackRecordingBeforeExit();
+      if (!ready || leavingRef.current || !isSameOwnerSession(generation, owner)) return;
+      setConnectionAttempt((attempt) => attempt + 1);
+    } finally {
+      retryingRef.current = false;
+      if (mountedRef.current) setIsRetrying(false);
     }
   };
 
   // Leave Meeting
   const handleLeave = async () => {
-    await flushFallbackRecordingBeforeExit();
+    if (leavingRef.current) return;
+    leavingRef.current = true;
+    const generation = getSessionGeneration();
+    if (!await flushFallbackRecordingBeforeExit() || generation !== getSessionGeneration()) return;
     try {
-      await meetingService.leaveMeeting(projectId, meetingId);
+      const sid = roomRef.current?.localParticipant.sid;
+      if (sid) await meetingService.leaveMeeting(projectId, meetingId, sid);
     } catch (e) {
       console.warn("Leave meeting error", e);
     }
@@ -1171,13 +1000,20 @@ export function LiveMeetingRoom({
       variant: "destructive",
     });
 
-    if (isConfirmed) {
-      await flushFallbackRecordingBeforeExit();
+    if (isConfirmed && !leavingRef.current) {
+      leavingRef.current = true;
+      const generation = getSessionGeneration();
+      if (!await flushFallbackRecordingBeforeExit() || generation !== getSessionGeneration()) return;
       try {
-        await meetingService.endMeeting(projectId, meetingId);
-        toast.success(t("meetings.end_meeting_success", { defaultValue: "Cuộc họp đã kết thúc" }));
-      } catch (e) {
-        console.warn("End meeting error", e);
+        const result = await meetingService.endMeeting(projectId, meetingId);
+        if (generation !== getSessionGeneration()) return;
+        if (result.status === "ENDED") toast.success(t("meetings.end_meeting_success", { defaultValue: "Cuộc họp đã kết thúc" }));
+        else if (result.status === "ENDING") toast.info(t("meetings.meeting_closing", { defaultValue: "Đang chờ máy chủ đóng phòng họp." }));
+        else throw new Error("Meeting closure was not accepted");
+      } catch {
+        leavingRef.current = false;
+        toast.error(t("meetings.end_meeting_failed", { defaultValue: "Chưa thể yêu cầu kết thúc cuộc họp. Hãy thử lại." }));
+        return;
       }
       cleanupRoom();
       if (onEndMeeting) {
@@ -1237,23 +1073,70 @@ export function LiveMeetingRoom({
     }, 100);
   };
 
-  if (connectionState === "error") {
+  const recoveryNotice = temporaryRecording && (
+    <div className="flex flex-wrap items-center gap-2 px-5 pt-2 text-sm" role="alert">
+      <p>{t("meetings.export_before_leaving", { defaultValue: "Thiết bị chưa lưu được bản ghi. Hãy tải video xuống trước khi rời phòng." })}</p>
+      <Button size="sm" onClick={() => {
+        if (!temporaryRecording.blob) return;
+        const url = URL.createObjectURL(temporaryRecording.blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = recordingFilename(temporaryRecording);
+        link.click();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        rememberTemporaryRecording(undefined);
+      }}>{t("meetings.download_recording", { defaultValue: "Tải video" })}</Button>
+      <Button size="sm" variant="ghost" onClick={async () => {
+        if (!await confirm({
+          title: t("meetings.discard_recording", { defaultValue: "Bỏ bản ghi trên thiết bị" }),
+          message: t("meetings.discard_unsaved_recording", { defaultValue: "Bản ghi này đang được giữ trong tab và sẽ mất khi bỏ." }),
+          confirmText: t("meetings.discard_recording_action", { defaultValue: "Bỏ bản ghi" }),
+          variant: "destructive",
+        })) return;
+        rememberTemporaryRecording(undefined);
+      }}>{t("meetings.discard_recording_action", { defaultValue: "Bỏ bản ghi" })}</Button>
+    </div>
+  );
+
+  if (connectionState !== "connected") {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[500px] p-6 text-center bg-card rounded-xl border border-destructive/20 shadow-sm" data-testid="meeting-error-view">
+      <div className="flex flex-col items-center justify-center min-h-[500px] p-6 text-center bg-card rounded-xl border border-destructive/20 shadow-sm" data-testid={connectionState === "connecting" ? "meeting-connecting" : "meeting-connection-error"}>
         <div className="w-16 h-16 rounded-full bg-destructive/10 text-destructive flex items-center justify-center mb-4">
           <PhoneOff className="w-8 h-8" />
         </div>
-        <h3 className="text-xl font-bold mb-2">{t("meetings.error_cannot_join", { defaultValue: "Không thể tham gia cuộc họp" })}</h3>
-        <p className="text-muted-foreground max-w-md mb-6">{errorMessage || t("meetings.error_cannot_join_desc", { defaultValue: "Cuộc họp đã kết thúc hoặc bạn không có quyền truy cập." })}</p>
-        <Button onClick={onLeave} variant="default" data-testid="back-to-meetings-btn">
+        <h3 className="text-xl font-bold mb-2">
+          {connectionState === "connecting"
+            ? t("meetings.connecting_room", { defaultValue: "Đang kết nối phòng họp…" })
+            : t("meetings.error_cannot_join", { defaultValue: "Không thể tham gia cuộc họp" })}
+        </h3>
+        {recoveryNotice}
+        {connectionState !== "connecting" && (
+          <>
+            <p className="text-muted-foreground max-w-md mb-6">{errorMessage === "LIVEKIT_UNAVAILABLE"
+              ? t("meetings.media_unavailable", { defaultValue: "Dịch vụ họp trực tuyến hiện không khả dụng." })
+              : errorMessage || t("meetings.connection_lost", { defaultValue: "Kết nối phòng họp đã dừng." })}</p>
+            <Button disabled={Boolean(temporaryRecording) || isRetrying} onClick={() => void handleRetry()} className="mb-2">
+              {t("common.retry", { defaultValue: "Thử lại" })}
+            </Button>
+          </>
+        )}
+        <Button disabled={Boolean(temporaryRecording)} onClick={() => void handleLeave()} variant="outline" data-testid="back-to-meetings-btn">
           {t("meetings.back_to_meetings", { defaultValue: "Quay lại danh sách cuộc họp" })}
         </Button>
       </div>
     );
   }
 
+  const hasRemoteScreen = [...(roomRef.current?.remoteParticipants.values() ?? [])]
+    .some((participant) => {
+      const publication = participant.getTrackPublication(Track.Source.ScreenShare);
+      return Boolean(publication?.isSubscribed && publication.track);
+    });
+
   return (
     <div className="flex flex-col h-[calc(100vh-140px)] min-h-[600px] w-full bg-card text-card-foreground rounded-xl overflow-hidden border border-border shadow-xl relative" data-testid="live-meeting-room">
+      {recoveryNotice}
+      {roomRef.current && <RemoteAudioRenderer room={roomRef.current} />}
       {/* 1. Header Bar */}
       <div className="flex items-center justify-between px-5 py-3.5 bg-card border-b border-border z-20 shadow-sm">
         <div className="flex items-center gap-3">
@@ -1370,7 +1253,7 @@ export function LiveMeetingRoom({
       {/* 2. Main Area: Video Grid & Side Drawers */}
       <div className="flex flex-1 overflow-hidden relative">
         {/* Center Stage: Screen Share Spotlight OR Camera Grid */}
-        {isScreenSharing ? (
+        {isScreenSharing || hasRemoteScreen ? (
           <div className="flex-1 p-3 sm:p-4 overflow-hidden flex flex-col gap-3 bg-muted/40">
             {/* Screen Share Stage (Spotlight) */}
             <div className="flex-1 w-full min-h-0 relative">

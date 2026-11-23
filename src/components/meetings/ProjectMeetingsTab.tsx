@@ -162,7 +162,7 @@ export function ProjectMeetingsTab({
 
   const filteredMeetings = meetings.filter((m) => {
     if (filter === "ACTIVE") return m.status === "ACTIVE";
-    if (filter === "ENDED") return m.status === "ENDED";
+    if (filter === "ENDED") return m.status === "ENDED" || m.status === "ENDING";
     return true;
   });
 
@@ -420,7 +420,7 @@ export function ProjectMeetingsTab({
                           {t("meetings.status_active", { defaultValue: "Đang diễn ra" })}
                         </>
                       ) : (
-                        t("meetings.ended", { defaultValue: "Đã kết thúc" })
+                        m.status === "ENDING" ? t("meetings.meeting_closing", { defaultValue: "Đang chờ máy chủ đóng phòng họp." }) : t("meetings.ended", { defaultValue: "Đã kết thúc" })
                       )}
                     </Badge>
 
@@ -523,6 +523,7 @@ export function ProjectMeetingsTab({
         isOpen={Boolean(selectedRecordingMeeting)}
         onClose={() => setSelectedRecordingMeeting(null)}
         meeting={selectedRecordingMeeting}
+        currentUserId={currentUserId}
         onMeetingUpdated={(updated) => {
           setSelectedRecordingMeeting(updated);
           setMeetings((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));

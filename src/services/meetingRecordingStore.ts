@@ -17,6 +17,7 @@ export interface MeetingRecordingRecord extends MeetingRecordingScope {
   coverage: string;
   uploadState: "CAPTURING" | "LOCAL_ONLY" | "UPLOADING" | "READY";
   fileId?: number;
+  uploadTarget?: "B2";
   durationMs?: number;
   blob?: Blob;
 }

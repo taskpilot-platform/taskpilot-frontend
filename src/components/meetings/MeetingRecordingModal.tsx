@@ -1,655 +1,361 @@
-import React, { useEffect, useState, useRef, useCallback } from "react";
-import { Dialog, DialogContent, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Video, Download, Play, Clock, User, AlertCircle, Upload, RefreshCw, ShieldAlert } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Download, Upload, Video, RefreshCw } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { toast } from "react-toastify";
-import { meetingRecordingStore } from "@/services/meetingRecordingStore";
-import { projectFilesService } from "@/services/project-files.service";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from "@/components/ui/dialog";
 import { meetingService } from "@/services/meeting.service";
-import fixWebmDuration from "fix-webm-duration";
-import type { MeetingRecordingPlaybackResponse, ProjectMeetingDto } from "@/types/meeting";
+import { meetingRecordingStore, type MeetingRecordingRecord } from "@/services/meetingRecordingStore";
+import { maxRecordingBytes, recordingChecksum, syncMeetingRecording } from "@/services/meetingRecordingSync";
+import { projectFilesService } from "@/services/project-files.service";
+import type { MeetingRecordingDto, MeetingRecordingPlaybackResponse, ProjectMeetingDto } from "@/types/meeting";
+import { getSessionGeneration } from "@/lib/http";
 
-async function findLegacyRecordingId(meeting: ProjectMeetingDto): Promise<number | null> {
-  if (!meeting.projectId) return null;
-  const prefix = `meeting_${meeting.id}_rec_`;
-  const res = await projectFilesService.getFiles(meeting.projectId, prefix, 0, 50);
-  const hits = (res?.data?.content ?? []).filter((f) => f.originalName?.startsWith(prefix));
-  return hits.length ? Math.max(...hits.map((f) => f.id)) : null;
+const sampleChecksum = "560a6e704000aa1035f92419b72b4f59aacd7d307fea059410be4e4eef892cf6";
+
+type PlaybackState = "loading" | "ready" | "local" | "unavailable" | "denied" | "error";
+
+interface Clip {
+  key: string;
+  fileId?: number;
+  local?: MeetingRecordingRecord;
+  createdAt: string;
+  legacy?: boolean;
+  cloud?: MeetingRecordingPlaybackResponse;
 }
 
-function resolvePlaybackUrl(rawUrl: string): string {
-  if (/^https?:\/\//i.test(rawUrl) || rawUrl.startsWith("blob:")) {
-    return rawUrl;
-  }
+function resolvePlaybackUrl(rawUrl: string) {
+  if (/^https?:\/\//i.test(rawUrl)) return rawUrl;
   const apiBase = import.meta.env.VITE_API_BASE_URL?.trim() || "";
-  if (/^https?:\/\//i.test(apiBase)) {
-    const origin = apiBase.replace(/\/api\/?$/i, "").replace(/\/+$/, "");
-    return rawUrl.startsWith("/") ? `${origin}${rawUrl}` : `${origin}/${rawUrl}`;
-  }
+  if (/^https?:\/\//i.test(apiBase)) return `${apiBase.replace(/\/api\/?$/i, "").replace(/\/+$/, "")}/${rawUrl.replace(/^\/+/, "")}`;
   return rawUrl;
 }
 
-interface MeetingRecordingModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  meeting: ProjectMeetingDto | null;
-  onMeetingUpdated?: (meeting: ProjectMeetingDto) => void;
+function errorStatus(error: unknown): number | undefined {
+  if (!error || typeof error !== "object") return undefined;
+  const result = error as { status?: number; response?: { status?: number } };
+  return result.response?.status ?? result.status;
 }
 
 export function MeetingRecordingModal({
-  isOpen,
-  onClose,
-  meeting,
-  onMeetingUpdated,
-}: MeetingRecordingModalProps) {
-  const { t } = useTranslation();
-  const [videoUrl, setVideoUrl] = useState<string | null>(null);
-  const [videoBlob, setVideoBlob] = useState<Blob | null>(null);
-  const [playbackInfo, setPlaybackInfo] = useState<MeetingRecordingPlaybackResponse | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [isDemoMode, setIsDemoMode] = useState(false);
-  const [isLocalFallbackOnly, setIsLocalFallbackOnly] = useState(false);
-  const [isRetryingLocalUpload, setIsRetryingLocalUpload] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const objectUrlRef = useRef<string | null>(null);
+  isOpen, onClose, meeting, currentUserId, onUpdated, onMeetingUpdated,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  meeting: ProjectMeetingDto | null;
+  currentUserId?: number | null;
+  onUpdated?: () => void;
+  onMeetingUpdated?: (meeting: ProjectMeetingDto) => void;
+}) {
+  const { t, i18n } = useTranslation();
+  const fileInput = useRef<HTMLInputElement>(null);
+  const mounted = useRef(false);
+  const [clips, setClips] = useState<Clip[]>([]);
+  const [chosenKey, setChosenKey] = useState("");
+  const [listVersion, setListVersion] = useState(0);
+  const [state, setState] = useState<PlaybackState>("loading");
+  const [video, setVideo] = useState<{ url: string; type: string; clipKey: string }>();
+  const [localPlaybackBlob, setLocalPlaybackBlob] = useState<Blob>();
+  const [busy, setBusy] = useState(false);
+  const [playbackInfo, setPlaybackInfo] = useState<MeetingRecordingPlaybackResponse>();
+  const operation = useRef(0);
+  const projectId = meeting?.projectId;
+  const meetingId = meeting?.id;
+  const legacyFileId = meeting?.recordingFileId;
+  const chosen = clips.find((clip) => clip.key === chosenKey);
 
-  const revokeCurrentObjectUrl = () => {
-    if (objectUrlRef.current) {
-      URL.revokeObjectURL(objectUrlRef.current);
-      objectUrlRef.current = null;
-    }
-  };
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
 
-  const loadRecording = useCallback(async (cancelledRef?: { current: boolean }) => {
-    if (!isOpen || !meeting) return;
-    setIsLoading(true);
-    setIsDemoMode(false);
-    setIsLocalFallbackOnly(false);
-
-    const isCancelled = () => Boolean(cancelledRef?.current);
-
-    const showBlob = (blob: Blob, localOnly = false) => {
-      if (isCancelled()) return;
-      revokeCurrentObjectUrl();
-      const nextUrl = URL.createObjectURL(blob);
-      objectUrlRef.current = nextUrl;
-      setVideoBlob(blob);
-      setVideoUrl(nextUrl);
-      setIsDemoMode(false);
-      setIsLocalFallbackOnly(localOnly);
-    };
-
-    const showDirectUrl = (url: string, info: MeetingRecordingPlaybackResponse) => {
-      if (isCancelled()) return;
-      revokeCurrentObjectUrl();
-      setVideoBlob(null);
-      setVideoUrl(resolvePlaybackUrl(url));
-      setPlaybackInfo(info);
-      setIsDemoMode(false);
-      setIsLocalFallbackOnly(false);
-    };
-
-    const showSample = () => {
-      if (isCancelled()) return;
-      revokeCurrentObjectUrl();
-      setVideoUrl("/sample-meeting-recording.webm");
-      setVideoBlob(null);
-      setIsDemoMode(true);
-      setIsLocalFallbackOnly(false);
-    };
-
-    try {
-      let playback: MeetingRecordingPlaybackResponse | null = null;
-      // 1. Try cloud Egress playback URL endpoint first (direct B2 presigned GET or signed Range proxy)
-      if (meeting.projectId && typeof meetingService.getRecordingPlaybackUrl === "function") {
-        try {
-          playback = await meetingService.getRecordingPlaybackUrl(meeting.projectId, meeting.id);
-          if (playback && !isCancelled()) {
-            setPlaybackInfo(playback);
-            if (playback.url) {
-              showDirectUrl(playback.url, playback);
-              return;
-            }
-            if (
-              playback.recordingStatus === "STARTING" ||
-              playback.recordingStatus === "RECORDING" ||
-              playback.recordingStatus === "PROCESSING"
-            ) {
-              revokeCurrentObjectUrl();
-              setVideoBlob(null);
-              setVideoUrl(null);
-              return;
-            }
-          }
-        } catch {
-          // Fall through cleanly to local/legacy lookup
+  useEffect(() => {
+    operation.current += 1;
+    if (!isOpen || !projectId || !meetingId) return;
+    let active = true;
+    const generation = getSessionGeneration();
+    const current = () => active && generation === getSessionGeneration();
+    const load = async () => {
+      setState("loading");
+      setBusy(false);
+      setVideo(undefined);
+      setClips([]);
+      setChosenKey("");
+      setPlaybackInfo(undefined);
+      let cloud: MeetingRecordingPlaybackResponse | undefined;
+      try {
+        if (typeof meetingService.getRecordingPlaybackUrl === "function") {
+          cloud = await meetingService.getRecordingPlaybackUrl(projectId, meetingId);
+          if (!current()) return;
+          setPlaybackInfo(cloud);
         }
-      }
-
-      // 2. Always check local IndexedDB store (preserves Tier 3 fallback recordings even when cloud status is FAILED)
-      const record = await meetingRecordingStore.getRecording(meeting.id);
-      if (record && record.blob) {
-        let playableBlob = record.blob;
-        if (playableBlob.type.includes("webm") || !playableBlob.type) {
-          const durMs = Math.max(1000, (record.durationSeconds || meeting.durationSeconds || 1) * 1000);
-          try {
-            playableBlob = await fixWebmDuration(record.blob, durMs);
-          } catch {
-            playableBlob = record.blob;
-          }
-        }
-        showBlob(playableBlob, true);
-        return;
-      }
-
-      // 2b. If no local fallback copy exists and cloud status is FAILED or backupStorageUsed, surface status view
-      if (playback && (playback.backupStorageUsed || playback.recordingStatus === "FAILED")) {
-        revokeCurrentObjectUrl();
-        setVideoBlob(null);
-        setVideoUrl(null);
-        return;
-      }
-
-      // 3. Try legacy server-side uploaded recording file
-      if (meeting.projectId) {
-        const fileId = meeting.recordingFileId ?? (await findLegacyRecordingId(meeting));
-        if (fileId) {
-          const blob = await projectFilesService.downloadFileBlob(meeting.projectId, fileId);
-          showBlob(blob, false);
+      } catch (error) {
+        if (errorStatus(error) === 403 || errorStatus(error) === 401) {
+          if (current()) setState("denied");
           return;
         }
       }
-
-      // 4. Fallback to enterprise sample meeting recording video
-      showSample();
-    } catch {
-      showSample();
-    } finally {
-      if (!isCancelled()) {
-        setIsLoading(false);
+      let remote: MeetingRecordingDto[] = [];
+      let listFailed = false;
+      try {
+        if (typeof meetingService.getRecordings === "function") remote = await meetingService.getRecordings(projectId, meetingId);
+      } catch (error) {
+        const status = errorStatus(error);
+        if (status === 403 || status === 401) {
+          if (current()) setState("denied");
+          return;
+        }
+        listFailed = status !== 404;
       }
-    }
-  }, [isOpen, meeting]);
+      if (!current()) return;
+      const ready: Clip[] = remote.flatMap((clip) =>
+        clip.state === "READY" && clip.fileId
+          ? [{ key: clip.id, fileId: clip.fileId, createdAt: clip.createdAt }]
+          : []
+      );
+      if (cloud?.url) ready.unshift({ key: "cloud", createdAt: "", cloud });
+      if (legacyFileId && !cloud?.url && !ready.some((clip) => clip.fileId === legacyFileId)) {
+        ready.push({ key: `legacy-${legacyFileId}`, fileId: legacyFileId, createdAt: "", legacy: true });
+      }
+
+      const recovery = currentUserId
+        ? await meetingRecordingStore.list({ projectId, meetingId, userId: currentUserId }).catch(() => [])
+        : [];
+      if (!current()) return;
+      const list = [
+        ...ready,
+        ...recovery.filter((record) => record.uploadState !== "READY" && !ready.some((clip) => clip.key === record.recordingId))
+          .map((local) => ({ key: local.recordingId, local, createdAt: local.recordedAt })),
+      ];
+      setClips(list);
+      setChosenKey(list[0]?.key ?? "");
+      if (!list.length) setState(listFailed ? "error" : "unavailable");
+    };
+    void load();
+    return () => { active = false; operation.current += 1; };
+  }, [isOpen, projectId, meetingId, legacyFileId, currentUserId, listVersion]);
 
   useEffect(() => {
-    const cancelledRef = { current: false };
-    setPlaybackInfo(null);
+    if (!isOpen || !projectId || !chosen) return;
+    let active = true;
+    const generation = getSessionGeneration();
+    const current = () => active && generation === getSessionGeneration();
+    let url: string | undefined;
+    setState("loading");
+    setVideo(undefined);
+    setLocalPlaybackBlob(undefined);
+    const load = async () => {
+      try {
+        if (chosen.cloud?.url) {
+          if (current()) {
+            setVideo({ url: resolvePlaybackUrl(chosen.cloud.url), type: chosen.cloud.contentType || "video/mp4", clipKey: chosen.key });
+            setState("ready");
+          }
+          return;
+        }
+        const blob = chosen.fileId
+          ? await projectFilesService.downloadFileBlob(projectId, chosen.fileId)
+          : chosen.local?.blob ?? (chosen.local && await meetingRecordingStore.recoverChunks(chosen.local));
+        if (!current()) return;
+        const wasDemoFile = chosen.legacy && blob?.size === 2_019_927 && await recordingChecksum(blob) === sampleChecksum;
+        if (!current()) return;
+        if (!blob?.size || wasDemoFile) {
+          setState("unavailable");
+          return;
+        }
+        url = URL.createObjectURL(blob);
+        setVideo({ url, type: blob.type, clipKey: chosen.key });
+        setLocalPlaybackBlob(chosen.fileId ? undefined : blob);
+        setState(chosen.fileId ? "ready" : "local");
+      } catch (error) {
+        if (!current()) return;
+        const status = errorStatus(error);
+        setState(status === 403 || status === 401 ? "denied" : status === 404 ? "unavailable" : "error");
+      }
+    };
+    void load();
+    return () => {
+      active = false;
+      if (url) URL.revokeObjectURL(url);
+    };
+  }, [isOpen, projectId, chosen]);
 
-    if (!isOpen || !meeting) {
-      revokeCurrentObjectUrl();
-      setVideoUrl(null);
-      setVideoBlob(null);
+  const synchronize = async (record: MeetingRecordingRecord, generation: number) => {
+    const version = operation.current;
+    const isCurrent = () => mounted.current && getSessionGeneration() === generation && operation.current === version;
+    if (!isCurrent()) return;
+    setBusy(true);
+    try {
+      if (record.uploadTarget === "B2") {
+        const updated = await meetingService.uploadFallbackRecordingToB2(record.projectId, record.meetingId, record.blob!, {
+          fileName: `meeting_${record.meetingId}_fallback_${record.recordingId}.${record.mimeType.startsWith("video/mp4") ? "mp4" : "webm"}`,
+          durationSeconds: record.durationMs ? Math.round(record.durationMs / 1000) : undefined,
+        });
+        await meetingRecordingStore.save({ ...record, uploadState: "READY", fileId: updated.recordingFileId ?? undefined });
+        if (isCurrent()) onMeetingUpdated?.(updated);
+      } else {
+        await syncMeetingRecording(record, generation);
+      }
+      if (!isCurrent()) return;
+      toast.success(t("meetings.recording_shared", { defaultValue: "Bản ghi đã sẵn sàng cho dự án" }));
+      onUpdated?.();
+      setListVersion((version) => version + 1);
+    } catch {
+      if (isCurrent()) toast.warning(t("meetings.recording_recoverable_upload_failure", {
+        defaultValue: "Chưa gửi được bản ghi. Bạn có thể thử tải lên lại hoặc tải tệp xuống.",
+      }));
+    } finally {
+      if (isCurrent()) setBusy(false);
+    }
+  };
+
+  const importRecording = async (file: File | undefined) => {
+    if (!file || !meeting?.isHost || !currentUserId || busy) return;
+    const generation = getSessionGeneration();
+    const version = operation.current;
+    if (!/^video\/(webm|mp4)$/.test(file.type) || !file.size || file.size > maxRecordingBytes) {
+      toast.warning(t("meetings.import_recording_limit", { defaultValue: "Chọn video WebM hoặc MP4 tối đa 50 MiB." }));
       return;
     }
-
-    void loadRecording(cancelledRef);
-
-    return () => {
-      cancelledRef.current = true;
-      revokeCurrentObjectUrl();
-    };
-  }, [isOpen, meeting, loadRecording]);
-
-  const handleSyncRecording = async () => {
-    if (!meeting?.projectId || isSyncing) return;
-    setIsSyncing(true);
-    try {
-      const synced = await meetingService.syncRecording(meeting.projectId, meeting.id);
-      if (synced && onMeetingUpdated) {
-        onMeetingUpdated(synced);
-      } else {
-        await loadRecording();
-      }
-    } catch (err: any) {
-      console.warn("Could not synchronize recording status:", err);
-      toast.error(
-        err?.response?.data?.message ||
-          err?.message ||
-          t("meetings.sync_recording_failed", { defaultValue: "Không thể đồng bộ trạng thái bản ghi" })
-      );
-    } finally {
-      setIsSyncing(false);
-    }
-  };
-
-  const handleRetryLocalUploadToB2 = async () => {
-    if (!meeting?.projectId || !videoBlob || isRetryingLocalUpload) return;
-    setIsRetryingLocalUpload(true);
-    try {
-      const ext = videoBlob.type.toLowerCase().includes("mp4") ? ".mp4" : ".webm";
-      const updated = await meetingService.uploadFallbackRecordingToB2(meeting.projectId, meeting.id, videoBlob, {
-        fileName: `meeting_${meeting.id}_fallback_${Date.now()}${ext}`,
-        durationSeconds: meeting.durationSeconds || 30,
-      });
-      toast.success(
-        t("meetings.upload_video_success", {
-          defaultValue: "Đã tải bản ghi lên Backblaze B2 thành công!",
-        })
-      );
-      if (updated && onMeetingUpdated) {
-        onMeetingUpdated(updated);
-      } else {
-        await loadRecording();
-      }
-    } catch (err: any) {
-      toast.error(
-        err?.response?.data?.message ||
-          err?.message ||
-          t("meetings.upload_video_b2_failed", {
-            defaultValue: "Không thể tải bản ghi cục bộ lên Backblaze B2.",
-          })
-      );
-    } finally {
-      setIsRetryingLocalUpload(false);
-    }
-  };
-
-  const handleDownload = () => {
-    if (!meeting) return;
-    let downloadUrl = videoUrl;
-    let tempUrl = false;
-
-    if (videoBlob) {
-      downloadUrl = URL.createObjectURL(videoBlob);
-      tempUrl = true;
-    }
-
-    if (!downloadUrl) return;
-
-    if (!videoBlob && downloadUrl.includes("/stream")) {
-      downloadUrl = downloadUrl.includes("?") ? `${downloadUrl}&download=true` : `${downloadUrl}?download=true`;
-    }
-
-    const defaultExt = playbackInfo?.contentType?.includes("mp4") ? "mp4" : "webm";
-    const downloadName = playbackInfo?.fileName || `meeting_${meeting.id}_recording.${defaultExt}`;
-
-    const a = document.createElement("a");
-    a.href = downloadUrl;
-    a.download = downloadName;
-    if (/^https?:\/\//i.test(downloadUrl)) {
-      a.target = "_blank";
-      a.rel = "noopener noreferrer";
-    }
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-
-    if (tempUrl) {
-      setTimeout(() => URL.revokeObjectURL(downloadUrl!), 1000);
-    }
-  };
-
-  const handlePlaySample = () => {
-    setVideoUrl("/sample-meeting-recording.webm");
-    setIsDemoMode(true);
-    if (meeting) {
-      fetch("/sample-meeting-recording.webm")
-        .then((res) => res.blob())
-        .then(async (blob) => {
-          let fixed = blob;
-          try {
-            fixed = await fixWebmDuration(blob, (meeting.durationSeconds || 16) * 1000);
-          } catch {}
-          setVideoBlob(fixed);
-          void meetingRecordingStore.saveRecording(meeting.id, fixed, {
-            title: meeting.title,
-            projectId: meeting.projectId,
-            durationSeconds: meeting.durationSeconds || 16,
-          });
-        })
-        .catch(() => {});
-    }
-  };
-
-  const handleUploadCustomVideo = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !meeting || meeting.isHost === false) return;
-
-    let patchedFile: Blob = file;
-    const durMs = Math.max(1000, (meeting.durationSeconds || 30) * 1000);
-    if (file.type.includes("webm") || !file.type) {
-      try {
-        patchedFile = await fixWebmDuration(file, durMs);
-      } catch {}
-    }
-
-    revokeCurrentObjectUrl();
-    const url = URL.createObjectURL(patchedFile);
-    objectUrlRef.current = url;
-    setVideoBlob(patchedFile);
-    setVideoUrl(url);
-    setIsDemoMode(false);
-
-    await meetingRecordingStore.saveRecording(meeting.id, patchedFile, {
-      title: meeting.title,
+    const record: MeetingRecordingRecord = {
+      userId: currentUserId,
       projectId: meeting.projectId,
-      durationSeconds: meeting.durationSeconds || 30,
-    });
-
-    if (meeting.projectId) {
-      const ext = file.name.includes(".") ? file.name.slice(file.name.lastIndexOf(".")) : ".webm";
-      const uploadName = `meeting_${meeting.id}_rec_${Date.now()}${ext}`;
-      try {
-        const updated = await meetingService.uploadFallbackRecordingToB2(meeting.projectId, meeting.id, patchedFile, {
-          fileName: uploadName,
-          durationSeconds: meeting.durationSeconds || 30,
-        });
-        toast.success(
-          t("meetings.upload_video_success", {
-            defaultValue: "Đã tải bản ghi lên Backblaze B2 thành công!",
-          })
-        );
-        if (updated && onMeetingUpdated) {
-          onMeetingUpdated(updated);
-        } else {
-          await loadRecording();
-        }
-      } catch (b2Err: any) {
-        console.warn("Direct B2 presigned upload failed:", b2Err);
-        toast.error(
-          b2Err?.response?.data?.message ||
-            b2Err?.message ||
-            t("meetings.upload_video_b2_failed", {
-              defaultValue:
-                "Không thể tải video lên Backblaze B2 (chỉ hỗ trợ .webm/.mp4/.mkv). Bản sao cục bộ vẫn được giữ để xem tạm.",
-            })
-        );
+      meetingId: meeting.id,
+      recordingId: crypto.randomUUID(),
+      recordedAt: new Date().toISOString(),
+      title: meeting.title,
+      mimeType: file.type,
+      origin: "IMPORT",
+      uploadTarget: "B2",
+      coverage: "IMPORTED_FILE",
+      uploadState: "LOCAL_ONLY",
+      blob: file,
+    };
+    try {
+      setBusy(true);
+      await meetingRecordingStore.save(record);
+    } catch {
+      if (mounted.current && getSessionGeneration() === generation) {
+        setBusy(false);
+        toast.error(t("meetings.recording_store_failed", { defaultValue: "Thiết bị không lưu được dữ liệu bản ghi." }));
       }
+      return;
+    }
+    if (!mounted.current || getSessionGeneration() !== generation || operation.current !== version) return;
+    await synchronize(record, generation);
+    if (mounted.current && getSessionGeneration() === generation) setListVersion((version) => version + 1);
+  };
+
+  const syncCloudStatus = async () => {
+    if (!meeting || busy) return;
+    const generation = getSessionGeneration();
+    const version = operation.current;
+    setBusy(true);
+    try {
+      const updated = await meetingService.syncRecording(meeting.projectId, meeting.id);
+      if (!mounted.current || generation !== getSessionGeneration() || version !== operation.current) return;
+      onMeetingUpdated?.(updated);
+      setListVersion((value) => value + 1);
+    } catch {
+      if (mounted.current && generation === getSessionGeneration() && version === operation.current)
+        toast.error(t("meetings.sync_recording_failed", { defaultValue: "Không thể đồng bộ trạng thái bản ghi" }));
+    } finally {
+      if (mounted.current && generation === getSessionGeneration() && version === operation.current) setBusy(false);
     }
   };
-
-  const formatDuration = (seconds?: number | null) => {
-    if (!seconds || seconds <= 0) return "0s";
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    if (mins === 0) return `${secs}s`;
-    return `${mins}m ${secs}s`;
+  const cloudStatus = playbackInfo?.recordingStatus ?? meeting?.recordingStatus;
+  const processing = ["STARTING", "RECORDING", "PROCESSING"].includes(cloudStatus || "");
+  const backupStorageUsed = playbackInfo?.backupStorageUsed ?? meeting?.backupStorageUsed;
+  const egressId = playbackInfo?.egressId ?? meeting?.egressId;
+  const isPlayerVisible = (state === "ready" || state === "local") && video?.clipKey === chosenKey;
+  const unavailableMessages = {
+    loading: t("meetings.loading_recording", { defaultValue: "Đang tải bản ghi…" }),
+    unavailable: t("meetings.recording_unavailable", { defaultValue: "Chưa có bản ghi để xem." }),
+    denied: t("meetings.recording_denied", { defaultValue: "Bạn không có quyền xem bản ghi này." }),
+    error: t("meetings.recording_load_error", { defaultValue: "Không thể tải bản ghi. Hãy thử lại." }),
   };
-
-  const effectiveStatus = playbackInfo?.recordingStatus ?? meeting?.recordingStatus;
-  const isBackupStorageUsed = Boolean(playbackInfo?.backupStorageUsed ?? meeting?.backupStorageUsed);
-  const effectiveEgressId = playbackInfo?.egressId ?? meeting?.egressId;
-  const effectiveError = playbackInfo?.recordingError ?? meeting?.recordingError;
-  const isProcessing =
-    effectiveStatus === "STARTING" ||
-    effectiveStatus === "RECORDING" ||
-    effectiveStatus === "PROCESSING";
-  const downloadLabel = playbackInfo?.contentType?.includes("mp4")
-    ? t("meetings.download_video_mp4", { defaultValue: "Tải video (.mp4)" })
-    : t("meetings.download_video", { defaultValue: "Tải video (.webm)" });
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
-      <DialogContent className="sm:max-w-[760px] p-0 overflow-hidden border border-border/80 shadow-lg bg-card rounded-xl">
-        {/* Header */}
-        <div className="p-5 pb-3 border-b border-border/60 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-              <Video className="w-5 h-5" />
-            </div>
-            <div>
-              <DialogTitle className="text-base sm:text-lg font-bold tracking-tight text-foreground flex items-center gap-2">
-                <span>{meeting?.title || t("meetings.recording_title", { defaultValue: "Bản ghi hình cuộc họp" })}</span>
-                <Badge variant="outline" className="text-[10px] text-red-500 border-red-500/30">
-                  REC
-                </Badge>
-                {playbackInfo?.provider === "b2" && (
-                  <Badge variant="outline" className="text-[10px] text-emerald-600 border-emerald-500/30">
-                    {playbackInfo?.contentType?.includes("webm") ? "Cloud B2 (WebM)" : "Cloud B2 (MP4)"}
-                  </Badge>
-                )}
-                {playbackInfo?.provider === "gdrive" && (
-                  <Badge variant="outline" className="text-[10px] text-sky-600 border-sky-500/30">
-                    Drive Archive
-                  </Badge>
-                )}
-              </DialogTitle>
-              <DialogDescription className="text-xs text-muted-foreground flex items-center gap-3 mt-0.5">
-                <span className="flex items-center gap-1">
-                  <User className="w-3.5 h-3.5" />
-                  {meeting?.hostName || "Host"}
-                </span>
-                <span className="flex items-center gap-1">
-                  <Clock className="w-3.5 h-3.5" />
-                  {formatDuration(meeting?.durationSeconds)}
-                </span>
-              </DialogDescription>
-            </div>
+      <DialogContent className="sm:max-w-[760px]">
+        <DialogTitle className="flex items-center gap-2">
+          <Video className="size-5 text-emerald-600" />
+          {meeting?.title || t("meetings.recording_title", { defaultValue: "Bản ghi hình cuộc họp" })}
+        </DialogTitle>
+        <DialogDescription>{meeting?.hostName}</DialogDescription>
+        {clips.length > 1 && (
+          <select className="w-full rounded-md border bg-background p-2 text-sm" value={chosenKey}
+            aria-label={t("meetings.choose_recording", { defaultValue: "Chọn bản ghi" })}
+            onChange={(event) => setChosenKey(event.target.value)}>
+            {clips.map((clip, index) => (
+              <option key={clip.key} value={clip.key}>
+                {clip.createdAt ? new Date(clip.createdAt).toLocaleString(i18n.language) : `#${index + 1}`}
+                {clip.local ? ` · ${t("meetings.local_copy", { defaultValue: "Chỉ có trên thiết bị này" })}` : ""}
+              </option>
+            ))}
+          </select>
+        )}
+        {isPlayerVisible && video ? (
+          <>
+            <video src={video.url} controls playsInline className="aspect-video w-full rounded-lg bg-black"
+              data-testid="recording-video-player" onError={() => setState("error")} />
+            {state === "local" && (
+              <p role="status" className="text-sm text-muted-foreground" data-testid="local-fallback-recording-badge">
+                {t("meetings.local_copy", { defaultValue: "Chỉ có trên thiết bị này" })}
+              </p>
+            )}
+          </>
+        ) : state === "unavailable" && (processing || backupStorageUsed) ? (
+          <div className="flex aspect-video flex-col items-center justify-center rounded-lg border p-6 text-center gap-3"
+            role="status" data-testid={backupStorageUsed ? "recording-backup-storage-alert" : "recording-processing-view"}>
+            <p>{backupStorageUsed
+              ? t("meetings.backup_storage_title", { defaultValue: "Bản ghi nằm trong kho lưu trữ dự phòng của LiveKit Cloud" })
+              : t("meetings.recording_processing_title", { defaultValue: "Bản ghi đám mây đang được xử lý" })}</p>
+            {egressId && <p className="font-mono text-xs">Egress ID: {egressId}</p>}
+            <Button variant="outline" disabled={busy} onClick={() => void syncCloudStatus()} data-testid="sync-recording-btn">
+              <RefreshCw className="size-4" />{t("meetings.sync_recording_status", { defaultValue: "Đồng bộ trạng thái" })}
+            </Button>
           </div>
-        </div>
-
-        {/* Video Player or Status/Fallback View */}
-        <div className="p-5 bg-muted/20">
-          {isLoading ? (
-            <div className="aspect-video w-full rounded-xl bg-slate-950 flex flex-col items-center justify-center text-muted-foreground gap-2">
-              <div className="w-7 h-7 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
-              <p className="text-xs">{t("meetings.loading_recording", { defaultValue: "Đang tải video bản ghi..." })}</p>
-            </div>
-          ) : videoUrl ? (
-            <div className="relative aspect-video w-full rounded-xl overflow-hidden bg-black shadow-lg border border-border/70">
-              <video
-                src={videoUrl}
-                controls
-                autoPlay
-                playsInline
-                className="w-full h-full object-contain"
-                data-testid="recording-video-player"
-                onLoadedMetadata={(e) => {
-                  const v = e.currentTarget;
-                  if (!isFinite(v.duration) || v.duration === Infinity) {
-                    v.currentTime = 1e101;
-                    v.ontimeupdate = () => {
-                      v.ontimeupdate = null;
-                      v.currentTime = 0;
-                    };
-                  }
-                }}
-              />
-              {isLocalFallbackOnly && !isDemoMode && (
-                <div
-                  className="absolute top-3 left-3 bg-amber-500/90 text-slate-950 px-2.5 py-1 rounded-md text-[11px] font-medium shadow-xs flex items-center gap-1.5"
-                  data-testid="local-fallback-recording-badge"
-                >
-                  <span className="w-2 h-2 rounded-full bg-slate-950" />
-                  {t("meetings.local_fallback_badge", {
-                    defaultValue: "Bản ghi cục bộ trên trình duyệt (chưa đồng bộ B2)",
-                  })}
-                </div>
-              )}
-              {isDemoMode && (
-                <div
-                  className="absolute top-3 left-3 bg-background/90 px-2.5 py-1 rounded-md text-[11px] font-medium text-emerald-500 border border-border shadow-xs flex items-center gap-1.5"
-                  data-testid="recording-sample-badge"
-                >
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                  {t("meetings.sample_recording_badge", { defaultValue: "Bản ghi mẫu chính thức (Enterprise HD)" })}
-                </div>
-              )}
-            </div>
-          ) : isBackupStorageUsed ? (
-            <div
-              className="aspect-video w-full rounded-xl border border-amber-500/40 bg-amber-500/10 flex flex-col items-center justify-center p-6 text-center"
-              data-testid="recording-backup-storage-alert"
-            >
-              <div className="p-3 rounded-full bg-amber-500/20 text-amber-600 dark:text-amber-400 mb-3 border border-amber-500/30">
-                <ShieldAlert className="w-6 h-6" />
-              </div>
-              <h4 className="text-sm font-semibold text-foreground">
-                {t("meetings.backup_storage_title", {
-                  defaultValue: "Upload lỗi, bản ghi đang ở kho dự phòng LiveKit",
-                })}
-              </h4>
-              <p className="text-xs text-muted-foreground max-w-md mt-1.5 leading-relaxed">
-                {t("meetings.backup_storage_desc", {
-                  defaultValue:
-                    "Bản ghi chưa bị mất mà đang được lưu tạm trong kho dự phòng mã hoá của LiveKit Cloud (tối đa ~7 ngày). Hãy kiểm tra LiveKit Cloud Dashboard hoặc liên hệ LiveKit Support để khôi phục.",
-                })}
-              </p>
-              {effectiveEgressId && (
-                <p className="text-[11px] font-mono text-amber-700 dark:text-amber-300 mt-2 bg-background/60 px-2.5 py-1 rounded border border-amber-500/30">
-                  Egress ID: {effectiveEgressId}
-                </p>
-              )}
-              <div className="flex flex-wrap items-center justify-center gap-2 mt-4">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={handleSyncRecording}
-                  disabled={isSyncing}
-                  className="gap-1.5 text-xs"
-                  data-testid="sync-recording-btn"
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? "animate-spin" : ""}`} />
-                  {t("meetings.sync_recording_status", { defaultValue: "Đồng bộ trạng thái" })}
-                </Button>
-              </div>
-            </div>
-          ) : isProcessing ? (
-            <div
-              className="aspect-video w-full rounded-xl border border-border/80 bg-background/50 flex flex-col items-center justify-center p-6 text-center"
-              data-testid="recording-processing-view"
-            >
-              <div className="w-7 h-7 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin mb-3" />
-              <h4 className="text-sm font-semibold text-foreground">
-                {t("meetings.recording_processing_title", {
-                  defaultValue: "Bản ghi đám mây đang được xử lý",
-                })}
-              </h4>
-              <p className="text-xs text-muted-foreground max-w-md mt-1 leading-relaxed">
-                {t("meetings.recording_processing_desc", {
-                  defaultValue:
-                    "LiveKit Cloud Egress đang hoàn tất mã hoá và tải video MP4 lên kho lưu trữ. Bạn có thể bấm Đồng bộ trạng thái để kiểm tra ngay.",
-                })}
-              </p>
-              <div className="mt-4">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={handleSyncRecording}
-                  disabled={isSyncing}
-                  className="gap-1.5 text-xs"
-                  data-testid="sync-recording-btn"
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? "animate-spin" : ""}`} />
-                  {t("meetings.sync_recording_status", { defaultValue: "Đồng bộ trạng thái" })}
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <div className="aspect-video w-full rounded-xl border border-dashed border-border/80 bg-background/50 flex flex-col items-center justify-center p-6 text-center">
-              <div className="p-3 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 mb-3 border border-amber-500/20">
-                <AlertCircle className="w-6 h-6" />
-              </div>
-              <h4 className="text-sm font-semibold text-foreground">
-                {effectiveStatus === "FAILED"
-                  ? t("meetings.recording_failed_title", { defaultValue: "Ghi hình đám mây gặp lỗi" })
-                  : t("meetings.no_local_recording", { defaultValue: "Chưa tìm thấy bản ghi của phiên họp này" })}
-              </h4>
-              <p className="text-xs text-muted-foreground max-w-md mt-1 leading-relaxed">
-                {effectiveError ||
-                  t("meetings.no_recording_desc", {
-                    defaultValue:
-                      "Bản ghi Cloud Recording đang được xử lý trên máy chủ hoặc chưa được tạo. Bạn có thể đồng bộ trạng thái, phát video mẫu hoặc tải lên video thủ công.",
-                  })}
-              </p>
-
-              <div className="flex flex-wrap items-center justify-center gap-2 mt-4">
-                {effectiveEgressId && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={handleSyncRecording}
-                    disabled={isSyncing}
-                    className="gap-1.5 text-xs"
-                    data-testid="sync-recording-btn"
-                  >
-                    <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? "animate-spin" : ""}`} />
-                    {t("meetings.sync_recording_status", { defaultValue: "Đồng bộ trạng thái" })}
-                  </Button>
-                )}
-
-                <Button
-                  size="sm"
-                  variant="default"
-                  onClick={handlePlaySample}
-                  className="gap-1.5 text-xs bg-emerald-600 hover:bg-emerald-500 text-white"
-                  data-testid="play-sample-recording-btn"
-                >
-                  <Play className="w-3.5 h-3.5 fill-current" />
-                  {t("meetings.play_sample", { defaultValue: "Phát video mô phỏng mẫu" })}
-                </Button>
-
-                {meeting?.isHost !== false && (
-                  <>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => fileInputRef.current?.click()}
-                      className="gap-1.5 text-xs"
-                    >
-                      <Upload className="w-3.5 h-3.5" />
-                      {t("meetings.upload_video", { defaultValue: "Tải tệp video lên" })}
-                    </Button>
-                    <input
-                      type="file"
-                      ref={fileInputRef}
-                      accept="video/webm,video/mp4,video/x-matroska,.webm,.mp4,.mkv"
-                      onChange={handleUploadCustomVideo}
-                      className="hidden"
-                      data-testid="custom-recording-upload-input"
-                    />
-                  </>
-                )}
-              </div>
-            </div>
+        ) : (
+          <div className="flex aspect-video items-center justify-center rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground"
+            role="status" data-testid={`recording-${isPlayerVisible ? "loading" : state}`}>
+            {state === "ready" || state === "local" ? unavailableMessages.loading : unavailableMessages[state]}
+          </div>
+        )}
+        <DialogFooter className="gap-2">
+          {state === "error" && (
+            <Button variant="outline" onClick={() => setListVersion((version) => version + 1)}>
+              {t("common.retry", { defaultValue: "Thử lại" })}
+            </Button>
           )}
-        </div>
-
-        {/* Footer */}
-        <DialogFooter className="p-4 border-t border-border/60 bg-muted/10 flex flex-row items-center justify-between gap-2">
-          {videoUrl ? (
-            <div className="flex items-center gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={handleDownload}
-                className="gap-1.5 text-xs"
-                data-testid="download-recording-btn"
-              >
-                <Download className="w-3.5 h-3.5" />
-                {downloadLabel}
+          {isPlayerVisible && video && (
+            <Button asChild variant="outline" data-testid="download-recording-btn">
+              <a href={video.url} download={`meeting_${meetingId}_recording.${video.type.startsWith("video/mp4") ? "mp4" : "webm"}`}>
+                <Download className="size-4" />
+                {t("meetings.download_recording", { defaultValue: "Tải video" })}
+              </a>
+            </Button>
+          )}
+          {state === "local" && chosen?.local && localPlaybackBlob && meeting?.isHost && (
+            <Button disabled={busy} onClick={() => { if (chosen.local && localPlaybackBlob) void synchronize({ ...chosen.local, blob: localPlaybackBlob }, getSessionGeneration()); }} data-testid="retry-local-b2-upload-btn">
+              {t("meetings.retry_recording_upload", { defaultValue: "Thử tải lên lại" })}
+            </Button>
+          )}
+          {meeting?.isHost && currentUserId && state !== "denied" && (
+            <>
+              <Button variant="outline" disabled={busy} onClick={() => fileInput.current?.click()}>
+                <Upload className="size-4" />
+                {t("meetings.import_recording", { defaultValue: "Nhập tệp ghi hình" })}
               </Button>
-              {isLocalFallbackOnly && videoBlob && meeting?.isHost !== false && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={handleRetryLocalUploadToB2}
-                  disabled={isRetryingLocalUpload}
-                  className="gap-1.5 text-xs border-amber-500/40 text-amber-700 dark:text-amber-300"
-                  data-testid="retry-local-b2-upload-btn"
-                >
-                  <Upload className="w-3.5 h-3.5" />
-                  {isRetryingLocalUpload
-                    ? t("meetings.recording_uploading_b2", { defaultValue: "Đang tải lên B2..." })
-                    : t("meetings.retry_b2_upload", { defaultValue: "Tải lên Backblaze B2" })}
-                </Button>
-              )}
-            </div>
-          ) : (
-            <div />
+              <input data-testid="custom-recording-upload-input" ref={fileInput} type="file" accept="video/webm,video/mp4" className="hidden"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  event.target.value = "";
+                  void importRecording(file);
+                }} />
+            </>
           )}
-
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={onClose}
-            className="text-xs px-4"
-          >
-            {t("common.close", { defaultValue: "Đóng" })}
-          </Button>
+          <Button variant="ghost" onClick={onClose}>{t("common.close", { defaultValue: "Đóng" })}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

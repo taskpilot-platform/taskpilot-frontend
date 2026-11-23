@@ -1,4 +1,4 @@
-import { api } from "@/lib/http";
+import { api, getSessionGeneration } from "@/lib/http";
 import type {
   CompleteRecordingUploadRequest,
   CreateMeetingRequest,
@@ -129,12 +129,18 @@ export const meetingService = {
     blob: Blob,
     options?: { fileName?: string; durationSeconds?: number }
   ): Promise<ProjectMeetingDto> => {
+    const generation = getSessionGeneration();
+    const requireSession = () => {
+      if (generation !== getSessionGeneration()) throw new Error("Session changed during recording upload");
+    };
+    if (!blob.size) throw new Error("The recording is empty");
     const rawContentType = blob.type || "video/webm";
     const presigned = await meetingService.presignFallbackUpload(projectId, meetingId, {
       contentType: rawContentType,
       fileName: options?.fileName,
     });
 
+    requireSession();
     if (blob.size > presigned.maxFileSizeBytes) {
       throw new Error(
         `Recording exceeds maximum allowed size (${Math.round(presigned.maxFileSizeBytes / (1024 * 1024))} MB)`
@@ -153,6 +159,7 @@ export const meetingService = {
       throw new Error(`Backblaze B2 direct upload failed (HTTP ${putRes.status})`);
     }
 
+    requireSession();
     return meetingService.completeFallbackUpload(projectId, meetingId, {
       uploadToken: presigned.uploadToken,
       durationSeconds: options?.durationSeconds,
