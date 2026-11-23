@@ -524,6 +524,13 @@
     "success_delete_session": "Chat session deleted",
     "error_delete_session": "Error deleting session.",
     "error_ai_connection": "Error connecting to AI. Please try again.",
+    "status": {
+      "COPILOT_MODELS_EXHAUSTED": "Copilot cannot respond right now: tried {{attempted}} available AI model(s) in order, and all failed or were overloaded. Please try again in a few minutes.",
+      "COPILOT_TURN_DEADLINE_EXCEEDED": "Copilot stopped this request after exceeding the {{deadlineSeconds}}s limit without a model response. Please try again in a few minutes.",
+      "COPILOT_MAX_ATTEMPTS_REACHED": "Copilot stopped this request after trying {{maxAttempts}} AI model(s) without a response. Please try again in a few minutes.",
+      "COPILOT_NO_AVAILABLE_MODEL": "No eligible AI model is currently available for this request. Please ask an administrator to check the model configuration.",
+      "COPILOT_CONFIRMATION_EXPLANATION_INCOMPLETE": "The proposed action is ready for your approval in the confirmation card below. The AI could not finish the final explanation, so the confirmation action is shown immediately."
+    },
     "new_chat": "New Chat",
     "group_today": "Today",
     "group_past_7_days": "Previous 7 Days",

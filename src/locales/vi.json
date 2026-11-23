@@ -524,6 +524,13 @@
     "success_delete_session": "Đã xóa cuộc trò chuyện",
     "error_delete_session": "Lỗi khi xóa.",
     "error_ai_connection": "Lỗi kết nối tới AI. Vui lòng thử lại.",
+    "status": {
+      "COPILOT_MODELS_EXHAUSTED": "Copilot chưa thể trả lời lúc này: đã thử lần lượt {{attempted}} mô hình AI khả dụng nhưng đều lỗi hoặc đang quá tải. Vui lòng thử lại sau ít phút.",
+      "COPILOT_TURN_DEADLINE_EXCEEDED": "Copilot đã dừng yêu cầu này vì quá {{deadlineSeconds}} giây mà chưa có mô hình AI nào phản hồi được. Vui lòng thử lại sau ít phút.",
+      "COPILOT_MAX_ATTEMPTS_REACHED": "Copilot đã dừng yêu cầu này sau {{maxAttempts}} mô hình AI mà chưa có mô hình nào phản hồi được. Vui lòng thử lại sau ít phút.",
+      "COPILOT_NO_AVAILABLE_MODEL": "Copilot chưa có mô hình AI khả dụng cho yêu cầu này. Vui lòng báo quản trị viên kiểm tra cấu hình mô hình.",
+      "COPILOT_CONFIRMATION_EXPLANATION_INCOMPLETE": "Đã chuẩn bị đề xuất thao tác và cần bạn phê duyệt trong thẻ xác nhận bên dưới. Phần diễn giải cuối của AI chưa hoàn tất nên hệ thống hiển thị ngay hành động cần xác nhận."
+    },
     "new_chat": "Cuộc trò chuyện mới",
     "group_today": "Hôm nay",
     "group_past_7_days": "7 ngày qua",

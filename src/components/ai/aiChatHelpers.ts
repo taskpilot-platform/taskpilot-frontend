@@ -1,3 +1,4 @@
+import type { ChatMessage } from "@/services/ai.service";
 import type {
   ToolAccess,
   ToolEvent,
@@ -620,3 +621,136 @@ export const parseThinkingToSteps = (thinking: string, stepTitlePrefix: string) 
       thinkingText,
     };
   };
+
+export const COPILOT_STATUS_CODES = new Set([
+  "COPILOT_MODELS_EXHAUSTED",
+  "COPILOT_TURN_DEADLINE_EXCEEDED",
+  "COPILOT_MAX_ATTEMPTS_REACHED",
+  "COPILOT_NO_AVAILABLE_MODEL",
+  "COPILOT_CONFIRMATION_EXPLANATION_INCOMPLETE",
+]);
+
+export function hasVisibleAssistantText(buffer: string): boolean {
+  if (!buffer) return false;
+  return extractThinkPayload(buffer).beforeThink.trim().length > 0;
+}
+
+/**
+ * Discards any partial visible answer streamed by a failed attempt before a mid-turn
+ * model switch or retry, while keeping thinking blocks intact.
+ */
+export function discardPartialStreamResponse(buffer: string): string {
+  if (!buffer) return "";
+  const segments = parseInterleavedContent(buffer);
+  const hasVisible = segments.some((s) => s.type === "response" && s.content.length > 0);
+  if (!hasVisible) {
+    return buffer;
+  }
+  const thinkBlocks = segments
+    .filter((s) => s.type === "think")
+    .map((s) => (s.isUnclosed ? `<think>${s.content}` : `<think>${s.content}</think>`));
+  if (thinkBlocks.length === 0) {
+    return "";
+  }
+  const lastIsUnclosed = segments.some((s) => s.type === "think" && s.isUnclosed);
+  return lastIsUnclosed ? thinkBlocks.join("\n\n") : `${thinkBlocks.join("\n\n")}\n\n`;
+}
+
+export function resolveStreamErrorMessage(
+  raw: string | null | undefined,
+  t: (key: string, opts?: Record<string, unknown>) => string,
+): string | null {
+  if (!raw) return null;
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+
+  if (trimmed.startsWith("{")) {
+    try {
+      const parsed = JSON.parse(trimmed) as {
+        code?: unknown;
+        params?: unknown;
+        error?: unknown;
+        message?: unknown;
+      };
+      if (typeof parsed.code === "string" && parsed.code.trim()) {
+        const code = parsed.code.trim();
+        const params =
+          parsed.params && typeof parsed.params === "object" && !Array.isArray(parsed.params)
+            ? (parsed.params as Record<string, unknown>)
+            : undefined;
+        const key = `copilot.status.${code}`;
+        const translated = t(key, params);
+        if (translated && translated !== key) {
+          return translated;
+        }
+        return code;
+      }
+      if (typeof parsed.error === "string" && parsed.error.trim()) {
+        return parsed.error.trim();
+      }
+      if (typeof parsed.message === "string" && parsed.message.trim()) {
+        return parsed.message.trim();
+      }
+    } catch {
+      // Legacy plain-text SSE error fallback
+    }
+  }
+
+  if (COPILOT_STATUS_CODES.has(trimmed)) {
+    const key = `copilot.status.${trimmed}`;
+    const translated = t(key);
+    return translated && translated !== key ? translated : trimmed;
+  }
+
+  return trimmed;
+}
+
+export function localizeCopilotStatusContent(
+  content: string,
+  t: (key: string, opts?: Record<string, unknown>) => string,
+): string {
+  if (!content) return content;
+  const trimmed = content.trim();
+  if (COPILOT_STATUS_CODES.has(trimmed)) {
+    const key = `copilot.status.${trimmed}`;
+    const translated = t(key);
+    return translated && translated !== key ? translated : content;
+  }
+  return content;
+}
+
+export function mergeMissingConfirmationMessage(
+  messages: ChatMessage[],
+  confirmations: PendingActionConfirmation[],
+  note: string,
+): ChatMessage[] {
+  if (!confirmations || confirmations.length === 0) {
+    return messages;
+  }
+  const existingKeys = new Set<string>();
+  for (const msg of messages) {
+    if (msg.sender !== "ASSISTANT" || !msg.content) continue;
+    for (const spec of extractConfirmationSpecs(msg.content)) {
+      existingKeys.add(confirmationDedupeKey(spec));
+    }
+  }
+
+  const missing = dedupeConfirmations(confirmations).filter(
+    (conf) => !existingKeys.has(confirmationDedupeKey(conf)),
+  );
+  if (missing.length === 0) {
+    return messages;
+  }
+
+  const blocks = missing.map(
+    (conf) =>
+      `\`\`\`taskpilot-confirm\n${JSON.stringify({ ...conf, confirmationRequired: true })}\n\`\`\``,
+  );
+  const localMsg: ChatMessage = {
+    id: -Date.now(),
+    sender: "ASSISTANT",
+    createdAt: new Date().toISOString(),
+    content: `${note}\n\n${blocks.join("\n\n")}`.trim(),
+  };
+  return [...messages, localMsg];
+}
