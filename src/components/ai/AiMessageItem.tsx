@@ -12,6 +12,7 @@ import type {
 } from "./aiChatTypes";
 import {
   stripDynamicFormBlocks,
+  localizeCopilotStatusContent,
   parseInterleavedContent,
   extractConfirmationSpecs,
   dedupeConfirmations,
@@ -49,7 +50,10 @@ export function AiMessageContent({
   confirmPendingAction: (confirmation: PendingActionConfirmation) => void;
   cancelPendingAction: (actionId: string) => void;
 }) {
-  const displayContent = stripDynamicFormBlocks(content, collapseWhenComplete);
+  const displayContent = localizeCopilotStatusContent(
+    stripDynamicFormBlocks(content, collapseWhenComplete),
+    t,
+  );
   const segments = parseInterleavedContent(displayContent);
   const lastThinkIndex = segments.map((s, idx) => (s.type === "think" ? idx : -1)).filter((idx) => idx !== -1).pop();
 

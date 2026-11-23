@@ -10,10 +10,16 @@ import type {
   PendingActionConfirmation,
 } from "@/components/ai/aiChatTypes";
 import {
+  dedupeConfirmations,
   dedupeToolEvents,
+  discardPartialStreamResponse,
   extractThinkPayload,
+  hasVisibleAssistantText,
+  mergeMissingConfirmationMessage,
   mutationFromConfirmation,
   notifyTaskMutation,
+  parseConfirmationResult,
+  resolveStreamErrorMessage,
 } from "@/components/ai/aiChatHelpers";
 
 export const MAX_PROMPT_CHARS = 4000;
@@ -259,12 +265,30 @@ export function useAiChatStream({
         }
 
         if (status.phase === "FAILED") {
+          const pendingConfirmations = dedupeConfirmations(
+            toolEventsRef.current
+              .map((event) => event.confirmation ?? parseConfirmationResult(event.result))
+              .filter((c): c is PendingActionConfirmation => Boolean(c)),
+          );
+          const hasVisibleResult =
+            hasVisibleAssistantText(currentStreamMsgRef.current) ||
+            hasVisibleAssistantText(targetStreamTextRef.current);
           clearPendingRequest(sessionId);
           stopPolling();
           resetStreamingUi();
-          const hasVisibleResult = targetStreamTextRef.current.trim().length > 0 || currentStreamMsgRef.current.trim().length > 0;
-          if (!hasVisibleResult && activeSessionIdRef.current === sessionId) {
-            toast.error(status.errorMessage || t("copilot.error_ai_connection"), { toastId: AI_STREAM_ERROR_TOAST_ID });
+          if (pendingConfirmations.length > 0 && activeSessionIdRef.current === sessionId) {
+            try {
+              await loadMessagesRef.current(sessionId, true);
+              await loadSessionsRef.current();
+            } catch (reloadErr) {
+              console.error("Failed to reload messages after FAILED stream status:", reloadErr);
+            }
+            const note = t("copilot.status.COPILOT_CONFIRMATION_EXPLANATION_INCOMPLETE");
+            setMessages((prev) => mergeMissingConfirmationMessage(prev, pendingConfirmations, note));
+          }
+          if ((!hasVisibleResult || pendingConfirmations.length > 0) && activeSessionIdRef.current === sessionId) {
+            const resolvedMessage = resolveStreamErrorMessage(status.errorMessage, t);
+            toast.error(resolvedMessage || t("copilot.error_ai_connection"), { toastId: AI_STREAM_ERROR_TOAST_ID });
           }
         }
       } catch {
@@ -363,6 +387,24 @@ export function useAiChatStream({
     startStatusPolling(targetSession.id, clientMessageId);
     let responseBuffer = "";
     let streamErrorMessage: string | null = null;
+    let receivedModelEvent = false;
+
+    const resetPartialAnswerBuffer = () => {
+      const kept = discardPartialStreamResponse(responseBuffer);
+      if (kept === responseBuffer && !currentStreamMsgRef.current) {
+        return;
+      }
+      responseBuffer = kept;
+      if (typewriterTimerRef.current) {
+        window.cancelAnimationFrame(typewriterTimerRef.current);
+        typewriterTimerRef.current = null;
+      }
+      targetStreamTextRef.current = kept;
+      lastTypewriterPaintRef.current = 0;
+      if (isMountedRef.current) {
+        setCurrentStreamMsg(kept);
+      }
+    };
 
     try {
       await fetchEventSource(`${API_BASE_URL}/v1/ai/sessions/${targetSession.id}/stream`, {
@@ -389,6 +431,10 @@ export function useAiChatStream({
           }
         },
         onmessage(ev) {
+          if (ev.event === "reset_stream") {
+            resetPartialAnswerBuffer();
+            return;
+          }
           if (ev.event === "token") {
             let tokenChunk = ev.data;
             try {
@@ -398,6 +444,13 @@ export function useAiChatStream({
               }
             } catch {
               // Plain-text token chunk fallback
+            }
+            if (
+              /^\s*<\/\s*(?:d?think|thought)\s*>/i.test(tokenChunk) &&
+              !extractThinkPayload(responseBuffer).hasUnclosedThink
+            ) {
+              tokenChunk = tokenChunk.replace(/^\s*<\/\s*(?:d?think|thought)\s*>\s*/i, "");
+              if (!tokenChunk) return;
             }
             responseBuffer += tokenChunk;
             if (isMountedRef.current) {
@@ -414,6 +467,10 @@ export function useAiChatStream({
               startTypewriter(targetSession!);
             }
           } else if (ev.event === "model") {
+            if (receivedModelEvent) {
+              resetPartialAnswerBuffer();
+            }
+            receivedModelEvent = true;
             if (ev.data && isMountedRef.current) {
               setStreamModel(ev.data);
             }
@@ -445,21 +502,15 @@ export function useAiChatStream({
                   result: parsed.result,
                   confirmation: parsed.confirmation,
                 };
-                setToolEvents((prev) => {
-                  const updated = dedupeToolEvents([...prev, toolEvent]);
-                  toolEventsRef.current = updated;
-                  return updated;
-                });
+                const updated = dedupeToolEvents([...toolEventsRef.current, toolEvent]);
+                toolEventsRef.current = updated;
+                setToolEvents(updated);
               }
             } catch {
               // Ignore malformed tool event
             }
           } else if (ev.event === "error") {
-            streamErrorMessage = ev.data || "SSE server error";
-            const hasResult = responseBuffer.trim().length > 0 || streamCompletedRef.current;
-            if (!hasResult && isMountedRef.current) {
-              toast.error(streamErrorMessage, { toastId: AI_STREAM_ERROR_TOAST_ID });
-            }
+            streamErrorMessage = resolveStreamErrorMessage(ev.data, t) || "SSE server error";
             throw new Error(streamErrorMessage);
           }
         },
@@ -483,19 +534,33 @@ export function useAiChatStream({
 
       loadSessions();
     } catch (err) {
+      const pendingConfirmations = dedupeConfirmations(
+        toolEventsRef.current
+          .map((event) => event.confirmation ?? parseConfirmationResult(event.result))
+          .filter((c): c is PendingActionConfirmation => Boolean(c)),
+      );
+      const hasResult = hasVisibleAssistantText(responseBuffer) || streamCompletedRef.current;
       clearPendingRequest(targetSession.id);
       stopPolling();
-      const hasResult = responseBuffer.trim().length > 0 || streamCompletedRef.current;
-      if (hasResult && isMountedRef.current && activeSessionIdRef.current === targetSession.id) {
-        await loadMessages(targetSession.id, true);
-        await loadSessions();
-      }
       if (isMountedRef.current) {
         resetStreamingUi();
       }
+      if ((hasResult || pendingConfirmations.length > 0) && isMountedRef.current && activeSessionIdRef.current === targetSession.id) {
+        try {
+          await loadMessages(targetSession.id, true);
+          await loadSessions();
+        } catch (reloadErr) {
+          console.error("Failed to reload messages after stream error:", reloadErr);
+        }
+      }
+      if (pendingConfirmations.length > 0 && isMountedRef.current && activeSessionIdRef.current === targetSession.id) {
+        const note = t("copilot.status.COPILOT_CONFIRMATION_EXPLANATION_INCOMPLETE");
+        setMessages((prev) => mergeMissingConfirmationMessage(prev, pendingConfirmations, note));
+      }
       const isAbort = err instanceof DOMException && err.name === "AbortError";
-      if (!isAbort && !hasResult && isMountedRef.current) {
-        toast.error(streamErrorMessage || getApiErrorMessage(err) || t("copilot.error_ai_connection"), {
+      if (!isAbort && (Boolean(streamErrorMessage) || !hasResult || pendingConfirmations.length > 0) && isMountedRef.current) {
+        const fallbackErrMsg = resolveStreamErrorMessage(getApiErrorMessage(err), t);
+        toast.error(streamErrorMessage || fallbackErrMsg || t("copilot.error_ai_connection"), {
           toastId: AI_STREAM_ERROR_TOAST_ID,
         });
       }
